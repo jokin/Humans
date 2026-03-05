@@ -57,6 +57,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddScoped<IApplicationDecisionService, ApplicationDecisionService>();
         services.AddScoped<IOnboardingService, OnboardingService>();
         services.AddScoped<IConsentService, ConsentService>();
+        services.AddScoped<IProfileService, ProfileService>();
         services.AddScoped<SystemTeamSyncJob>();
         services.AddScoped<SyncLegalDocumentsJob>();
         services.AddScoped<SendReConsentReminderJob>();
