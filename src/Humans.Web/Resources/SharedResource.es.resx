@@ -223,6 +223,7 @@
   <!-- Profile Edit View -->
   <data name="ProfileEdit_BurnerNamePlaceholder" xml:space="preserve"><value>El nombre por el que se le conoce</value></data>
   <data name="ProfileEdit_BurnerNameHelp" xml:space="preserve"><value>Este es su nombre p&#xFA;blico, visible para todos.</value></data>
+  <data name="ProfileEdit_BurnerNameMatchesLegalName" xml:space="preserve"><value>Tu burner name parece coincidir con tu nombre legal. Considera usar un nombre diferente para proteger tu privacidad — este nombre es visible para todos los humans.</value></data>
   <data name="ProfileEdit_LegalNameHelp" xml:space="preserve"><value>Necesario para documentos oficiales y firmas.</value></data>
   <data name="ProfileEdit_Select" xml:space="preserve"><value>Seleccionar</value></data>
   <data name="ProfileEdit_City" xml:space="preserve"><value>Ciudad</value></data>

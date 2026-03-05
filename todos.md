@@ -1,11 +1,34 @@
 # Release TODOs
 
 Audit date: 2026-02-05
-Last synced: 2026-02-24
+Last synced: 2026-03-05
 
 ---
 
 ## Open Work — Prioritized
+
+### Priority 2: Small-Medium Enhancements
+
+#### #72: Add clear CTA to homepage (before login)
+The pre-login homepage needs a call-to-action like "New here? Sign in with Google to apply" for when the app URL is shared externally.
+
+#### #80: Enforce E.164 format (+country code) for phone number fields
+Phone and WhatsApp contact fields and emergency contact phone must start with `+` and country code. Client + server validation, placeholder hints, prompt existing members to update non-compliant numbers.
+
+#### #77: Reasons why an Asociado is accepted (or applying)
+Board members voting on Asociado applications should be required to select which bylaw criteria the applicant meets. Optionally, the applicant could also state their reasons when applying.
+
+#### #85: Map: connect-with-people functionality + restrict to active volunteers only
+Map pins should enable connection (link to profiles, "say hi"). Only show active volunteers — exclude people who haven't completed onboarding.
+
+---
+
+### Priority 3: Medium Features
+
+#### #84: Admin/Humans table — column sorting, status filtering, default sort order
+Clickable column headers for sort (toggle asc/desc), status filter dropdown/tabs, intentional default sort (alphabetical or by team/role, not insert order). Audit other tables too.
+
+---
 
 ### Blocked — Waiting on External Input
 
@@ -27,8 +50,18 @@ Service-layer refactoring to move data mutations out of controllers. Consolidate
 #### #14: Drive Activity Monitor: resolve people/ IDs to email addresses
 Drive Activity API returns `people/` IDs instead of email addresses. Need to resolve these via the People API for meaningful audit display.
 
-#### #33: Add Discord integration to sync team/role-based server roles via API
-Discord bot integration to automatically assign/remove Discord server roles based on Humans team memberships and role assignments. Configurable team→Discord role mappings, drift detection, audit logging, and manual sync UI at `/Admin/DiscordSync`.
+#### #33 / #82: Discord integration — sync team memberships to server roles
+Discord bot integration to automatically assign/remove Discord server roles based on Humans team memberships and role assignments. Configurable team→Discord role mappings, drift detection, audit logging, and manual sync UI at `/Admin/DiscordSync`. #82 has detailed architecture and phased implementation plan. Follows the Google Workspace sync pattern (outbox, periodic full sync, stub for dev).
+
+---
+
+### Priority 5b: Large Features (Future)
+
+#### #86: Voting system — bylaw-compliant member voting with notifications and multilingual support
+Formal member voting system: Yes/No votes with configurable voting periods (default 1 week), automated reminder schedule (open, 3 days, 1 day), multilingual support (5 languages), quorum enforcement, eligibility checks (Asociados only for binding votes). Open questions around anonymity requirements, proxy voting, and bylaw specifics. Optional non-binding community polls alongside binding votes.
+
+#### #83: Add other OAuth options, additional to Google
+Currently only Google OAuth login. Add email/password option (and potentially other OAuth providers) for users without Google accounts.
 
 ---
 
@@ -104,6 +137,9 @@ Two OpenTelemetry packages pinned to beta versions. Check for stable releases or
 ---
 
 ## Completed
+
+### #87 + #88 + #81: Profile bug fixes and UX improvements DONE
+Fixed broken "My Data" and "Edit Profile" links on `/Human/{id}` page (missing `asp-controller="Profile"`). New contact fields now require explicit visibility selection instead of defaulting to "All active members". Added client-side warning on profile edit when burner name matches legal name, localized in all 5 languages. Committed `290ea9b`.
 
 ### #26: Wire up custom Prometheus metrics DONE
 Eagerly resolve HumansMetricsService at startup, add RecordJobRun to 3 uninstrumented jobs, add google_sync_outbox_pending gauge. Committed `5a99d19`.

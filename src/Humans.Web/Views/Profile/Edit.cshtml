@@ -60,6 +60,10 @@
                         <label asp-for="BurnerName" class="form-label"></label>
                         <input asp-for="BurnerName" class="form-control" placeholder="@Localizer["ProfileEdit_BurnerNamePlaceholder"].Value" />
                         <span asp-validation-for="BurnerName" class="text-danger"></span>
+                        <div id="burnerNameWarning" class="alert alert-warning mt-2 d-none" role="alert">
+                            <i class="fa-solid fa-triangle-exclamation me-1"></i>
+                            @Localizer["ProfileEdit_BurnerNameMatchesLegalName"]
+                        </div>
                         <div class="form-text">@Localizer["ProfileEdit_BurnerNameHelp"]</div>
                     </div>
 
@@ -566,8 +570,9 @@
                                 </div>
 
                                 <div class="col-md-3">
-                                    <select name="EditableContactFields[${index}].Visibility" id="EditableContactFields_${index}__Visibility" class="form-select form-select-sm">
-                                        <option value="AllActiveProfiles" selected>All active members</option>
+                                    <select name="EditableContactFields[${index}].Visibility" id="EditableContactFields_${index}__Visibility" class="form-select form-select-sm" required>
+                                        <option value="" selected disabled>-- Choose visibility --</option>
+                                        <option value="AllActiveProfiles">All active members</option>
                                         <option value="MyTeams">My teams (+ leads & board)</option>
                                         <option value="LeadsAndBoard">Leads + Board</option>
                                         <option value="BoardOnly">Board only</option>
@@ -786,6 +791,29 @@
             const vh = document.getElementById('volunteerHistoryContainer');
             if (cf) observer.observe(cf, opts);
             if (vh) observer.observe(vh, opts);
+
+            // Burner name / legal name match warning
+            const burnerNameInput = document.getElementById('BurnerName');
+            const firstNameInput = document.getElementById('FirstName');
+            const lastNameInput = document.getElementById('LastName');
+            const burnerWarning = document.getElementById('burnerNameWarning');
+
+            function checkBurnerNameMatch() {
+                if (!burnerNameInput || !burnerWarning) return;
+                const burner = burnerNameInput.value.trim().toLowerCase();
+                if (!burner) { burnerWarning.classList.add('d-none'); return; }
+                const first = (firstNameInput?.value || '').trim().toLowerCase();
+                const last = (lastNameInput?.value || '').trim().toLowerCase();
+                const legalParts = [first, last].filter(Boolean);
+                const matches = legalParts.some(part => part && burner.includes(part))
+                    || (first && last && `${first} ${last}`.includes(burner));
+                burnerWarning.classList.toggle('d-none', !matches);
+            }
+
+            burnerNameInput?.addEventListener('input', checkBurnerNameMatch);
+            firstNameInput?.addEventListener('input', checkBurnerNameMatch);
+            lastNameInput?.addEventListener('input', checkBurnerNameMatch);
+            checkBurnerNameMatch();
 
             // Clear on submit so saving doesn't trigger warning
             form.addEventListener('submit', () => { dirty = false; });

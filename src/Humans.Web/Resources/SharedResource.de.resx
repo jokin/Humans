@@ -221,6 +221,7 @@
   <!-- Profile Edit View -->
   <data name="ProfileEdit_BurnerNamePlaceholder" xml:space="preserve"><value>Der Name, unter dem Sie bekannt sind</value></data>
   <data name="ProfileEdit_BurnerNameHelp" xml:space="preserve"><value>Dies ist Ihr öffentlicher Anzeigename, der für alle sichtbar ist.</value></data>
+  <data name="ProfileEdit_BurnerNameMatchesLegalName" xml:space="preserve"><value>Ihr Burner Name scheint mit Ihrem b&#xFC;rgerlichen Namen &#xFC;bereinzustimmen. Erw&#xE4;gen Sie einen anderen Namen, um Ihre Privatsph&#xE4;re zu sch&#xFC;tzen — dieser Name ist f&#xFC;r alle Humans sichtbar.</value></data>
   <data name="ProfileEdit_LegalNameHelp" xml:space="preserve"><value>Erforderlich für offizielle Dokumente und Unterschriften.</value></data>
   <data name="ProfileEdit_Select" xml:space="preserve"><value>Auswählen</value></data>
   <data name="ProfileEdit_City" xml:space="preserve"><value>Stadt</value></data>
