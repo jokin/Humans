@@ -15,11 +15,13 @@ RUN dotnet restore src/Humans.Web/Humans.Web.csproj
 # Copy source code
 COPY src/ src/
 
-# Coolify passes SOURCE_COMMIT as a build arg; deploy-qa.sh sets it from the host repo
+# Coolify passes SOURCE_COMMIT and MINVER_VERSION as build args; deploy-qa.sh sets them from the host repo
 ARG SOURCE_COMMIT=""
+ARG MINVER_VERSION=""
 RUN dotnet publish src/Humans.Web/Humans.Web.csproj -c Release -o /app/publish \
     -p:TreatWarningsAsErrors=false \
-    -p:SourceRevisionId="${SOURCE_COMMIT}"
+    -p:SourceRevisionId="${SOURCE_COMMIT}" \
+    -p:MinVerVersionOverride="${MINVER_VERSION}"
 
 # Runtime stage
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
