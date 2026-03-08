@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using NodaTime;
 using NodaTime.Testing;
 using NSubstitute;
+using Humans.Application.DTOs;
 using Humans.Application.Interfaces;
 using Humans.Domain.Entities;
 using Humans.Domain.Enums;
@@ -355,6 +356,563 @@ public class ProfileServiceTests : IDisposable
         result.ErrorKey.Should().Be("NoDeletionPending");
     }
 
+    // --- Simple lookups ---
+
+    [Fact]
+    public async Task GetProfileAsync_ExistingUser_ReturnsProfileWithUser()
+    {
+        var userId = Guid.NewGuid();
+        await SeedUserWithProfileAsync(userId);
+
+        var result = await _service.GetProfileAsync(userId);
+
+        result.Should().NotBeNull();
+        result!.UserId.Should().Be(userId);
+        result.User.Should().NotBeNull();
+        result.User.Id.Should().Be(userId);
+    }
+
+    [Fact]
+    public async Task GetProfileAsync_NoProfile_ReturnsNull()
+    {
+        var userId = Guid.NewGuid();
+        await SeedUserAsync(userId);
+
+        var result = await _service.GetProfileAsync(userId);
+
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task GetProfilePictureAsync_WithPicture_ReturnsData()
+    {
+        var userId = Guid.NewGuid();
+        await SeedUserWithProfileAsync(userId, withPicture: true);
+        var profile = await _dbContext.Profiles.FirstAsync(p => p.UserId == userId);
+
+        var (data, contentType) = await _service.GetProfilePictureAsync(profile.Id);
+
+        data.Should().NotBeNull();
+        data.Should().BeEquivalentTo(new byte[] { 1, 2, 3 });
+        contentType.Should().Be("image/png");
+    }
+
+    [Fact]
+    public async Task GetProfilePictureAsync_NoPicture_ReturnsNulls()
+    {
+        var userId = Guid.NewGuid();
+        await SeedUserWithProfileAsync(userId, withPicture: false);
+        var profile = await _dbContext.Profiles.FirstAsync(p => p.UserId == userId);
+
+        var (data, contentType) = await _service.GetProfilePictureAsync(profile.Id);
+
+        data.Should().BeNull();
+        contentType.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task GetProfilePictureAsync_NoProfile_ReturnsNulls()
+    {
+        var (data, contentType) = await _service.GetProfilePictureAsync(Guid.NewGuid());
+
+        data.Should().BeNull();
+        contentType.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task GetTierCountsAsync_CorrectCounts()
+    {
+        // 1 Colaborador non-suspended, 1 Colaborador suspended, 1 Asociado non-suspended
+        var u1 = Guid.NewGuid();
+        var u2 = Guid.NewGuid();
+        var u3 = Guid.NewGuid();
+        await SeedUserAsync(u1);
+        await SeedUserAsync(u2);
+        await SeedUserAsync(u3);
+        await _dbContext.Profiles.AddRangeAsync(
+            MakeProfile(u1, MembershipTier.Colaborador, isSuspended: false),
+            MakeProfile(u2, MembershipTier.Colaborador, isSuspended: true),
+            MakeProfile(u3, MembershipTier.Asociado, isSuspended: false));
+        await _dbContext.SaveChangesAsync();
+
+        var (colaboradorCount, asociadoCount) = await _service.GetTierCountsAsync();
+
+        colaboradorCount.Should().Be(1);
+        asociadoCount.Should().Be(1);
+    }
+
+    // --- Index/edit data ---
+
+    [Fact]
+    public async Task GetProfileIndexDataAsync_ReturnsProfileAndLatestApp()
+    {
+        var userId = Guid.NewGuid();
+        await SeedUserWithProfileAsync(userId);
+
+        var olderApp = new MemberApplication
+        {
+            Id = Guid.NewGuid(), UserId = userId, MembershipTier = MembershipTier.Colaborador,
+            Motivation = "first", SubmittedAt = _clock.GetCurrentInstant() - Duration.FromDays(5),
+            UpdatedAt = _clock.GetCurrentInstant() - Duration.FromDays(5)
+        };
+        var newerApp = new MemberApplication
+        {
+            Id = Guid.NewGuid(), UserId = userId, MembershipTier = MembershipTier.Asociado,
+            Motivation = "second", SubmittedAt = _clock.GetCurrentInstant(),
+            UpdatedAt = _clock.GetCurrentInstant()
+        };
+        await _dbContext.Applications.AddRangeAsync(olderApp, newerApp);
+        await _dbContext.SaveChangesAsync();
+
+        _membershipCalculator.GetMembershipSnapshotAsync(userId, Arg.Any<CancellationToken>())
+            .Returns(new MembershipSnapshot(MembershipStatus.Active, true, 3, 2, new List<Guid>()));
+
+        var (profile, latestApp, pendingConsentCount) = await _service.GetProfileIndexDataAsync(userId);
+
+        profile.Should().NotBeNull();
+        latestApp.Should().NotBeNull();
+        latestApp!.Id.Should().Be(newerApp.Id);
+        pendingConsentCount.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task GetProfileIndexDataAsync_NoProfile_ReturnsNulls()
+    {
+        var userId = Guid.NewGuid();
+        await SeedUserAsync(userId);
+
+        _membershipCalculator.GetMembershipSnapshotAsync(userId, Arg.Any<CancellationToken>())
+            .Returns(new MembershipSnapshot(MembershipStatus.Pending, false, 0, 0, new List<Guid>()));
+
+        var (profile, latestApp, _) = await _service.GetProfileIndexDataAsync(userId);
+
+        profile.Should().BeNull();
+        latestApp.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task GetProfileEditDataAsync_SubmittedApp_IsTierLocked()
+    {
+        var userId = Guid.NewGuid();
+        await SeedUserWithProfileAsync(userId, isApproved: false);
+        _dbContext.Applications.Add(new MemberApplication
+        {
+            Id = Guid.NewGuid(), UserId = userId, MembershipTier = MembershipTier.Colaborador,
+            Motivation = "test",
+            SubmittedAt = _clock.GetCurrentInstant(), UpdatedAt = _clock.GetCurrentInstant()
+        });
+        await _dbContext.SaveChangesAsync();
+
+        var (profile, isTierLocked, pendingApp) = await _service.GetProfileEditDataAsync(userId);
+
+        profile.Should().NotBeNull();
+        isTierLocked.Should().BeTrue();
+        pendingApp.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task GetProfileEditDataAsync_ApprovedApp_IsTierLocked()
+    {
+        var userId = Guid.NewGuid();
+        await SeedUserWithProfileAsync(userId, isApproved: true);
+        var app = new MemberApplication
+        {
+            Id = Guid.NewGuid(), UserId = userId, MembershipTier = MembershipTier.Colaborador,
+            Motivation = "test",
+            SubmittedAt = _clock.GetCurrentInstant(), UpdatedAt = _clock.GetCurrentInstant()
+        };
+        app.Approve(userId, null, _clock);
+        _dbContext.Applications.Add(app);
+        await _dbContext.SaveChangesAsync();
+
+        var (_, isTierLocked, pendingApp) = await _service.GetProfileEditDataAsync(userId);
+
+        isTierLocked.Should().BeTrue();
+        // Profile is approved, so PendingApplication is null even though app exists
+        pendingApp.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task GetProfileEditDataAsync_NoApps_NotLocked()
+    {
+        var userId = Guid.NewGuid();
+        await SeedUserWithProfileAsync(userId);
+
+        var (profile, isTierLocked, pendingApp) = await _service.GetProfileEditDataAsync(userId);
+
+        profile.Should().NotBeNull();
+        isTierLocked.Should().BeFalse();
+        pendingApp.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task GetProfileEditDataAsync_NoProfile_ReturnsNulls()
+    {
+        var userId = Guid.NewGuid();
+        await SeedUserAsync(userId);
+
+        var (profile, isTierLocked, pendingApp) = await _service.GetProfileEditDataAsync(userId);
+
+        profile.Should().BeNull();
+        isTierLocked.Should().BeFalse();
+        pendingApp.Should().BeNull();
+    }
+
+    // --- Batch/filtered queries ---
+
+    [Fact]
+    public async Task GetCustomPictureInfoByUserIdsAsync_WithPictures_ReturnsTuples()
+    {
+        var u1 = Guid.NewGuid();
+        var u2 = Guid.NewGuid();
+        var u3 = Guid.NewGuid();
+        await SeedUserWithProfileAsync(u1, withPicture: true);
+        await SeedUserWithProfileAsync(u2, withPicture: true);
+        await SeedUserWithProfileAsync(u3, withPicture: false);
+
+        var result = await _service.GetCustomPictureInfoByUserIdsAsync(new[] { u1, u2, u3 });
+
+        result.Should().HaveCount(2);
+    }
+
+    [Fact]
+    public async Task GetCustomPictureInfoByUserIdsAsync_EmptyInput_ReturnsEmpty()
+    {
+        var result = await _service.GetCustomPictureInfoByUserIdsAsync(Array.Empty<Guid>());
+
+        result.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task GetBirthdayProfilesAsync_MatchesMonth_OrderedByDay()
+    {
+        var u1 = Guid.NewGuid();
+        var u2 = Guid.NewGuid();
+        var u3 = Guid.NewGuid();
+        await SeedUserAsync(u1);
+        await SeedUserAsync(u2);
+        await SeedUserAsync(u3);
+
+        var p1 = MakeProfile(u1);
+        p1.DateOfBirth = new LocalDate(4, 3, 20);
+        var p2 = MakeProfile(u2);
+        p2.DateOfBirth = new LocalDate(4, 3, 5);
+        var p3 = MakeProfile(u3);
+        p3.DateOfBirth = new LocalDate(4, 6, 15);
+        await _dbContext.Profiles.AddRangeAsync(p1, p2, p3);
+        await _dbContext.SaveChangesAsync();
+
+        var result = await _service.GetBirthdayProfilesAsync(3);
+
+        result.Should().HaveCount(2);
+        result[0].Day.Should().Be(5);
+        result[1].Day.Should().Be(20);
+    }
+
+    [Fact]
+    public async Task GetBirthdayProfilesAsync_ExcludesSuspended()
+    {
+        var u1 = Guid.NewGuid();
+        var u2 = Guid.NewGuid();
+        await SeedUserAsync(u1);
+        await SeedUserAsync(u2);
+
+        var p1 = MakeProfile(u1, isSuspended: true);
+        p1.DateOfBirth = new LocalDate(4, 3, 10);
+        var p2 = MakeProfile(u2);
+        p2.DateOfBirth = new LocalDate(4, 3, 15);
+        await _dbContext.Profiles.AddRangeAsync(p1, p2);
+        await _dbContext.SaveChangesAsync();
+
+        var result = await _service.GetBirthdayProfilesAsync(3);
+
+        result.Should().HaveCount(1);
+        result[0].UserId.Should().Be(u2);
+    }
+
+    [Fact]
+    public async Task GetBirthdayProfilesAsync_NoMatches_ReturnsEmpty()
+    {
+        var userId = Guid.NewGuid();
+        await SeedUserAsync(userId);
+        var profile = MakeProfile(userId);
+        profile.DateOfBirth = new LocalDate(4, 6, 10);
+        _dbContext.Profiles.Add(profile);
+        await _dbContext.SaveChangesAsync();
+
+        var result = await _service.GetBirthdayProfilesAsync(3);
+
+        result.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task GetApprovedProfilesWithLocationAsync_ReturnsApprovedWithCoordinates()
+    {
+        var userId = Guid.NewGuid();
+        await SeedUserAsync(userId);
+        var profile = MakeProfile(userId, isApproved: true);
+        profile.Latitude = 40.0;
+        profile.Longitude = -3.0;
+        _dbContext.Profiles.Add(profile);
+        await _dbContext.SaveChangesAsync();
+
+        var result = await _service.GetApprovedProfilesWithLocationAsync();
+
+        result.Should().HaveCount(1);
+        result[0].UserId.Should().Be(userId);
+        result[0].Latitude.Should().Be(40.0);
+        result[0].Longitude.Should().Be(-3.0);
+    }
+
+    [Fact]
+    public async Task GetApprovedProfilesWithLocationAsync_ExcludesSuspendedAndUnapproved()
+    {
+        var u1 = Guid.NewGuid();
+        var u2 = Guid.NewGuid();
+        var u3 = Guid.NewGuid();
+        await SeedUserAsync(u1);
+        await SeedUserAsync(u2);
+        await SeedUserAsync(u3);
+
+        // Suspended with location
+        var p1 = MakeProfile(u1, isApproved: true, isSuspended: true);
+        p1.Latitude = 40.0;
+        p1.Longitude = -3.0;
+        // Unapproved with location
+        var p2 = MakeProfile(u2, isApproved: false);
+        p2.Latitude = 41.0;
+        p2.Longitude = -2.0;
+        // Approved without location
+        var p3 = MakeProfile(u3, isApproved: true);
+        await _dbContext.Profiles.AddRangeAsync(p1, p2, p3);
+        await _dbContext.SaveChangesAsync();
+
+        var result = await _service.GetApprovedProfilesWithLocationAsync();
+
+        result.Should().BeEmpty();
+    }
+
+    // --- Admin queries ---
+
+    [Fact]
+    public async Task GetFilteredHumansAsync_NoFilter_ReturnsAll()
+    {
+        var u1 = Guid.NewGuid();
+        var u2 = Guid.NewGuid();
+        await SeedUserAsync(u1);
+        await SeedUserAsync(u2);
+
+        var result = await _service.GetFilteredHumansAsync(null, null);
+
+        result.Should().HaveCount(2);
+    }
+
+    [Fact]
+    public async Task GetFilteredHumansAsync_SearchByEmail()
+    {
+        var u1 = Guid.NewGuid();
+        var u2 = Guid.NewGuid();
+        await SeedUserAsync(u1);
+        await SeedUserAsync(u2);
+        var user2 = await _dbContext.Users.FirstAsync(u => u.Id == u2);
+        user2.Email = "special@example.com";
+        user2.UserName = "special@example.com";
+        await _dbContext.SaveChangesAsync();
+
+        var result = await _service.GetFilteredHumansAsync("special", null);
+
+        result.Should().HaveCount(1);
+        result[0].UserId.Should().Be(u2);
+    }
+
+    [Fact]
+    public async Task GetFilteredHumansAsync_SearchByDisplayName()
+    {
+        var u1 = Guid.NewGuid();
+        var u2 = Guid.NewGuid();
+        await SeedUserAsync(u1);
+        await SeedUserAsync(u2);
+        var user2 = await _dbContext.Users.FirstAsync(u => u.Id == u2);
+        user2.DisplayName = "UniqueFlame";
+        await _dbContext.SaveChangesAsync();
+
+        var result = await _service.GetFilteredHumansAsync("UniqueFlame", null);
+
+        result.Should().HaveCount(1);
+        result[0].UserId.Should().Be(u2);
+    }
+
+    [Fact]
+    public async Task GetFilteredHumansAsync_StatusActive()
+    {
+        var u1 = Guid.NewGuid();
+        var u2 = Guid.NewGuid();
+        await SeedUserAsync(u1);
+        await SeedUserAsync(u2);
+        _dbContext.Profiles.Add(MakeProfile(u1, isApproved: true));
+        _dbContext.Profiles.Add(MakeProfile(u2, isApproved: false));
+        await _dbContext.SaveChangesAsync();
+
+        var result = await _service.GetFilteredHumansAsync(null, "active");
+
+        result.Should().HaveCount(1);
+        result[0].UserId.Should().Be(u1);
+    }
+
+    [Fact]
+    public async Task GetFilteredHumansAsync_StatusPending()
+    {
+        var u1 = Guid.NewGuid();
+        var u2 = Guid.NewGuid();
+        await SeedUserAsync(u1);
+        await SeedUserAsync(u2);
+        _dbContext.Profiles.Add(MakeProfile(u1, isApproved: true));
+        _dbContext.Profiles.Add(MakeProfile(u2, isApproved: false));
+        await _dbContext.SaveChangesAsync();
+
+        var result = await _service.GetFilteredHumansAsync(null, "pending");
+
+        result.Should().HaveCount(1);
+        result[0].UserId.Should().Be(u2);
+    }
+
+    [Fact]
+    public async Task GetFilteredHumansAsync_StatusSuspended()
+    {
+        var u1 = Guid.NewGuid();
+        var u2 = Guid.NewGuid();
+        await SeedUserAsync(u1);
+        await SeedUserAsync(u2);
+        _dbContext.Profiles.Add(MakeProfile(u1, isSuspended: true));
+        _dbContext.Profiles.Add(MakeProfile(u2));
+        await _dbContext.SaveChangesAsync();
+
+        var result = await _service.GetFilteredHumansAsync(null, "suspended");
+
+        result.Should().HaveCount(1);
+        result[0].UserId.Should().Be(u1);
+    }
+
+    [Fact]
+    public async Task GetAdminHumanDetailAsync_ReturnsFullDetail()
+    {
+        var userId = Guid.NewGuid();
+        await SeedUserWithProfileAsync(userId, isApproved: true);
+
+        _dbContext.Applications.Add(new MemberApplication
+        {
+            Id = Guid.NewGuid(), UserId = userId, MembershipTier = MembershipTier.Colaborador,
+            Motivation = "test",
+            SubmittedAt = _clock.GetCurrentInstant(), UpdatedAt = _clock.GetCurrentInstant()
+        });
+        _dbContext.RoleAssignments.Add(new RoleAssignment
+        {
+            Id = Guid.NewGuid(), UserId = userId, RoleName = "Board",
+            ValidFrom = _clock.GetCurrentInstant() - Duration.FromDays(10),
+            CreatedAt = _clock.GetCurrentInstant(), CreatedByUserId = userId
+        });
+        _dbContext.AuditLogEntries.Add(new AuditLogEntry
+        {
+            Id = Guid.NewGuid(), Action = AuditAction.MembershipsRevokedOnDeletionRequest,
+            EntityType = "User", EntityId = userId, Description = "Test entry",
+            OccurredAt = _clock.GetCurrentInstant(), ActorName = "System"
+        });
+        await _dbContext.SaveChangesAsync();
+
+        var result = await _service.GetAdminHumanDetailAsync(userId);
+
+        result.Should().NotBeNull();
+        result!.User.Id.Should().Be(userId);
+        result.Profile.Should().NotBeNull();
+        result.Applications.Should().HaveCount(1);
+        result.RoleAssignments.Should().HaveCount(1);
+        result.AuditEntries.Should().HaveCount(1);
+    }
+
+    [Fact]
+    public async Task GetAdminHumanDetailAsync_NonExistent_ReturnsNull()
+    {
+        var result = await _service.GetAdminHumanDetailAsync(Guid.NewGuid());
+
+        result.Should().BeNull();
+    }
+
+    // --- Cooldown and export ---
+
+    [Fact]
+    public async Task GetEmailCooldownInfoAsync_WithinCooldown_ReturnsFalse()
+    {
+        var userId = Guid.NewGuid();
+        await SeedUserAsync(userId);
+        var emailId = Guid.NewGuid();
+        _dbContext.UserEmails.Add(new UserEmail
+        {
+            Id = emailId, UserId = userId, Email = "test@test.com",
+            VerificationSentAt = _clock.GetCurrentInstant() - Duration.FromMinutes(2),
+            DisplayOrder = 0
+        });
+        await _dbContext.SaveChangesAsync();
+
+        var (canAdd, minutesUntilResend, pendingEmailId) = await _service.GetEmailCooldownInfoAsync(emailId);
+
+        canAdd.Should().BeFalse();
+        minutesUntilResend.Should().BeGreaterThan(0);
+        pendingEmailId.Should().Be(emailId);
+    }
+
+    [Fact]
+    public async Task GetEmailCooldownInfoAsync_AfterCooldown_ReturnsTrue()
+    {
+        var userId = Guid.NewGuid();
+        await SeedUserAsync(userId);
+        var emailId = Guid.NewGuid();
+        _dbContext.UserEmails.Add(new UserEmail
+        {
+            Id = emailId, UserId = userId, Email = "test@test.com",
+            VerificationSentAt = _clock.GetCurrentInstant() - Duration.FromMinutes(6),
+            DisplayOrder = 0
+        });
+        await _dbContext.SaveChangesAsync();
+
+        var (canAdd, minutesUntilResend, pendingEmailId) = await _service.GetEmailCooldownInfoAsync(emailId);
+
+        canAdd.Should().BeTrue();
+        minutesUntilResend.Should().Be(0);
+        pendingEmailId.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task GetEmailCooldownInfoAsync_NoVerificationSent_ReturnsTrue()
+    {
+        var userId = Guid.NewGuid();
+        await SeedUserAsync(userId);
+        var emailId = Guid.NewGuid();
+        _dbContext.UserEmails.Add(new UserEmail
+        {
+            Id = emailId, UserId = userId, Email = "test@test.com",
+            VerificationSentAt = null,
+            DisplayOrder = 0
+        });
+        await _dbContext.SaveChangesAsync();
+
+        var (canAdd, minutesUntilResend, pendingEmailId) = await _service.GetEmailCooldownInfoAsync(emailId);
+
+        canAdd.Should().BeTrue();
+        minutesUntilResend.Should().Be(0);
+        pendingEmailId.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task ExportDataAsync_ReturnsNonNull()
+    {
+        var userId = Guid.NewGuid();
+        await SeedUserWithProfileAsync(userId);
+
+        var result = await _service.ExportDataAsync(userId);
+
+        result.Should().NotBeNull();
+    }
+
     // --- Helpers ---
 
     private async Task<User> SeedUserAsync(Guid userId)
@@ -414,5 +972,23 @@ public class ProfileServiceTests : IDisposable
             SelectedTier: selectedTier, ApplicationMotivation: applicationMotivation,
             ApplicationAdditionalInfo: null,
             ApplicationSignificantContribution: null, ApplicationRoleUnderstanding: null);
+    }
+
+    private Profile MakeProfile(Guid userId, MembershipTier tier = MembershipTier.Volunteer,
+        bool isApproved = false, bool isSuspended = false)
+    {
+        return new Profile
+        {
+            Id = Guid.NewGuid(),
+            UserId = userId,
+            BurnerName = "Test",
+            FirstName = "First",
+            LastName = "Last",
+            MembershipTier = tier,
+            IsApproved = isApproved,
+            IsSuspended = isSuspended,
+            CreatedAt = _clock.GetCurrentInstant(),
+            UpdatedAt = _clock.GetCurrentInstant()
+        };
     }
 }

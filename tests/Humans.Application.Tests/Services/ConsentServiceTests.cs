@@ -176,7 +176,330 @@ public class ConsentServiceTests : IDisposable
         result.DocumentName.Should().Be("Privacy Policy");
     }
 
+    // --- GetConsentDashboardAsync ---
+
+    [Fact]
+    public async Task GetConsentDashboardAsync_ReturnsDocumentsGroupedByTeam()
+    {
+        var userId = Guid.NewGuid();
+        var teamId1 = Guid.NewGuid();
+        var teamId2 = Guid.NewGuid();
+        _membershipCalculator.GetRequiredTeamIdsForUserAsync(userId, Arg.Any<CancellationToken>())
+            .Returns(new List<Guid> { teamId1, teamId2 });
+
+        SeedTeam(teamId1, "Team A");
+        SeedTeam(teamId2, "Team B");
+        SeedDocument(teamId1, "Doc A");
+        SeedDocument(teamId2, "Doc B");
+        await _dbContext.SaveChangesAsync();
+
+        var (groups, _) = await _service.GetConsentDashboardAsync(userId);
+
+        groups.Should().HaveCount(2);
+    }
+
+    [Fact]
+    public async Task GetConsentDashboardAsync_OnlyIncludesActiveRequiredDocuments()
+    {
+        var userId = Guid.NewGuid();
+        var teamId = Guid.NewGuid();
+        _membershipCalculator.GetRequiredTeamIdsForUserAsync(userId, Arg.Any<CancellationToken>())
+            .Returns(new List<Guid> { teamId });
+
+        SeedTeam(teamId, "Team");
+        SeedDocument(teamId, "Active Doc");
+        SeedDocument(teamId, "Inactive Doc", isActive: false);
+        await _dbContext.SaveChangesAsync();
+
+        var (groups, _) = await _service.GetConsentDashboardAsync(userId);
+
+        groups.Should().HaveCount(1);
+        groups[0].Documents.Should().HaveCount(1);
+    }
+
+    [Fact]
+    public async Task GetConsentDashboardAsync_SelectsCurrentVersion()
+    {
+        var userId = Guid.NewGuid();
+        var teamId = Guid.NewGuid();
+        var now = _clock.GetCurrentInstant();
+        _membershipCalculator.GetRequiredTeamIdsForUserAsync(userId, Arg.Any<CancellationToken>())
+            .Returns(new List<Guid> { teamId });
+
+        SeedTeam(teamId, "Team");
+        var docId = Guid.NewGuid();
+        var olderVersionId = Guid.NewGuid();
+        var newerVersionId = Guid.NewGuid();
+        _dbContext.LegalDocuments.Add(new LegalDocument
+        {
+            Id = docId,
+            Name = "Versioned Doc",
+            TeamId = teamId,
+            IsRequired = true,
+            IsActive = true,
+            CurrentCommitSha = "test",
+            CreatedAt = now,
+            LastSyncedAt = now
+        });
+        _dbContext.DocumentVersions.Add(new DocumentVersion
+        {
+            Id = olderVersionId,
+            LegalDocumentId = docId,
+            VersionNumber = "v1",
+            CommitSha = "old",
+            EffectiveFrom = now - Duration.FromDays(30),
+            Content = new Dictionary<string, string>(StringComparer.Ordinal) { ["es"] = "old" },
+            CreatedAt = now
+        });
+        _dbContext.DocumentVersions.Add(new DocumentVersion
+        {
+            Id = newerVersionId,
+            LegalDocumentId = docId,
+            VersionNumber = "v2",
+            CommitSha = "new",
+            EffectiveFrom = now - Duration.FromDays(1),
+            Content = new Dictionary<string, string>(StringComparer.Ordinal) { ["es"] = "new" },
+            CreatedAt = now
+        });
+        await _dbContext.SaveChangesAsync();
+
+        var (groups, _) = await _service.GetConsentDashboardAsync(userId);
+
+        groups.Should().HaveCount(1);
+        groups[0].Documents.Should().HaveCount(1);
+        groups[0].Documents[0].Version.Id.Should().Be(newerVersionId);
+    }
+
+    [Fact]
+    public async Task GetConsentDashboardAsync_PairsVersionWithConsent()
+    {
+        var userId = Guid.NewGuid();
+        var teamId = Guid.NewGuid();
+        _membershipCalculator.GetRequiredTeamIdsForUserAsync(userId, Arg.Any<CancellationToken>())
+            .Returns(new List<Guid> { teamId });
+
+        SeedTeam(teamId, "Team");
+        var versionId = SeedDocument(teamId, "Doc");
+        SeedConsentRecord(userId, versionId);
+        await _dbContext.SaveChangesAsync();
+
+        var (groups, _) = await _service.GetConsentDashboardAsync(userId);
+
+        groups.Should().HaveCount(1);
+        groups[0].Documents[0].Consent.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task GetConsentDashboardAsync_NullConsentWhenNotSigned()
+    {
+        var userId = Guid.NewGuid();
+        var teamId = Guid.NewGuid();
+        _membershipCalculator.GetRequiredTeamIdsForUserAsync(userId, Arg.Any<CancellationToken>())
+            .Returns(new List<Guid> { teamId });
+
+        SeedTeam(teamId, "Team");
+        SeedDocument(teamId, "Doc");
+        await _dbContext.SaveChangesAsync();
+
+        var (groups, _) = await _service.GetConsentDashboardAsync(userId);
+
+        groups.Should().HaveCount(1);
+        groups[0].Documents[0].Consent.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task GetConsentDashboardAsync_ReturnsHistory()
+    {
+        var userId = Guid.NewGuid();
+        var teamId = Guid.NewGuid();
+        var now = _clock.GetCurrentInstant();
+        _membershipCalculator.GetRequiredTeamIdsForUserAsync(userId, Arg.Any<CancellationToken>())
+            .Returns(new List<Guid> { teamId });
+
+        SeedTeam(teamId, "Team");
+        var v1 = SeedDocument(teamId, "Doc A");
+        var v2 = SeedDocument(teamId, "Doc B");
+        SeedConsentRecord(userId, v1, now - Duration.FromHours(2));
+        SeedConsentRecord(userId, v2, now - Duration.FromHours(1));
+        await _dbContext.SaveChangesAsync();
+
+        var (_, history) = await _service.GetConsentDashboardAsync(userId);
+
+        history.Should().HaveCount(2);
+        history[0].ConsentedAt.Should().BeGreaterThan(history[1].ConsentedAt);
+    }
+
+    [Fact]
+    public async Task GetConsentDashboardAsync_ExcludesFutureVersions()
+    {
+        var userId = Guid.NewGuid();
+        var teamId = Guid.NewGuid();
+        var now = _clock.GetCurrentInstant();
+        _membershipCalculator.GetRequiredTeamIdsForUserAsync(userId, Arg.Any<CancellationToken>())
+            .Returns(new List<Guid> { teamId });
+
+        SeedTeam(teamId, "Team");
+        SeedDocument(teamId, "Future Doc", effectiveFrom: now + Duration.FromDays(30));
+        await _dbContext.SaveChangesAsync();
+
+        var (groups, _) = await _service.GetConsentDashboardAsync(userId);
+
+        groups.Should().HaveCount(1);
+        groups[0].Documents.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task GetConsentDashboardAsync_EmptyWhenNoDocuments()
+    {
+        var userId = Guid.NewGuid();
+        var teamId = Guid.NewGuid();
+        _membershipCalculator.GetRequiredTeamIdsForUserAsync(userId, Arg.Any<CancellationToken>())
+            .Returns(new List<Guid> { teamId });
+
+        var (groups, history) = await _service.GetConsentDashboardAsync(userId);
+
+        groups.Should().BeEmpty();
+        history.Should().BeEmpty();
+    }
+
+    // --- GetConsentReviewDetailAsync ---
+
+    [Fact]
+    public async Task GetConsentReviewDetailAsync_ReturnsVersionWithDocumentAndConsent()
+    {
+        var userId = Guid.NewGuid();
+        var versionId = Guid.NewGuid();
+        SeedDocumentVersion(versionId, "Test Doc", new Dictionary<string, string>(StringComparer.Ordinal) { ["es"] = "text" });
+        SeedConsentRecord(userId, versionId);
+        _dbContext.Profiles.Add(new Profile
+        {
+            Id = Guid.NewGuid(),
+            UserId = userId,
+            BurnerName = "Test",
+            FirstName = "Jane",
+            LastName = "Doe",
+            CreatedAt = _clock.GetCurrentInstant(),
+            UpdatedAt = _clock.GetCurrentInstant()
+        });
+        await _dbContext.SaveChangesAsync();
+
+        var (version, consent, fullName) = await _service.GetConsentReviewDetailAsync(versionId, userId);
+
+        version.Should().NotBeNull();
+        version!.LegalDocument.Should().NotBeNull();
+        consent.Should().NotBeNull();
+        fullName.Should().Be("Jane Doe");
+    }
+
+    [Fact]
+    public async Task GetConsentReviewDetailAsync_NullConsentWhenNotSigned()
+    {
+        var userId = Guid.NewGuid();
+        var versionId = Guid.NewGuid();
+        SeedDocumentVersion(versionId, "Test Doc", new Dictionary<string, string>(StringComparer.Ordinal) { ["es"] = "text" });
+        _dbContext.Profiles.Add(new Profile
+        {
+            Id = Guid.NewGuid(),
+            UserId = userId,
+            BurnerName = "Test",
+            FirstName = "Jane",
+            LastName = "Doe",
+            CreatedAt = _clock.GetCurrentInstant(),
+            UpdatedAt = _clock.GetCurrentInstant()
+        });
+        await _dbContext.SaveChangesAsync();
+
+        var (version, consent, fullName) = await _service.GetConsentReviewDetailAsync(versionId, userId);
+
+        version.Should().NotBeNull();
+        consent.Should().BeNull();
+        fullName.Should().Be("Jane Doe");
+    }
+
+    [Fact]
+    public async Task GetConsentReviewDetailAsync_VersionNotFound_ReturnsAllNulls()
+    {
+        var (version, consent, fullName) = await _service.GetConsentReviewDetailAsync(Guid.NewGuid(), Guid.NewGuid());
+
+        version.Should().BeNull();
+        consent.Should().BeNull();
+        fullName.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task GetConsentReviewDetailAsync_NullFullNameWhenNoProfile()
+    {
+        var userId = Guid.NewGuid();
+        var versionId = Guid.NewGuid();
+        SeedDocumentVersion(versionId, "Test Doc", new Dictionary<string, string>(StringComparer.Ordinal) { ["es"] = "text" });
+
+        var (version, consent, fullName) = await _service.GetConsentReviewDetailAsync(versionId, userId);
+
+        version.Should().NotBeNull();
+        consent.Should().BeNull();
+        fullName.Should().BeNull();
+    }
+
     // --- Helpers ---
+
+    private Team SeedTeam(Guid teamId, string name)
+    {
+        var team = new Team
+        {
+            Id = teamId,
+            Name = name,
+            Slug = name.ToLowerInvariant().Replace(' ', '-'),
+            IsActive = true,
+            CreatedAt = _clock.GetCurrentInstant(),
+            UpdatedAt = _clock.GetCurrentInstant()
+        };
+        _dbContext.Teams.Add(team);
+        return team;
+    }
+
+    private Guid SeedDocument(Guid teamId, string name, bool isActive = true, bool isRequired = true, Instant? effectiveFrom = null)
+    {
+        var now = _clock.GetCurrentInstant();
+        var docId = Guid.NewGuid();
+        var versionId = Guid.NewGuid();
+        _dbContext.LegalDocuments.Add(new LegalDocument
+        {
+            Id = docId,
+            Name = name,
+            TeamId = teamId,
+            IsRequired = isRequired,
+            IsActive = isActive,
+            CurrentCommitSha = "test",
+            CreatedAt = now,
+            LastSyncedAt = now
+        });
+        _dbContext.DocumentVersions.Add(new DocumentVersion
+        {
+            Id = versionId,
+            LegalDocumentId = docId,
+            VersionNumber = "v1",
+            CommitSha = "abc123",
+            Content = new Dictionary<string, string>(StringComparer.Ordinal) { ["es"] = "text" },
+            EffectiveFrom = effectiveFrom ?? now - Duration.FromDays(1),
+            CreatedAt = now
+        });
+        return versionId;
+    }
+
+    private void SeedConsentRecord(Guid userId, Guid versionId, Instant? consentedAt = null)
+    {
+        _dbContext.ConsentRecords.Add(new ConsentRecord
+        {
+            Id = Guid.NewGuid(),
+            UserId = userId,
+            DocumentVersionId = versionId,
+            ExplicitConsent = true,
+            ConsentedAt = consentedAt ?? _clock.GetCurrentInstant(),
+            IpAddress = "127.0.0.1",
+            UserAgent = "test",
+            ContentHash = "testhash"
+        });
+    }
 
     private void SeedDocumentVersion(Guid versionId, string documentName, Dictionary<string, string> content)
     {
