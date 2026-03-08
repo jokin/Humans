@@ -1,9 +1,7 @@
 <Project>
 
   <PropertyGroup>
-    <Version>0.0.1.0</Version>
-    <FileVersion>0.0.1.0</FileVersion>
-    <AssemblyVersion>0.0.1.0</AssemblyVersion>
+    <MinVerTagPrefix>v</MinVerTagPrefix>
     <NeutralLanguage>en</NeutralLanguage>
   </PropertyGroup>
 
@@ -36,6 +34,13 @@
       <Output TaskParameter="ConsoleOutput" PropertyName="SourceRevisionId" />
     </Exec>
   </Target>
+
+  <!-- Versioning -->
+  <ItemGroup>
+    <PackageReference Include="MinVer">
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+  </ItemGroup>
 
   <!-- Analyzers -->
   <ItemGroup>
