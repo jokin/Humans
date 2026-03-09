@@ -100,6 +100,7 @@
   <!-- ======================== -->
   <data name="Home_Title" xml:space="preserve"><value>Inicio</value></data>
   <data name="Home_Tagline" xml:space="preserve"><value>Portal de miembros de Nobodies Collective</value></data>
+  <data name="Home_CTA" xml:space="preserve"><value>&#xBF;Eres nuevo/a? Inicia sesi&#xF3;n con Google para empezar.</value></data>
   <data name="Home_WhyTitle" xml:space="preserve"><value>&#xBF;Por qu&#xE9; necesitamos esto?</value></data>
   <data name="Home_WhyDescription" xml:space="preserve"><value>Como asociaci&#xF3;n registrada en Espa&#xF1;a, Nobodies Collective tiene obligaciones legales. Antes de que cualquier persona pueda acceder a los recursos compartidos, necesitamos confirmar su aceptaci&#xF3;n de nuestras pol&#xED;ticas. Este sistema se encarga de ello de forma sencilla y mantiene todo actualizado.</value></data>
   <data name="Home_ComplianceTitle" xml:space="preserve"><value>Cumplimiento legal</value></data>
@@ -186,6 +187,7 @@
   <data name="Profile_Phone" xml:space="preserve"><value>Tel&#xE9;fono</value></data>
   <data name="Profile_Location" xml:space="preserve"><value>Ubicaci&#xF3;n</value></data>
   <data name="Profile_Bio" xml:space="preserve"><value>Biograf&#xED;a</value></data>
+  <data name="Profile_ChooseVisibility" xml:space="preserve"><value>-- Elegir visibilidad --</value></data>
   <data name="Profile_ContactInformation" xml:space="preserve"><value>Informaci&#xF3;n de contacto</value></data>
   <data name="Profile_NoContactInfo" xml:space="preserve"><value>A&#xFA;n no se ha a&#xF1;adido informaci&#xF3;n de contacto.</value></data>
   <data name="Profile_AddSome" xml:space="preserve"><value>A&#xF1;adir informaci&#xF3;n</value></data>
@@ -223,6 +225,7 @@
   <!-- Profile Edit View -->
   <data name="ProfileEdit_BurnerNamePlaceholder" xml:space="preserve"><value>El nombre por el que se le conoce</value></data>
   <data name="ProfileEdit_BurnerNameHelp" xml:space="preserve"><value>Este es su nombre p&#xFA;blico, visible para todos.</value></data>
+  <data name="ProfileEdit_BurnerNameMatchesLegalName" xml:space="preserve"><value>Tu burner name parece coincidir con tu nombre legal. Considera usar un nombre diferente para proteger tu privacidad — este nombre es visible para todos los humans.</value></data>
   <data name="ProfileEdit_LegalNameHelp" xml:space="preserve"><value>Necesario para documentos oficiales y firmas.</value></data>
   <data name="ProfileEdit_Select" xml:space="preserve"><value>Seleccionar</value></data>
   <data name="ProfileEdit_City" xml:space="preserve"><value>Ciudad</value></data>
@@ -549,6 +552,12 @@
   <!-- ======================== -->
   <data name="AdminDashboard_Title" xml:space="preserve"><value>Panel de administraci&#xF3;n</value></data>
   <data name="AdminHumans_Title" xml:space="preserve"><value>Humans</value></data>
+  <data name="AdminHumans_AllStatuses" xml:space="preserve"><value>Todos</value></data>
+  <data name="AdminHumans_Active" xml:space="preserve"><value>Activos</value></data>
+  <data name="AdminHumans_Pending" xml:space="preserve"><value>Pendientes</value></data>
+  <data name="AdminHumans_Suspended" xml:space="preserve"><value>Suspendidos</value></data>
+  <data name="AdminHumans_Inactive" xml:space="preserve"><value>Inactivos</value></data>
+  <data name="AdminHumans_Deleting" xml:space="preserve"><value>Pendiente de borrado</value></data>
   <data name="AdminHumanDetail_Title" xml:space="preserve"><value>Miembro: {0}</value><comment>{0} = display name</comment></data>
   <data name="AdminApplications_Title" xml:space="preserve"><value>Solicitudes de asociado</value></data>
   <data name="AdminApplicationDetail_Title" xml:space="preserve"><value>Revisar solicitud</value></data>
@@ -878,7 +887,11 @@
   <data name="ProfileEdit_ContributionInterestsHelp" xml:space="preserve"><value>Comparte tus habilidades, intereses y cómo te gustaría participar. Visible para todos los miembros.</value></data>
   <data name="Profile_BoardNotes" xml:space="preserve"><value>Notas para la Junta</value></data>
   <data name="ProfileEdit_BoardNotesHelp" xml:space="preserve"><value>Notas privadas para la Junta.</value></data>
+  <data name="Validation_PhoneE164" xml:space="preserve"><value>{0} debe empezar con + y c&#xF3;digo de pa&#xED;s (ej. +34 612 345 678)</value></data>
+  <data name="Validation_PhonePlaceholder" xml:space="preserve"><value>+34 612 345 678</value></data>
+  <data name="Validation_PhoneHint" xml:space="preserve"><value>Debe empezar con + y c&#xF3;digo de pa&#xED;s (ej. +34 612 345 678)</value></data>
   <data name="Profile_BoardInformation" xml:space="preserve"><value>Información privada y de la Junta</value></data>
+  <data name="Profile_WhatsApp" xml:space="preserve"><value>WhatsApp</value></data>
 
   <!-- Onboarding Review -->
   <data name="OnboardingReview_Title" xml:space="preserve"><value>Cola de revisi&#xF3;n de incorporaci&#xF3;n</value></data>

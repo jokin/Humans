@@ -1,11 +1,20 @@
 # Release TODOs
 
 Audit date: 2026-02-05
-Last synced: 2026-02-24
+Last synced: 2026-03-05
 
 ---
 
 ## Open Work — Prioritized
+
+### Priority 2: Small-Medium Enhancements
+
+#### #77: Reasons why an Asociado is accepted (or applying)
+Board members voting on Asociado applications should be required to select which bylaw criteria the applicant meets. Optionally, the applicant could also state their reasons when applying.
+
+---
+
+### Priority 3: Medium Features
 
 ### Blocked — Waiting on External Input
 
@@ -17,18 +26,23 @@ Dedicated page for app-specific operational disclosures (delegated coordinator r
 
 ### Priority 4: Architecture / Refactoring
 
-#### #70: Extract IOnboardingService and expand IApplicationDecisionService
-Service-layer refactoring to move data mutations out of controllers. Consolidates duplicated consent-check logic, fixes missing deprovision call in `AdminController.RejectSignup`, and moves cache eviction from 10 scattered sites to 2 services. Full plan at `~/.claude/plans/sharded-swinging-thompson.md`. See [#70](https://github.com/nobodies-collective/Humans/issues/70).
-
----
-
 ### Priority 5: UI/Navigation Improvements
 
 #### #14: Drive Activity Monitor: resolve people/ IDs to email addresses
 Drive Activity API returns `people/` IDs instead of email addresses. Need to resolve these via the People API for meaningful audit display.
 
-#### #33: Add Discord integration to sync team/role-based server roles via API
-Discord bot integration to automatically assign/remove Discord server roles based on Humans team memberships and role assignments. Configurable team→Discord role mappings, drift detection, audit logging, and manual sync UI at `/Admin/DiscordSync`.
+#### #33 / #82: Discord integration — sync team memberships to server roles
+Discord bot integration to automatically assign/remove Discord server roles based on Humans team memberships and role assignments. Configurable team→Discord role mappings, drift detection, audit logging, and manual sync UI at `/Admin/DiscordSync`. #82 has detailed architecture and phased implementation plan. Follows the Google Workspace sync pattern (outbox, periodic full sync, stub for dev).
+
+---
+
+### Priority 5b: Large Features (Future)
+
+#### #86: Voting system — bylaw-compliant member voting with notifications and multilingual support
+Formal member voting system: Yes/No votes with configurable voting periods (default 1 week), automated reminder schedule (open, 3 days, 1 day), multilingual support (5 languages), quorum enforcement, eligibility checks (Asociados only for binding votes). Open questions around anonymity requirements, proxy voting, and bylaw specifics. Optional non-binding community polls alongside binding votes.
+
+#### #83: Add other OAuth options, additional to Google
+Currently only Google OAuth login. Add email/password option (and potentially other OAuth providers) for users without Google accounts.
 
 ---
 
@@ -60,7 +74,7 @@ Helper methods re-query resources already loaded by parent methods. Redundant DB
 `HumanDetail` loads ALL applications and consent records via `Include` when it only needs a few. `Humans` list relies on implicit Include behavior.
 
 #### #59 / G-08: Extract duplicated controller business logic into shared services
-Legal docs slice extracted to `AdminLegalDocumentsController` + `IAdminLegalDocumentService`. Application approve/reject extracted to `IApplicationDecisionService`. Remaining: signup rejection (duplicated in Admin + OnboardingReview), volunteer approval (duplicated in Admin + OnboardingReview), and extending `IRoleAssignmentService` with assign/end/reassign orchestration. Consolidate into fewest services needed — extend existing interfaces where possible.
+Legal docs slice extracted to `AdminLegalDocumentsController` + `IAdminLegalDocumentService`. Application approve/reject extracted to `IApplicationDecisionService`. #70 extracted `IOnboardingService`, `IConsentService`, `IProfileService` — removing DbContext from OnboardingReview, Application, Consent, and Profile controllers. Remaining: extending `IRoleAssignmentService` with assign/end/reassign orchestration and removing remaining DbContext usage from AdminController.
 
 #### #60: Replace magic string ViewModel properties with domain enums
 ~50+ sites across 20+ ViewModels, 10+ controllers, and 3 views use `.ToString()` on domain enums instead of passing typed enums through. Affects `ApplicationStatus`, `MembershipStatus`, `TeamMemberRole`, `SystemTeamType`, `GoogleResourceType`, `TeamJoinRequestStatus`, `AuditAction`, `GoogleSyncSource`, `MembershipTier`. Also fix `StatusBadgeExtensions` to accept enums and add coding rules to prevent recurrence.
@@ -104,6 +118,24 @@ Two OpenTelemetry packages pinned to beta versions. Check for stable releases or
 ---
 
 ## Completed
+
+### #70: Extract IOnboardingService, expand IApplicationDecisionService, remove DbContext from controllers DONE
+Extracted 3 new service interfaces (`IOnboardingService`, `IConsentService`, `IProfileService`) and expanded `IApplicationDecisionService` with 4 new methods. Removed `DbContext` from OnboardingReviewController, ApplicationController, ConsentController, and ProfileController. Consolidated duplicated consent-check-to-Pending logic. Fixed bugs: AdminController.RejectSignup missing deprovision, AdminController.ApproveVolunteer missing cache eviction. AdminController mutations (Suspend/Unsuspend/Approve/Reject) now delegate to IOnboardingService. Committed `f351b82`, `931aa7d`, `c9a2388`, `bba766f`.
+
+### #84: Admin/Humans table sorting, filtering, default sort DONE
+Clickable column headers (name, joined, last login, status) with toggle asc/desc. Status filter bar: All/Active/Pending/Suspended/Inactive/Pending Deletion. Default sort changed to alphabetical. All state preserved across search/filter/sort/pagination. Localized in 5 languages. Committed `4456115`.
+
+### #85: Map: restrict to active volunteers + profile links DONE
+Added `IsApproved` filter to map query so only approved volunteers appear. Map InfoWindow now links display names to `/Human/{userId}` profiles. Committed `50ebc77`.
+
+### #80: Enforce E.164 phone format DONE
+Phone/WhatsApp contact fields and emergency contact phone now require + country code prefix. Client-side: dynamic pattern/placeholder/type=tel on Phone/WhatsApp fields, static on emergency phone. Server-side: controller validates before save with localized error. All 5 languages. Existing numbers untouched until next edit. Committed `5d90b77`.
+
+### #72: Add clear CTA to homepage DONE
+Added "New here? Sign in with Google to get started." text above the sign-in button on the pre-login homepage. Localized in all 5 languages. Committed `534554a`.
+
+### #87 + #88 + #81: Profile bug fixes and UX improvements DONE
+Fixed broken "My Data" and "Edit Profile" links on `/Human/{id}` page (missing `asp-controller="Profile"`). New contact fields now require explicit visibility selection instead of defaulting to "All active members". Added client-side warning on profile edit when burner name matches legal name, localized in all 5 languages. Committed `290ea9b`.
 
 ### #26: Wire up custom Prometheus metrics DONE
 Eagerly resolve HumansMetricsService at startup, add RecordJobRun to 3 uninstrumented jobs, add google_sync_outbox_pending gauge. Committed `5a99d19`.

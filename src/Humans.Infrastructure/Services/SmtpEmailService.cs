@@ -19,14 +19,14 @@ namespace Humans.Infrastructure.Services;
 public class SmtpEmailService : IEmailService
 {
     private readonly EmailSettings _settings;
-    private readonly HumansMetricsService _metrics;
+    private readonly IHumansMetrics _metrics;
     private readonly ILogger<SmtpEmailService> _logger;
     private readonly IEmailRenderer _renderer;
     private readonly string _environmentName;
 
     public SmtpEmailService(
         IOptions<EmailSettings> settings,
-        HumansMetricsService metrics,
+        IHumansMetrics metrics,
         ILogger<SmtpEmailService> logger,
         IEmailRenderer renderer,
         IHostEnvironment hostEnvironment)

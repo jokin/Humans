@@ -7,7 +7,7 @@ using Humans.Application.Interfaces;
 using Humans.Domain;
 using Humans.Domain.Enums;
 using Humans.Infrastructure.Data;
-using Humans.Infrastructure.Jobs;
+using MemberApplication = Humans.Domain.Entities.Application;
 
 namespace Humans.Infrastructure.Services;
 
@@ -16,8 +16,8 @@ public class ApplicationDecisionService : IApplicationDecisionService
     private readonly HumansDbContext _dbContext;
     private readonly IAuditLogService _auditLogService;
     private readonly IEmailService _emailService;
-    private readonly SystemTeamSyncJob _syncJob;
-    private readonly HumansMetricsService _metrics;
+    private readonly ISystemTeamSync _syncJob;
+    private readonly IHumansMetrics _metrics;
     private readonly IClock _clock;
     private readonly IMemoryCache _cache;
     private readonly ILogger<ApplicationDecisionService> _logger;
@@ -26,8 +26,8 @@ public class ApplicationDecisionService : IApplicationDecisionService
         HumansDbContext dbContext,
         IAuditLogService auditLogService,
         IEmailService emailService,
-        SystemTeamSyncJob syncJob,
-        HumansMetricsService metrics,
+        ISystemTeamSync syncJob,
+        IHumansMetrics metrics,
         IClock clock,
         IMemoryCache cache,
         ILogger<ApplicationDecisionService> logger)
@@ -221,5 +221,128 @@ public class ApplicationDecisionService : IApplicationDecisionService
         }
 
         return new ApplicationDecisionResult(true);
+    }
+
+    public async Task<IReadOnlyList<MemberApplication>> GetUserApplicationsAsync(
+        Guid userId, CancellationToken ct = default)
+    {
+        return await _dbContext.Applications
+            .Where(a => a.UserId == userId)
+            .OrderByDescending(a => a.SubmittedAt)
+            .ToListAsync(ct);
+    }
+
+    public async Task<MemberApplication?> GetUserApplicationDetailAsync(
+        Guid applicationId, Guid userId, CancellationToken ct = default)
+    {
+        return await _dbContext.Applications
+            .Include(a => a.ReviewedByUser)
+            .Include(a => a.StateHistory)
+                .ThenInclude(h => h.ChangedByUser)
+            .FirstOrDefaultAsync(a => a.Id == applicationId && a.UserId == userId, ct);
+    }
+
+    public async Task<ApplicationDecisionResult> SubmitAsync(
+        Guid userId, MembershipTier tier, string motivation,
+        string? additionalInfo, string? significantContribution, string? roleUnderstanding,
+        string language, CancellationToken ct = default)
+    {
+        // Check for existing pending application
+        var hasPending = await _dbContext.Applications
+            .AnyAsync(a => a.UserId == userId && a.Status == ApplicationStatus.Submitted, ct);
+
+        if (hasPending)
+            return new ApplicationDecisionResult(false, "AlreadyPending");
+
+        var now = _clock.GetCurrentInstant();
+
+        var application = new MemberApplication
+        {
+            Id = Guid.NewGuid(),
+            UserId = userId,
+            MembershipTier = tier,
+            Motivation = motivation,
+            AdditionalInfo = additionalInfo,
+            SignificantContribution = tier == MembershipTier.Asociado ? significantContribution : null,
+            RoleUnderstanding = tier == MembershipTier.Asociado ? roleUnderstanding : null,
+            Language = language,
+            SubmittedAt = now,
+            UpdatedAt = now
+        };
+
+        _dbContext.Applications.Add(application);
+        await _dbContext.SaveChangesAsync(ct);
+        _cache.Remove(CacheKeys.NavBadgeCounts);
+
+        _logger.LogInformation("User {UserId} submitted application {ApplicationId}", userId, application.Id);
+
+        return new ApplicationDecisionResult(true, ApplicationId: application.Id);
+    }
+
+    public async Task<ApplicationDecisionResult> WithdrawAsync(
+        Guid applicationId, Guid userId, CancellationToken ct = default)
+    {
+        var application = await _dbContext.Applications
+            .Include(a => a.StateHistory)
+            .FirstOrDefaultAsync(a => a.Id == applicationId && a.UserId == userId, ct);
+
+        if (application == null)
+            return new ApplicationDecisionResult(false, "NotFound");
+
+        if (application.Status != ApplicationStatus.Submitted)
+            return new ApplicationDecisionResult(false, "CannotWithdraw");
+
+        application.Withdraw(_clock);
+        await _dbContext.SaveChangesAsync(ct);
+        _cache.Remove(CacheKeys.NavBadgeCounts);
+        _metrics.RecordApplicationProcessed("withdrawn");
+
+        _logger.LogInformation("User {UserId} withdrew application {ApplicationId}", userId, applicationId);
+
+        return new ApplicationDecisionResult(true);
+    }
+
+    public async Task<(IReadOnlyList<MemberApplication> Items, int TotalCount)> GetFilteredApplicationsAsync(
+        string? statusFilter, string? tierFilter, int page, int pageSize, CancellationToken ct = default)
+    {
+        var query = _dbContext.Applications
+            .AsNoTracking()
+            .Include(a => a.User)
+            .AsQueryable();
+
+        if (!string.IsNullOrWhiteSpace(statusFilter) && Enum.TryParse<ApplicationStatus>(statusFilter, out var statusEnum))
+        {
+            query = query.Where(a => a.Status == statusEnum);
+        }
+        else
+        {
+            // Default: show pending applications
+            query = query.Where(a => a.Status == ApplicationStatus.Submitted);
+        }
+
+        if (!string.IsNullOrWhiteSpace(tierFilter) && Enum.TryParse<MembershipTier>(tierFilter, out var tierEnum))
+        {
+            query = query.Where(a => a.MembershipTier == tierEnum);
+        }
+
+        var totalCount = await query.CountAsync(ct);
+
+        var items = await query
+            .OrderBy(a => a.SubmittedAt)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync(ct);
+
+        return (items, totalCount);
+    }
+
+    public async Task<MemberApplication?> GetApplicationDetailAsync(Guid applicationId, CancellationToken ct = default)
+    {
+        return await _dbContext.Applications
+            .Include(a => a.User)
+            .Include(a => a.ReviewedByUser)
+            .Include(a => a.StateHistory)
+                .ThenInclude(h => h.ChangedByUser)
+            .FirstOrDefaultAsync(a => a.Id == applicationId, ct);
     }
 }

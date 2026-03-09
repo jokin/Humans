@@ -14,7 +14,7 @@ namespace Humans.Infrastructure.Services;
 /// counters and observable gauges. Gauge values are refreshed every 60 seconds from
 /// the database via a background timer.
 /// </summary>
-public sealed class HumansMetricsService : IDisposable
+public sealed class HumansMetricsService : IHumansMetrics, IDisposable
 {
     private static readonly Meter HumansMeter = new("Humans.Metrics");
 

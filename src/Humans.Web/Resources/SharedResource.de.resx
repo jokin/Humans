@@ -100,6 +100,7 @@
   <!-- ======================== -->
   <data name="Home_Title" xml:space="preserve"><value>Startseite</value></data>
   <data name="Home_Tagline" xml:space="preserve"><value>Mitgliederportal für Nobodies Collective</value></data>
+  <data name="Home_CTA" xml:space="preserve"><value>Neu hier? Melden Sie sich mit Google an, um loszulegen.</value></data>
   <data name="Home_WhyTitle" xml:space="preserve"><value>Warum brauchen wir das?</value></data>
   <data name="Home_WhyDescription" xml:space="preserve"><value>Als eingetragener Verein in Spanien hat Nobodies Collective gesetzliche Verpflichtungen. Bevor jemand auf gemeinsame Ressourcen zugreifen kann, müssen wir die Zustimmung zu unseren Richtlinien bestätigen. Dieses System erledigt das auf einfache Weise und hält alles aktuell.</value></data>
   <data name="Home_ComplianceTitle" xml:space="preserve"><value>Rechtliche Compliance</value></data>
@@ -186,6 +187,7 @@
   <data name="Profile_Phone" xml:space="preserve"><value>Telefon</value></data>
   <data name="Profile_Location" xml:space="preserve"><value>Standort</value></data>
   <data name="Profile_Bio" xml:space="preserve"><value>Biografie</value></data>
+  <data name="Profile_ChooseVisibility" xml:space="preserve"><value>-- Sichtbarkeit wählen --</value></data>
   <data name="Profile_ContactInformation" xml:space="preserve"><value>Kontaktinformationen</value></data>
   <data name="Profile_NoContactInfo" xml:space="preserve"><value>Noch keine Kontaktdaten hinzugefügt.</value></data>
   <data name="Profile_AddSome" xml:space="preserve"><value>Einige hinzufügen</value></data>
@@ -221,6 +223,7 @@
   <!-- Profile Edit View -->
   <data name="ProfileEdit_BurnerNamePlaceholder" xml:space="preserve"><value>Der Name, unter dem Sie bekannt sind</value></data>
   <data name="ProfileEdit_BurnerNameHelp" xml:space="preserve"><value>Dies ist Ihr öffentlicher Anzeigename, der für alle sichtbar ist.</value></data>
+  <data name="ProfileEdit_BurnerNameMatchesLegalName" xml:space="preserve"><value>Ihr Burner Name scheint mit Ihrem b&#xFC;rgerlichen Namen &#xFC;bereinzustimmen. Erw&#xE4;gen Sie einen anderen Namen, um Ihre Privatsph&#xE4;re zu sch&#xFC;tzen — dieser Name ist f&#xFC;r alle Humans sichtbar.</value></data>
   <data name="ProfileEdit_LegalNameHelp" xml:space="preserve"><value>Erforderlich für offizielle Dokumente und Unterschriften.</value></data>
   <data name="ProfileEdit_Select" xml:space="preserve"><value>Auswählen</value></data>
   <data name="ProfileEdit_City" xml:space="preserve"><value>Stadt</value></data>
@@ -544,6 +547,12 @@
   <!-- ======================== -->
   <data name="AdminDashboard_Title" xml:space="preserve"><value>Admin-Dashboard</value></data>
   <data name="AdminHumans_Title" xml:space="preserve"><value>Humans</value></data>
+  <data name="AdminHumans_AllStatuses" xml:space="preserve"><value>Alle</value></data>
+  <data name="AdminHumans_Active" xml:space="preserve"><value>Aktiv</value></data>
+  <data name="AdminHumans_Pending" xml:space="preserve"><value>Ausstehend</value></data>
+  <data name="AdminHumans_Suspended" xml:space="preserve"><value>Gesperrt</value></data>
+  <data name="AdminHumans_Inactive" xml:space="preserve"><value>Inaktiv</value></data>
+  <data name="AdminHumans_Deleting" xml:space="preserve"><value>L&#xF6;schung ausstehend</value></data>
   <data name="AdminHumanDetail_Title" xml:space="preserve"><value>Mitglied: {0}</value><comment>{0} = display name</comment></data>
   <data name="AdminApplications_Title" xml:space="preserve"><value>Asociado-Anträge</value></data>
   <data name="AdminApplicationDetail_Title" xml:space="preserve"><value>Antrag prüfen</value></data>
@@ -873,7 +882,11 @@
   <data name="ProfileEdit_ContributionInterestsHelp" xml:space="preserve"><value>Teile deine Fähigkeiten, Interessen und wie du dich einbringen möchtest. Für alle Mitglieder sichtbar.</value></data>
   <data name="Profile_BoardNotes" xml:space="preserve"><value>Notizen für den Vorstand</value></data>
   <data name="ProfileEdit_BoardNotesHelp" xml:space="preserve"><value>Private Notizen für den Vorstand.</value></data>
+  <data name="Validation_PhoneE164" xml:space="preserve"><value>{0} muss mit + und L&#xE4;ndervorwahl beginnen (z.B. +34 612 345 678)</value></data>
+  <data name="Validation_PhonePlaceholder" xml:space="preserve"><value>+34 612 345 678</value></data>
+  <data name="Validation_PhoneHint" xml:space="preserve"><value>Muss mit + und L&#xE4;ndervorwahl beginnen (z.B. +34 612 345 678)</value></data>
   <data name="Profile_BoardInformation" xml:space="preserve"><value>Vorstand &amp; private Informationen</value></data>
+  <data name="Profile_WhatsApp" xml:space="preserve"><value>WhatsApp</value></data>
 
   <!-- Onboarding Review -->
   <data name="OnboardingReview_Title" xml:space="preserve"><value>Onboarding-Pr&#xFC;fwarteschlange</value></data>

@@ -100,6 +100,7 @@
   <!-- ======================== -->
   <data name="Home_Title" xml:space="preserve"><value>Home</value></data>
   <data name="Home_Tagline" xml:space="preserve"><value>Membership portal for Nobodies Collective</value></data>
+  <data name="Home_CTA" xml:space="preserve"><value>New here? Sign in with Google to get started.</value></data>
   <data name="Home_WhyTitle" xml:space="preserve"><value>Why do we need this?</value></data>
   <data name="Home_WhyDescription" xml:space="preserve"><value>As a registered association in Spain, Nobodies Collective has legal obligations. Before anyone can access shared resources, we need to confirm agreement to our policies. This system handles that simply and keeps everything current.</value></data>
   <data name="Home_ComplianceTitle" xml:space="preserve"><value>Legal Compliance</value></data>
@@ -186,6 +187,7 @@
   <data name="Profile_Phone" xml:space="preserve"><value>Phone</value></data>
   <data name="Profile_Location" xml:space="preserve"><value>Location</value></data>
   <data name="Profile_Bio" xml:space="preserve"><value>Bio</value></data>
+  <data name="Profile_ChooseVisibility" xml:space="preserve"><value>-- Choose visibility --</value></data>
   <data name="Profile_ContactInformation" xml:space="preserve"><value>Contact Information</value></data>
   <data name="Profile_NoContactInfo" xml:space="preserve"><value>No contact information added yet.</value></data>
   <data name="Profile_AddSome" xml:space="preserve"><value>Add some</value></data>
@@ -223,6 +225,7 @@
   <!-- Profile Edit View -->
   <data name="ProfileEdit_BurnerNamePlaceholder" xml:space="preserve"><value>The name you go by</value></data>
   <data name="ProfileEdit_BurnerNameHelp" xml:space="preserve"><value>This is your public display name, visible to everyone.</value></data>
+  <data name="ProfileEdit_BurnerNameMatchesLegalName" xml:space="preserve"><value>Your burner name appears to match your legal name. Consider using a different name to protect your privacy — this name is visible to all humans.</value></data>
   <data name="ProfileEdit_LegalNameHelp" xml:space="preserve"><value>Required for official documents and signing.</value></data>
   <data name="ProfileEdit_Select" xml:space="preserve"><value>Select</value></data>
   <data name="ProfileEdit_City" xml:space="preserve"><value>City</value></data>
@@ -538,6 +541,12 @@
   <!-- ======================== -->
   <data name="AdminDashboard_Title" xml:space="preserve"><value>Admin Dashboard</value></data>
   <data name="AdminHumans_Title" xml:space="preserve"><value>Humans</value></data>
+  <data name="AdminHumans_AllStatuses" xml:space="preserve"><value>All</value></data>
+  <data name="AdminHumans_Active" xml:space="preserve"><value>Active</value></data>
+  <data name="AdminHumans_Pending" xml:space="preserve"><value>Pending</value></data>
+  <data name="AdminHumans_Suspended" xml:space="preserve"><value>Suspended</value></data>
+  <data name="AdminHumans_Inactive" xml:space="preserve"><value>Inactive</value></data>
+  <data name="AdminHumans_Deleting" xml:space="preserve"><value>Pending Deletion</value></data>
   <data name="AdminHumanDetail_Title" xml:space="preserve"><value>Member: {0}</value><comment>{0} = display name</comment></data>
   <data name="AdminApplications_Title" xml:space="preserve"><value>Asociado Applications</value></data>
   <data name="AdminApplicationDetail_Title" xml:space="preserve"><value>Review Application</value></data>
@@ -873,7 +882,11 @@
   <data name="ProfileEdit_ContributionInterestsHelp" xml:space="preserve"><value>Share your skills, interests, and how you'd like to get involved. Visible to all members.</value></data>
   <data name="Profile_BoardNotes" xml:space="preserve"><value>Notes for the Board</value></data>
   <data name="ProfileEdit_BoardNotesHelp" xml:space="preserve"><value>Private notes for the Board.</value></data>
+  <data name="Validation_PhoneE164" xml:space="preserve"><value>{0} must start with + and country code (e.g. +34 612 345 678)</value></data>
+  <data name="Validation_PhonePlaceholder" xml:space="preserve"><value>+34 612 345 678</value></data>
+  <data name="Validation_PhoneHint" xml:space="preserve"><value>Must start with + and country code (e.g. +34 612 345 678)</value></data>
   <data name="Profile_BoardInformation" xml:space="preserve"><value>Board &amp; Private Information</value></data>
+  <data name="Profile_WhatsApp" xml:space="preserve"><value>WhatsApp</value></data>
 
   <!-- Onboarding Review -->
   <data name="OnboardingReview_Title" xml:space="preserve"><value>Onboarding Review Queue</value></data>

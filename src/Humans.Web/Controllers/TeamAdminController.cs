@@ -6,7 +6,6 @@ using Microsoft.Extensions.Localization;
 using Humans.Application.Interfaces;
 using Humans.Domain.Entities;
 using Humans.Domain.Enums;
-using Humans.Infrastructure.Jobs;
 using Humans.Web.Models;
 
 namespace Humans.Web.Controllers;
@@ -19,7 +18,7 @@ public class TeamAdminController : Controller
     private readonly ITeamResourceService _teamResourceService;
     private readonly IGoogleSyncService _googleSyncService;
     private readonly UserManager<User> _userManager;
-    private readonly SystemTeamSyncJob _systemTeamSyncJob;
+    private readonly ISystemTeamSync _systemTeamSyncJob;
     private readonly ILogger<TeamAdminController> _logger;
     private readonly IStringLocalizer<SharedResource> _localizer;
 
@@ -28,7 +27,7 @@ public class TeamAdminController : Controller
         ITeamResourceService teamResourceService,
         IGoogleSyncService googleSyncService,
         UserManager<User> userManager,
-        SystemTeamSyncJob systemTeamSyncJob,
+        ISystemTeamSync systemTeamSyncJob,
         ILogger<TeamAdminController> logger,
         IStringLocalizer<SharedResource> localizer)
     {

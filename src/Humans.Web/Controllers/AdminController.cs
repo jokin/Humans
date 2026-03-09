@@ -2,10 +2,8 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Localization;
 using NodaTime;
-using Humans.Application;
 using Humans.Application.DTOs;
 using Humans.Application.Interfaces;
 using Humans.Domain.Constants;
@@ -13,7 +11,6 @@ using Humans.Domain.Entities;
 using Humans.Domain.Enums;
 using Humans.Infrastructure.Configuration;
 using Humans.Infrastructure.Data;
-using Humans.Infrastructure.Jobs;
 using Humans.Infrastructure.Services;
 using Microsoft.Extensions.Options;
 using Humans.Web.Extensions;
@@ -25,21 +22,20 @@ namespace Humans.Web.Controllers;
 [Route("Admin")]
 public class AdminController : Controller
 {
-    private readonly HumansDbContext _dbContext;
+    private readonly HumansDbContext _dbContext; // Only used by DbVersion (EF migration introspection)
     private readonly UserManager<User> _userManager;
     private readonly ITeamService _teamService;
     private readonly IGoogleSyncService _googleSyncService;
     private readonly IAuditLogService _auditLogService;
-    private readonly IMembershipCalculator _membershipCalculator;
     private readonly IRoleAssignmentService _roleAssignmentService;
-    private readonly IEmailService _emailService;
+    private readonly IProfileService _profileService;
+    private readonly IApplicationDecisionService _applicationDecisionService;
+    private readonly ITeamResourceService _teamResourceService;
     private readonly IClock _clock;
     private readonly ILogger<AdminController> _logger;
-    private readonly SystemTeamSyncJob _systemTeamSyncJob;
-    private readonly HumansMetricsService _metrics;
-    private readonly IMemoryCache _cache;
     private readonly IStringLocalizer<SharedResource> _localizer;
     private readonly IWebHostEnvironment _environment;
+    private readonly IOnboardingService _onboardingService;
 
     public AdminController(
         HumansDbContext dbContext,
@@ -47,151 +43,108 @@ public class AdminController : Controller
         ITeamService teamService,
         IGoogleSyncService googleSyncService,
         IAuditLogService auditLogService,
-        IMembershipCalculator membershipCalculator,
         IRoleAssignmentService roleAssignmentService,
-        IEmailService emailService,
+        IProfileService profileService,
+        IApplicationDecisionService applicationDecisionService,
+        ITeamResourceService teamResourceService,
         IClock clock,
         ILogger<AdminController> logger,
-        SystemTeamSyncJob systemTeamSyncJob,
-        HumansMetricsService metrics,
-        IMemoryCache cache,
         IStringLocalizer<SharedResource> localizer,
-        IWebHostEnvironment environment)
+        IWebHostEnvironment environment,
+        IOnboardingService onboardingService)
     {
         _dbContext = dbContext;
         _userManager = userManager;
         _teamService = teamService;
         _googleSyncService = googleSyncService;
         _auditLogService = auditLogService;
-        _membershipCalculator = membershipCalculator;
         _roleAssignmentService = roleAssignmentService;
-        _emailService = emailService;
+        _profileService = profileService;
+        _applicationDecisionService = applicationDecisionService;
+        _teamResourceService = teamResourceService;
         _clock = clock;
         _logger = logger;
-        _systemTeamSyncJob = systemTeamSyncJob;
-        _metrics = metrics;
-        _cache = cache;
         _localizer = localizer;
         _environment = environment;
+        _onboardingService = onboardingService;
     }
 
     [HttpGet("")]
     public async Task<IActionResult> Index()
     {
-        var totalMembers = await _dbContext.Users.CountAsync();
-        var pendingApplications = await _dbContext.Applications
-            .CountAsync(a => a.Status == ApplicationStatus.Submitted);
-        var pendingVolunteers = await _dbContext.Profiles
-            .CountAsync(p => !p.IsApproved && !p.IsSuspended);
+        var dashboardData = await _onboardingService.GetAdminDashboardAsync();
+        var recentEntries = await _auditLogService.GetRecentAsync(15);
 
-        // Calculate users with missing required consents (Volunteers docs = global)
-        var allUserIds = await _dbContext.Users.Select(u => u.Id).ToListAsync();
-        var usersWithAllVolunteerConsents = await _membershipCalculator.GetUsersWithAllRequiredConsentsAsync(allUserIds);
-
-        // Also count Leads missing their team-specific docs
-        var leadUserIds = await _dbContext.TeamMembers
-            .Where(tm => tm.LeftAt == null && tm.Role == TeamMemberRole.Lead && tm.Team.SystemTeamType == SystemTeamType.None)
-            .Select(tm => tm.UserId)
-            .Distinct()
-            .ToListAsync();
-        var leadsWithAllConsents = leadUserIds.Count > 0
-            ? await _membershipCalculator.GetUsersWithAllRequiredConsentsForTeamAsync(leadUserIds, SystemTeamIds.Leads)
-            : new HashSet<Guid>();
-
-        // A user has pending consents if missing any Volunteers doc OR (if they're a Lead) any Leads doc
-        var pendingConsents = allUserIds.Count(id =>
-            !usersWithAllVolunteerConsents.Contains(id) ||
-            (leadUserIds.Contains(id) && !leadsWithAllConsents.Contains(id)));
-
-        var recentActivity = await _dbContext.AuditLogEntries
-            .AsNoTracking()
-            .OrderByDescending(e => e.OccurredAt)
-            .Take(15)
-            .Select(e => new RecentActivityViewModel
+        var viewModel = new AdminDashboardViewModel
+        {
+            TotalMembers = dashboardData.TotalMembers,
+            ActiveMembers = dashboardData.ActiveMembers,
+            PendingVolunteers = dashboardData.PendingVolunteers,
+            PendingApplications = dashboardData.PendingApplications,
+            PendingConsents = dashboardData.PendingConsents,
+            RecentActivity = recentEntries.Select(e => new RecentActivityViewModel
             {
                 Description = e.Description,
                 Timestamp = e.OccurredAt.ToDateTimeUtc(),
                 Type = e.Action.ToString()
-            })
-            .ToListAsync();
-
-        // Application statistics (non-withdrawn)
-        var appStats = await _dbContext.Applications
-            .AsNoTracking()
-            .Where(a => a.Status != ApplicationStatus.Withdrawn)
-            .GroupBy(_ => 1)
-            .Select(g => new
-            {
-                Total = g.Count(),
-                Approved = g.Count(a => a.Status == ApplicationStatus.Approved),
-                Rejected = g.Count(a => a.Status == ApplicationStatus.Rejected),
-                Colaborador = g.Count(a => a.MembershipTier == MembershipTier.Colaborador),
-                Asociado = g.Count(a => a.MembershipTier == MembershipTier.Asociado)
-            })
-            .FirstOrDefaultAsync();
-
-        var viewModel = new AdminDashboardViewModel
-        {
-            TotalMembers = totalMembers,
-            ActiveMembers = await _dbContext.Profiles.CountAsync(p => !p.IsSuspended),
-            PendingVolunteers = pendingVolunteers,
-            PendingApplications = pendingApplications,
-            PendingConsents = pendingConsents,
-            RecentActivity = recentActivity,
-            TotalApplications = appStats?.Total ?? 0,
-            ApprovedApplications = appStats?.Approved ?? 0,
-            RejectedApplications = appStats?.Rejected ?? 0,
-            ColaboradorApplied = appStats?.Colaborador ?? 0,
-            AsociadoApplied = appStats?.Asociado ?? 0
+            }).ToList(),
+            TotalApplications = dashboardData.TotalApplications,
+            ApprovedApplications = dashboardData.ApprovedApplications,
+            RejectedApplications = dashboardData.RejectedApplications,
+            ColaboradorApplied = dashboardData.ColaboradorApplied,
+            AsociadoApplied = dashboardData.AsociadoApplied
         };
 
         return View(viewModel);
     }
 
     [HttpGet("Humans")]
-    public async Task<IActionResult> Humans(string? search, string? filter, int page = 1)
+    public async Task<IActionResult> Humans(string? search, string? filter, string sort = "name", string dir = "asc", int page = 1)
     {
         var pageSize = 20;
-        var query = _dbContext.Users.AsQueryable();
+        var allRows = await _profileService.GetFilteredHumansAsync(search, filter);
+        var totalCount = allRows.Count;
 
-        if (!string.IsNullOrWhiteSpace(search))
+        // Materialize for flexible sorting (fine at ~500 users)
+        var allMatching = allRows.Select(r => new AdminHumanViewModel
         {
-            query = query.Where(u =>
-                u.Email!.Contains(search) ||
-                u.DisplayName.Contains(search));
-        }
+            Id = r.UserId,
+            Email = r.Email,
+            DisplayName = r.DisplayName,
+            ProfilePictureUrl = r.ProfilePictureUrl,
+            CreatedAt = r.CreatedAt,
+            LastLoginAt = r.LastLoginAt,
+            HasProfile = r.HasProfile,
+            IsApproved = r.IsApproved,
+            MembershipStatus = r.MembershipStatus
+        }).ToList();
 
-        if (string.Equals(filter, "pending", StringComparison.OrdinalIgnoreCase))
+        var ascending = !string.Equals(dir, "desc", StringComparison.OrdinalIgnoreCase);
+        IEnumerable<AdminHumanViewModel> sorted = sort?.ToLowerInvariant() switch
         {
-            query = query.Where(u => u.Profile != null && !u.Profile.IsApproved && !u.Profile.IsSuspended);
-        }
+            "joined" => ascending
+                ? allMatching.OrderBy(m => m.CreatedAt)
+                : allMatching.OrderByDescending(m => m.CreatedAt),
+            "login" => ascending
+                ? allMatching.OrderBy(m => m.LastLoginAt.HasValue ? 0 : 1).ThenBy(m => m.LastLoginAt)
+                : allMatching.OrderBy(m => m.LastLoginAt.HasValue ? 0 : 1).ThenByDescending(m => m.LastLoginAt),
+            "status" => ascending
+                ? allMatching.OrderBy(m => m.MembershipStatus, StringComparer.OrdinalIgnoreCase)
+                : allMatching.OrderByDescending(m => m.MembershipStatus, StringComparer.OrdinalIgnoreCase),
+            _ => ascending
+                ? allMatching.OrderBy(m => m.DisplayName, StringComparer.OrdinalIgnoreCase)
+                : allMatching.OrderByDescending(m => m.DisplayName, StringComparer.OrdinalIgnoreCase),
+        };
 
-        var totalCount = await query.CountAsync();
-
-        var members = await query
-            .OrderByDescending(u => u.CreatedAt)
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
-            .Select(u => new AdminHumanViewModel
-            {
-                Id = u.Id,
-                Email = u.Email ?? string.Empty,
-                DisplayName = u.DisplayName,
-                ProfilePictureUrl = u.ProfilePictureUrl,
-                CreatedAt = u.CreatedAt.ToDateTimeUtc(),
-                LastLoginAt = u.LastLoginAt != null ? u.LastLoginAt.Value.ToDateTimeUtc() : null,
-                HasProfile = u.Profile != null,
-                IsApproved = u.Profile != null && u.Profile.IsApproved,
-                MembershipStatus = u.Profile != null
-                    ? (u.Profile.IsSuspended ? "Suspended" : (!u.Profile.IsApproved ? "Pending Approval" : "Active"))
-                    : "Inactive"
-            })
-            .ToListAsync();
+        var members = sorted.Skip((page - 1) * pageSize).Take(pageSize).ToList();
 
         var viewModel = new AdminHumanListViewModel
         {
             Humans = members,
             SearchTerm = search,
+            StatusFilter = filter,
+            SortBy = sort?.ToLowerInvariant() ?? "name",
+            SortDir = ascending ? "asc" : "desc",
             TotalCount = totalCount,
             PageNumber = page,
             PageSize = pageSize
@@ -203,74 +156,35 @@ public class AdminController : Controller
     [HttpGet("Humans/{id}")]
     public async Task<IActionResult> HumanDetail(Guid id)
     {
-        var user = await _dbContext.Users
-            .Include(u => u.Profile)
-            .Include(u => u.Applications)
-            .Include(u => u.ConsentRecords)
-            .FirstOrDefaultAsync(u => u.Id == id);
-
-        if (user == null)
+        var data = await _profileService.GetAdminHumanDetailAsync(id);
+        if (data == null)
         {
             return NotFound();
         }
 
         var now = _clock.GetCurrentInstant();
-        var roleAssignments = await _dbContext.RoleAssignments
-            .Include(ra => ra.CreatedByUser)
-            .Where(ra => ra.UserId == id)
-            .OrderByDescending(ra => ra.ValidFrom)
-            .ToListAsync();
-
-        // Query audit entries where the user is either the primary or related entity
-        var auditEntries = await _dbContext.AuditLogEntries
-            .AsNoTracking()
-            .Where(e =>
-                (e.EntityType == "User" && e.EntityId == id) ||
-                (e.RelatedEntityId == id))
-            .OrderByDescending(e => e.OccurredAt)
-            .Take(50)
-            .Select(e => new AuditLogEntryViewModel
-            {
-                Action = e.Action.ToString(),
-                Description = e.Description,
-                OccurredAt = e.OccurredAt.ToDateTimeUtc(),
-                ActorName = e.ActorName,
-                IsSystemAction = e.ActorUserId == null
-            })
-            .ToListAsync();
-
-        // Load rejected-by user name if present
-        string? rejectedByName = null;
-        if (user.Profile?.RejectedByUserId != null)
-        {
-            var rejectedByUser = await _dbContext.Users
-                .AsNoTracking()
-                .FirstOrDefaultAsync(u => u.Id == user.Profile.RejectedByUserId.Value);
-            rejectedByName = rejectedByUser?.DisplayName;
-        }
 
         var viewModel = new AdminHumanDetailViewModel
         {
-            UserId = user.Id,
-            Email = user.Email ?? string.Empty,
-            DisplayName = user.DisplayName,
-            ProfilePictureUrl = user.ProfilePictureUrl,
-            CreatedAt = user.CreatedAt.ToDateTimeUtc(),
-            LastLoginAt = user.LastLoginAt?.ToDateTimeUtc(),
-            IsSuspended = user.Profile?.IsSuspended ?? false,
-            IsApproved = user.Profile?.IsApproved ?? false,
-            HasProfile = user.Profile != null,
-            AdminNotes = user.Profile?.AdminNotes,
-            MembershipTier = user.Profile?.MembershipTier ?? MembershipTier.Volunteer,
-            ConsentCheckStatus = user.Profile?.ConsentCheckStatus,
-            IsRejected = user.Profile?.RejectedAt != null,
-            RejectionReason = user.Profile?.RejectionReason,
-            RejectedAt = user.Profile?.RejectedAt?.ToDateTimeUtc(),
-            RejectedByName = rejectedByName,
-            ApplicationCount = user.Applications.Count,
-            ConsentCount = user.ConsentRecords.Count,
-            Applications = user.Applications
-                .OrderByDescending(a => a.SubmittedAt)
+            UserId = data.User.Id,
+            Email = data.User.Email ?? string.Empty,
+            DisplayName = data.User.DisplayName,
+            ProfilePictureUrl = data.User.ProfilePictureUrl,
+            CreatedAt = data.User.CreatedAt.ToDateTimeUtc(),
+            LastLoginAt = data.User.LastLoginAt?.ToDateTimeUtc(),
+            IsSuspended = data.Profile?.IsSuspended ?? false,
+            IsApproved = data.Profile?.IsApproved ?? false,
+            HasProfile = data.Profile != null,
+            AdminNotes = data.Profile?.AdminNotes,
+            MembershipTier = data.Profile?.MembershipTier ?? MembershipTier.Volunteer,
+            ConsentCheckStatus = data.Profile?.ConsentCheckStatus,
+            IsRejected = data.Profile?.RejectedAt != null,
+            RejectionReason = data.Profile?.RejectionReason,
+            RejectedAt = data.Profile?.RejectedAt?.ToDateTimeUtc(),
+            RejectedByName = data.RejectedByName,
+            ApplicationCount = data.Applications.Count,
+            ConsentCount = data.ConsentCount,
+            Applications = data.Applications
                 .Take(5)
                 .Select(a => new AdminHumanApplicationViewModel
                 {
@@ -278,7 +192,7 @@ public class AdminController : Controller
                     Status = a.Status.ToString(),
                     SubmittedAt = a.SubmittedAt.ToDateTimeUtc()
                 }).ToList(),
-            RoleAssignments = roleAssignments.Select(ra => new AdminRoleAssignmentViewModel
+            RoleAssignments = data.RoleAssignments.Select(ra => new AdminRoleAssignmentViewModel
             {
                 Id = ra.Id,
                 UserId = ra.UserId,
@@ -290,7 +204,14 @@ public class AdminController : Controller
                 CreatedByName = ra.CreatedByUser?.DisplayName,
                 CreatedAt = ra.CreatedAt.ToDateTimeUtc()
             }).ToList(),
-            AuditLog = auditEntries
+            AuditLog = data.AuditEntries.Select(e => new AuditLogEntryViewModel
+            {
+                Action = e.Action,
+                Description = e.Description,
+                OccurredAt = e.OccurredAt,
+                ActorName = e.ActorName ?? string.Empty,
+                IsSystemAction = e.IsSystemAction
+            }).ToList()
         };
 
         return View(viewModel);
@@ -300,45 +221,21 @@ public class AdminController : Controller
     public async Task<IActionResult> Applications(string? status, string? tier, int page = 1)
     {
         var pageSize = 20;
-        var query = _dbContext.Applications
-            .Include(a => a.User)
-            .AsQueryable();
+        var (items, totalCount) = await _applicationDecisionService.GetFilteredApplicationsAsync(
+            status, tier, page, pageSize);
 
-        if (!string.IsNullOrWhiteSpace(status) && Enum.TryParse<ApplicationStatus>(status, out var statusEnum))
+        var applications = items.Select(a => new AdminApplicationViewModel
         {
-            query = query.Where(a => a.Status == statusEnum);
-        }
-        else
-        {
-            // Default: show pending applications
-            query = query.Where(a =>
-                a.Status == ApplicationStatus.Submitted);
-        }
-
-        if (!string.IsNullOrWhiteSpace(tier) && Enum.TryParse<MembershipTier>(tier, out var tierEnum))
-        {
-            query = query.Where(a => a.MembershipTier == tierEnum);
-        }
-
-        var totalCount = await query.CountAsync();
-
-        var applications = await query
-            .OrderBy(a => a.SubmittedAt)
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
-            .Select(a => new AdminApplicationViewModel
-            {
-                Id = a.Id,
-                UserId = a.UserId,
-                UserEmail = a.User.Email ?? string.Empty,
-                UserDisplayName = a.User.DisplayName,
-                Status = a.Status.ToString(),
-                StatusBadgeClass = a.Status.GetBadgeClass(),
-                SubmittedAt = a.SubmittedAt.ToDateTimeUtc(),
-                MotivationPreview = a.Motivation.Length > 100 ? a.Motivation.Substring(0, 100) + "..." : a.Motivation,
-                MembershipTier = a.MembershipTier.ToString()
-            })
-            .ToListAsync();
+            Id = a.Id,
+            UserId = a.UserId,
+            UserEmail = a.User.Email ?? string.Empty,
+            UserDisplayName = a.User.DisplayName,
+            Status = a.Status.ToString(),
+            StatusBadgeClass = a.Status.GetBadgeClass(),
+            SubmittedAt = a.SubmittedAt.ToDateTimeUtc(),
+            MotivationPreview = a.Motivation.Length > 100 ? a.Motivation[..100] + "..." : a.Motivation,
+            MembershipTier = a.MembershipTier.ToString()
+        }).ToList();
 
         var viewModel = new AdminApplicationListViewModel
         {
@@ -356,12 +253,7 @@ public class AdminController : Controller
     [HttpGet("Applications/{id}")]
     public async Task<IActionResult> ApplicationDetail(Guid id)
     {
-        var application = await _dbContext.Applications
-            .Include(a => a.User)
-            .Include(a => a.ReviewedByUser)
-            .Include(a => a.StateHistory)
-                .ThenInclude(h => h.ChangedByUser)
-            .FirstOrDefaultAsync(a => a.Id == id);
+        var application = await _applicationDecisionService.GetApplicationDetailAsync(id);
 
         if (application == null)
         {
@@ -406,33 +298,13 @@ public class AdminController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> SuspendHuman(Guid id, string? notes)
     {
-        var user = await _dbContext.Users
-            .Include(u => u.Profile)
-            .FirstOrDefaultAsync(u => u.Id == id);
-
-        if (user?.Profile == null)
-        {
-            return NotFound();
-        }
-
         var currentUser = await _userManager.GetUserAsync(User);
+        if (currentUser == null)
+            return NotFound();
 
-        user.Profile.IsSuspended = true;
-        user.Profile.AdminNotes = notes;
-        user.Profile.UpdatedAt = _clock.GetCurrentInstant();
-
-        if (currentUser != null)
-        {
-            await _auditLogService.LogAsync(
-                AuditAction.MemberSuspended, "User", id,
-                $"{user.DisplayName} suspended by {currentUser.DisplayName}{(string.IsNullOrWhiteSpace(notes) ? "" : $": {notes}")}",
-                currentUser.Id, currentUser.DisplayName);
-        }
-
-        await _dbContext.SaveChangesAsync();
-
-        _metrics.RecordMemberSuspended("admin");
-        _logger.LogInformation("Admin {AdminId} suspended human {HumanId}", currentUser?.Id, id);
+        var result = await _onboardingService.SuspendAsync(id, currentUser.Id, currentUser.DisplayName, notes);
+        if (!result.Success)
+            return NotFound();
 
         TempData["SuccessMessage"] = _localizer["Admin_MemberSuspended"].Value;
         return RedirectToAction(nameof(HumanDetail), new { id });
@@ -442,31 +314,13 @@ public class AdminController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> UnsuspendHuman(Guid id)
     {
-        var user = await _dbContext.Users
-            .Include(u => u.Profile)
-            .FirstOrDefaultAsync(u => u.Id == id);
-
-        if (user?.Profile == null)
-        {
-            return NotFound();
-        }
-
         var currentUser = await _userManager.GetUserAsync(User);
+        if (currentUser == null)
+            return NotFound();
 
-        user.Profile.IsSuspended = false;
-        user.Profile.UpdatedAt = _clock.GetCurrentInstant();
-
-        if (currentUser != null)
-        {
-            await _auditLogService.LogAsync(
-                AuditAction.MemberUnsuspended, "User", id,
-                $"{user.DisplayName} unsuspended by {currentUser.DisplayName}",
-                currentUser.Id, currentUser.DisplayName);
-        }
-
-        await _dbContext.SaveChangesAsync();
-
-        _logger.LogInformation("Admin {AdminId} unsuspended human {HumanId}", currentUser?.Id, id);
+        var result = await _onboardingService.UnsuspendAsync(id, currentUser.Id, currentUser.DisplayName);
+        if (!result.Success)
+            return NotFound();
 
         TempData["SuccessMessage"] = _localizer["Admin_MemberUnsuspended"].Value;
         return RedirectToAction(nameof(HumanDetail), new { id });
@@ -476,36 +330,13 @@ public class AdminController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> ApproveVolunteer(Guid id)
     {
-        var user = await _dbContext.Users
-            .Include(u => u.Profile)
-            .FirstOrDefaultAsync(u => u.Id == id);
-
-        if (user?.Profile == null)
-        {
-            return NotFound();
-        }
-
         var currentUser = await _userManager.GetUserAsync(User);
-        var now = _clock.GetCurrentInstant();
+        if (currentUser == null)
+            return NotFound();
 
-        user.Profile.IsApproved = true;
-        user.Profile.UpdatedAt = now;
-
-        if (currentUser != null)
-        {
-            await _auditLogService.LogAsync(
-                AuditAction.VolunteerApproved, "User", id,
-                $"{user.DisplayName} approved as volunteer by {currentUser.DisplayName}",
-                currentUser.Id, currentUser.DisplayName);
-        }
-
-        await _dbContext.SaveChangesAsync();
-
-        // Sync Volunteers team membership (adds user if they also have all required consents)
-        await _systemTeamSyncJob.SyncVolunteersMembershipForUserAsync(id);
-
-        _metrics.RecordVolunteerApproved();
-        _logger.LogInformation("Admin {AdminId} approved human {HumanId}", currentUser?.Id, id);
+        var result = await _onboardingService.ApproveVolunteerAsync(id, currentUser.Id, currentUser.DisplayName);
+        if (!result.Success)
+            return NotFound();
 
         TempData["SuccessMessage"] = _localizer["Admin_VolunteerApproved"].Value;
         return RedirectToAction(nameof(HumanDetail), new { id });
@@ -515,57 +346,19 @@ public class AdminController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> RejectSignup(Guid id, string? reason)
     {
-        var user = await _dbContext.Users
-            .Include(u => u.Profile)
-            .FirstOrDefaultAsync(u => u.Id == id);
-
-        if (user?.Profile == null)
-        {
-            return NotFound();
-        }
-
-        if (user.Profile.RejectedAt != null)
-        {
-            TempData["ErrorMessage"] = "This human has already been rejected.";
-            return RedirectToAction(nameof(HumanDetail), new { id });
-        }
-
         var currentUser = await _userManager.GetUserAsync(User);
         if (currentUser == null)
-        {
             return Unauthorized();
-        }
 
-        var now = _clock.GetCurrentInstant();
-
-        user.Profile.RejectionReason = reason;
-        user.Profile.RejectedAt = now;
-        user.Profile.RejectedByUserId = currentUser.Id;
-        user.Profile.IsApproved = false;
-        user.Profile.UpdatedAt = now;
-
-        await _auditLogService.LogAsync(
-            AuditAction.SignupRejected, "User", id,
-            $"{user.DisplayName} rejected by {currentUser.DisplayName}{(string.IsNullOrWhiteSpace(reason) ? "" : $": {reason}")}",
-            currentUser.Id, currentUser.DisplayName);
-
-        await _dbContext.SaveChangesAsync();
-        _cache.Remove(CacheKeys.NavBadgeCounts);
-
-        try
+        var result = await _onboardingService.RejectSignupAsync(id, currentUser.Id, currentUser.DisplayName, reason);
+        if (!result.Success)
         {
-            await _emailService.SendSignupRejectedAsync(
-                user.Email ?? string.Empty,
-                user.DisplayName,
-                reason,
-                user.PreferredLanguage);
+            if (string.Equals(result.ErrorKey, "AlreadyRejected", StringComparison.Ordinal))
+                TempData["ErrorMessage"] = "This human has already been rejected.";
+            else
+                return NotFound();
+            return RedirectToAction(nameof(HumanDetail), new { id });
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to send signup rejection email to {Email}", user.Email);
-        }
-
-        _logger.LogInformation("Admin {AdminId} rejected signup for human {HumanId}", currentUser.Id, id);
 
         TempData["SuccessMessage"] = "Signup rejected.";
         return RedirectToAction(nameof(HumanDetail), new { id });
@@ -581,8 +374,7 @@ public class AdminController : Controller
             return NotFound();
         }
 
-        var user = await _dbContext.Users.FindAsync(id);
-
+        var user = await _userManager.FindByIdAsync(id.ToString());
         if (user == null)
         {
             return NotFound();
@@ -609,25 +401,11 @@ public class AdminController : Controller
             await _userManager.RemoveLoginAsync(user, login.LoginProvider, login.ProviderKey);
         }
 
-        // Remove UserEmails so the unique index doesn't block the new account
-        var userEmails = await _dbContext.UserEmails.Where(e => e.UserId == id).ToListAsync();
-        _dbContext.UserEmails.RemoveRange(userEmails);
-
-        // Change email so email-based lookup won't match
-        var purgedEmail = $"purged-{Guid.NewGuid()}@deleted.local";
-        user.Email = purgedEmail;
-        user.NormalizedEmail = purgedEmail.ToUpperInvariant();
-        user.UserName = purgedEmail;
-        user.NormalizedUserName = purgedEmail.ToUpperInvariant();
-        user.DisplayName = $"Purged ({displayName})";
-
-        // Lock out the account permanently
-        user.LockoutEnabled = true;
-        user.LockoutEnd = DateTimeOffset.MaxValue;
-
-        await _dbContext.SaveChangesAsync();
-
-        _logger.LogWarning("Purged human {DisplayName} ({HumanId})", displayName, id);
+        var result = await _onboardingService.PurgeHumanAsync(id);
+        if (!result.Success)
+        {
+            return NotFound();
+        }
 
         TempData["SuccessMessage"] = $"Purged {displayName}. They will get a fresh account on next login.";
         return RedirectToAction(nameof(Humans));
@@ -637,18 +415,7 @@ public class AdminController : Controller
     public async Task<IActionResult> Teams(int page = 1)
     {
         var pageSize = 20;
-        var query = _dbContext.Teams
-            .Include(t => t.Members.Where(m => m.LeftAt == null))
-            .Include(t => t.JoinRequests.Where(r => r.Status == TeamJoinRequestStatus.Pending))
-            .OrderBy(t => t.SystemTeamType)
-            .ThenBy(t => t.Name);
-
-        var totalCount = await query.CountAsync();
-
-        var teams = await query
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
-            .ToListAsync();
+        var (teams, totalCount) = await _teamService.GetAllTeamsForAdminAsync(page, pageSize);
 
         var viewModel = new AdminTeamListViewModel
         {
@@ -708,7 +475,7 @@ public class AdminController : Controller
     [HttpGet("Teams/{id}/Edit")]
     public async Task<IActionResult> EditTeam(Guid id)
     {
-        var team = await _dbContext.Teams.FindAsync(id);
+        var team = await _teamService.GetTeamByIdAsync(id);
         if (team == null)
         {
             return NotFound();
@@ -783,29 +550,8 @@ public class AdminController : Controller
         var pageSize = 50;
         var now = _clock.GetCurrentInstant();
 
-        var query = _dbContext.RoleAssignments
-            .Include(ra => ra.User)
-            .Include(ra => ra.CreatedByUser)
-            .AsQueryable();
-
-        if (!string.IsNullOrWhiteSpace(role))
-        {
-            query = query.Where(ra => ra.RoleName == role);
-        }
-
-        if (!showInactive)
-        {
-            query = query.Where(ra => ra.ValidFrom <= now && (ra.ValidTo == null || ra.ValidTo > now));
-        }
-
-        var totalCount = await query.CountAsync();
-
-        var assignments = await query
-            .OrderBy(ra => ra.RoleName)
-            .ThenByDescending(ra => ra.ValidFrom)
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
-            .ToListAsync();
+        var (assignments, totalCount) = await _roleAssignmentService.GetFilteredAsync(
+            role, activeOnly: !showInactive, page, pageSize, now);
 
         var viewModel = new AdminRoleAssignmentListViewModel
         {
@@ -836,7 +582,7 @@ public class AdminController : Controller
     [HttpGet("Humans/{id}/Roles/Add")]
     public async Task<IActionResult> AddRole(Guid id)
     {
-        var user = await _dbContext.Users.FindAsync(id);
+        var user = await _userManager.FindByIdAsync(id.ToString());
         if (user == null)
         {
             return NotFound();
@@ -858,7 +604,7 @@ public class AdminController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> AddRole(Guid id, CreateRoleAssignmentViewModel model)
     {
-        var user = await _dbContext.Users.FindAsync(id);
+        var user = await _userManager.FindByIdAsync(id.ToString());
         if (user == null)
         {
             return NotFound();
@@ -887,47 +633,13 @@ public class AdminController : Controller
             return Unauthorized();
         }
 
-        var now = _clock.GetCurrentInstant();
+        var result = await _roleAssignmentService.AssignRoleAsync(
+            id, model.RoleName, currentUser.Id, currentUser.DisplayName, model.Notes);
 
-        // Prevent overlapping role windows at application layer.
-        // This also blocks creating a "current" open-ended assignment
-        // when a future assignment for the same role already exists.
-        var hasOverlap = await _roleAssignmentService.HasOverlappingAssignmentAsync(
-            id, model.RoleName, now);
-
-        if (hasOverlap)
+        if (!result.Success)
         {
             TempData["ErrorMessage"] = string.Format(_localizer["Admin_RoleAlreadyActive"].Value, model.RoleName);
             return RedirectToAction(nameof(HumanDetail), new { id });
-        }
-
-        var roleAssignment = new RoleAssignment
-        {
-            Id = Guid.NewGuid(),
-            UserId = id,
-            RoleName = model.RoleName,
-            ValidFrom = now,
-            Notes = model.Notes,
-            CreatedAt = now,
-            CreatedByUserId = currentUser.Id
-        };
-
-        _dbContext.RoleAssignments.Add(roleAssignment);
-
-        await _auditLogService.LogAsync(
-            AuditAction.RoleAssigned, "User", id,
-            $"Role '{model.RoleName}' assigned to {user.DisplayName}",
-            currentUser.Id, currentUser.DisplayName);
-
-        await _dbContext.SaveChangesAsync();
-
-        _logger.LogInformation("Admin {AdminId} assigned role {Role} to user {UserId}",
-            currentUser.Id, model.RoleName, id);
-
-        // Trigger sync for Board role changes
-        if (string.Equals(model.RoleName, RoleNames.Board, StringComparison.Ordinal))
-        {
-            await _systemTeamSyncJob.SyncBoardTeamAsync();
         }
 
         TempData["SuccessMessage"] = string.Format(_localizer["Admin_RoleAssigned"].Value, model.RoleName);
@@ -938,9 +650,7 @@ public class AdminController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> EndRole(Guid id, string? notes)
     {
-        var roleAssignment = await _dbContext.RoleAssignments
-            .Include(ra => ra.User)
-            .FirstOrDefaultAsync(ra => ra.Id == id);
+        var roleAssignment = await _roleAssignmentService.GetByIdAsync(id);
 
         if (roleAssignment == null)
         {
@@ -953,41 +663,19 @@ public class AdminController : Controller
             return Forbid();
         }
 
-        var now = _clock.GetCurrentInstant();
+        var currentUser = await _userManager.GetUserAsync(User);
+        if (currentUser == null)
+        {
+            return Unauthorized();
+        }
 
-        if (!roleAssignment.IsActive(now))
+        var result = await _roleAssignmentService.EndRoleAsync(
+            id, currentUser.Id, currentUser.DisplayName, notes);
+
+        if (!result.Success)
         {
             TempData["ErrorMessage"] = _localizer["Admin_RoleNotActive"].Value;
             return RedirectToAction(nameof(HumanDetail), new { id = roleAssignment.UserId });
-        }
-
-        var currentUser = await _userManager.GetUserAsync(User);
-
-        roleAssignment.ValidTo = now;
-        if (!string.IsNullOrWhiteSpace(notes))
-        {
-            roleAssignment.Notes = string.IsNullOrEmpty(roleAssignment.Notes)
-                ? $"Ended: {notes}"
-                : $"{roleAssignment.Notes} | Ended: {notes}";
-        }
-
-        if (currentUser != null)
-        {
-            await _auditLogService.LogAsync(
-                AuditAction.RoleEnded, "User", roleAssignment.UserId,
-                $"Role '{roleAssignment.RoleName}' ended for {roleAssignment.User.DisplayName}",
-                currentUser.Id, currentUser.DisplayName);
-        }
-
-        await _dbContext.SaveChangesAsync();
-
-        _logger.LogInformation("Admin {AdminId} ended role {Role} for user {UserId}",
-            currentUser?.Id, roleAssignment.RoleName, roleAssignment.UserId);
-
-        // Trigger sync for Board role changes
-        if (string.Equals(roleAssignment.RoleName, RoleNames.Board, StringComparison.Ordinal))
-        {
-            await _systemTeamSyncJob.SyncBoardTeamAsync();
         }
 
         TempData["SuccessMessage"] = string.Format(_localizer["Admin_RoleEnded"].Value, roleAssignment.RoleName, roleAssignment.User.DisplayName);
@@ -1028,11 +716,12 @@ public class AdminController : Controller
 
     [HttpPost("SyncSystemTeams")]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> SyncSystemTeams()
+    public async Task<IActionResult> SyncSystemTeams(
+        [FromServices] Infrastructure.Jobs.SystemTeamSyncJob systemTeamSyncJob)
     {
         try
         {
-            await _systemTeamSyncJob.ExecuteAsync();
+            await systemTeamSyncJob.ExecuteAsync();
             TempData["SuccessMessage"] = "System teams synced successfully.";
         }
         catch (Exception ex)
@@ -1069,32 +758,16 @@ public class AdminController : Controller
     public async Task<IActionResult> AuditLog(string? filter, int page = 1)
     {
         var pageSize = 50;
-        var query = _dbContext.AuditLogEntries.AsNoTracking().AsQueryable();
+        var (items, totalCount, anomalyCount) = await _auditLogService.GetFilteredAsync(filter, page, pageSize);
 
-        if (!string.IsNullOrWhiteSpace(filter) && Enum.TryParse<AuditAction>(filter, out var actionEnum))
+        var entries = items.Select(e => new AuditLogEntryViewModel
         {
-            query = query.Where(e => e.Action == actionEnum);
-        }
-
-        var totalCount = await query.CountAsync();
-
-        var entries = await query
-            .OrderByDescending(e => e.OccurredAt)
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
-            .Select(e => new AuditLogEntryViewModel
-            {
-                Action = e.Action.ToString(),
-                Description = e.Description,
-                OccurredAt = e.OccurredAt.ToDateTimeUtc(),
-                ActorName = e.ActorName,
-                IsSystemAction = e.ActorUserId == null
-            })
-            .ToListAsync();
-
-        var anomalyCount = await _dbContext.AuditLogEntries
-            .AsNoTracking()
-            .CountAsync(e => e.Action == AuditAction.AnomalousPermissionDetected);
+            Action = e.Action.ToString(),
+            Description = e.Description,
+            OccurredAt = e.OccurredAt.ToDateTimeUtc(),
+            ActorName = e.ActorName,
+            IsSystemAction = e.ActorUserId == null
+        }).ToList();
 
         var viewModel = new AuditLogListViewModel
         {
@@ -1138,10 +811,7 @@ public class AdminController : Controller
     [HttpGet("GoogleSync/Resource/{id}/Audit")]
     public async Task<IActionResult> GoogleSyncResourceAudit(Guid id)
     {
-        var resource = await _dbContext.GoogleResources
-            .AsNoTracking()
-            .Include(r => r.Team)
-            .FirstOrDefaultAsync(r => r.Id == id);
+        var resource = await _teamResourceService.GetResourceByIdAsync(id);
 
         if (resource == null)
         {
@@ -1176,9 +846,7 @@ public class AdminController : Controller
     [HttpGet("Humans/{id}/GoogleSyncAudit")]
     public async Task<IActionResult> HumanGoogleSyncAudit(Guid id)
     {
-        var user = await _dbContext.Users
-            .AsNoTracking()
-            .FirstOrDefaultAsync(u => u.Id == id);
+        var user = await _userManager.FindByIdAsync(id.ToString());
 
         if (user == null)
         {

@@ -60,6 +60,10 @@
                         <label asp-for="BurnerName" class="form-label"></label>
                         <input asp-for="BurnerName" class="form-control" placeholder="@Localizer["ProfileEdit_BurnerNamePlaceholder"].Value" />
                         <span asp-validation-for="BurnerName" class="text-danger"></span>
+                        <div id="burnerNameWarning" class="alert alert-danger mt-2 d-none" role="alert">
+                            <i class="fa-solid fa-triangle-exclamation me-1"></i>
+                            @Localizer["ProfileEdit_BurnerNameMatchesLegalName"]
+                        </div>
                         <div class="form-text">@Localizer["ProfileEdit_BurnerNameHelp"]</div>
                     </div>
 
@@ -168,7 +172,18 @@
 
                                         <div class="col-md-3">
                                             <input type="text" name="EditableContactFields[@i].Value" id="EditableContactFields_@(i)__Value" value="@Model.EditableContactFields[i].Value" class="form-control form-control-sm contact-value-input" required placeholder="Enter contact info" />
-                                            <span class="text-danger small field-validation-error" data-valmsg-for="EditableContactFields[@i].Value"></span>
+                                            @{
+                                                var fieldKey = $"EditableContactFields[{i}].Value";
+                                                var fieldErrors = ViewData.ModelState[fieldKey]?.Errors;
+                                            }
+                                            @if (fieldErrors?.Count > 0)
+                                            {
+                                                <span class="text-danger small field-validation-error">@fieldErrors[0].ErrorMessage</span>
+                                            }
+                                            else
+                                            {
+                                                <span class="text-danger small field-validation-error" data-valmsg-for="EditableContactFields[@i].Value"></span>
+                                            }
                                         </div>
 
                                         <div class="col-md-3">
@@ -566,8 +581,9 @@
                                 </div>
 
                                 <div class="col-md-3">
-                                    <select name="EditableContactFields[${index}].Visibility" id="EditableContactFields_${index}__Visibility" class="form-select form-select-sm">
-                                        <option value="AllActiveProfiles" selected>All active members</option>
+                                    <select name="EditableContactFields[${index}].Visibility" id="EditableContactFields_${index}__Visibility" class="form-select form-select-sm" required>
+                                        <option value="" selected disabled>@Localizer["Profile_ChooseVisibility"]</option>
+                                        <option value="AllActiveProfiles">All active members</option>
                                         <option value="MyTeams">My teams (+ leads & board)</option>
                                         <option value="LeadsAndBoard">Leads + Board</option>
                                         <option value="BoardOnly">Board only</option>
@@ -588,14 +604,38 @@
                 return template.content.firstChild;
             }
 
+            const phoneTypes = ['Phone', 'WhatsApp'];
+            const phonePlaceholder = '@Html.Raw(Localizer["Validation_PhonePlaceholder"].Value)';
+            const phoneTitle = '@Html.Raw(Localizer["Validation_PhoneHint"].Value)';
+            const defaultPlaceholder = 'Enter contact info';
+
+            function applyPhoneValidation(valueInput, isPhone) {
+                if (isPhone) {
+                    valueInput.setAttribute('pattern', '\\+.+');
+                    valueInput.setAttribute('title', phoneTitle);
+                    valueInput.placeholder = phonePlaceholder;
+                    valueInput.type = 'tel';
+                } else {
+                    valueInput.removeAttribute('pattern');
+                    valueInput.removeAttribute('title');
+                    valueInput.placeholder = defaultPlaceholder;
+                    valueInput.type = 'text';
+                }
+            }
+
             function setupRow(row) {
                 const typeSelect = row.querySelector('.field-type-select');
                 const customLabelCol = row.querySelector('.custom-label-col');
                 const removeBtn = row.querySelector('.remove-contact-field');
+                const valueInput = row.querySelector('.contact-value-input');
 
-                typeSelect.addEventListener('change', function() {
-                    customLabelCol.style.display = this.value === 'Other' ? 'block' : 'none';
-                });
+                function onTypeChange() {
+                    customLabelCol.style.display = typeSelect.value === 'Other' ? 'block' : 'none';
+                    applyPhoneValidation(valueInput, phoneTypes.includes(typeSelect.value));
+                }
+
+                typeSelect.addEventListener('change', onTypeChange);
+                onTypeChange();
 
                 removeBtn.addEventListener('click', function() {
                     row.remove();
@@ -786,6 +826,34 @@
             const vh = document.getElementById('volunteerHistoryContainer');
             if (cf) observer.observe(cf, opts);
             if (vh) observer.observe(vh, opts);
+
+            // Burner name / legal name match warning
+            const burnerNameInput = document.getElementById('BurnerName');
+            const firstNameInput = document.getElementById('FirstName');
+            const lastNameInput = document.getElementById('LastName');
+            const burnerWarning = document.getElementById('burnerNameWarning');
+
+            function checkBurnerNameMatch() {
+                if (!burnerNameInput || !burnerWarning) return;
+                const burner = burnerNameInput.value.trim().toLowerCase();
+                if (!burner) { burnerWarning.classList.add('d-none'); return; }
+                const first = (firstNameInput?.value || '').trim().toLowerCase();
+                const last = (lastNameInput?.value || '').trim().toLowerCase();
+                const fullLegal = [first, last].filter(Boolean).join(' ');
+                const matches = fullLegal.length > 0 && burner === fullLegal;
+                burnerWarning.classList.toggle('d-none', !matches);
+            }
+
+            burnerNameInput?.addEventListener('input', checkBurnerNameMatch);
+            firstNameInput?.addEventListener('input', checkBurnerNameMatch);
+            lastNameInput?.addEventListener('input', checkBurnerNameMatch);
+            checkBurnerNameMatch();
+
+            // Scroll to first validation error
+            const firstError = document.querySelector('.field-validation-error:not(:empty), .text-danger:not(:empty)');
+            if (firstError) {
+                firstError.closest('.mb-3, .col-md-3, .card')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
 
             // Clear on submit so saving doesn't trigger warning
             form.addEventListener('submit', () => { dirty = false; });

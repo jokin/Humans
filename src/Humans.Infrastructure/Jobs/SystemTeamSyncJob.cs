@@ -13,7 +13,7 @@ namespace Humans.Infrastructure.Jobs;
 /// <summary>
 /// Background job that syncs membership for system-managed teams.
 /// </summary>
-public class SystemTeamSyncJob
+public class SystemTeamSyncJob : ISystemTeamSync
 {
     private readonly HumansDbContext _dbContext;
     private readonly IMembershipCalculator _membershipCalculator;
