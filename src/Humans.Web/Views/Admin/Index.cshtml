@@ -86,6 +86,21 @@
         }
 
         <div class="card mb-4">
+            <div class="card-header">Event Guide</div>
+            <div class="list-group list-group-flush">
+                <a asp-controller="GuideAdmin" asp-action="GuideSettings" class="list-group-item list-group-item-action">
+                    <i class="fa-solid fa-gear me-2"></i>Guide Settings
+                </a>
+                <a asp-controller="GuideAdmin" asp-action="GuideCategories" class="list-group-item list-group-item-action">
+                    <i class="fa-solid fa-tags me-2"></i>Categories
+                </a>
+                <a asp-controller="GuideAdmin" asp-action="GuideVenues" class="list-group-item list-group-item-action">
+                    <i class="fa-solid fa-location-dot me-2"></i>Venues
+                </a>
+            </div>
+        </div>
+
+        <div class="card mb-4">
             <div class="card-header">Quick Links</div>
             <div class="list-group list-group-flush">
                 <a asp-controller="Board" asp-action="Index" class="list-group-item list-group-item-action">
