@@ -22,8 +22,8 @@ Single record per event edition.
 
 | Column | Type | Notes |
 |--------|------|-------|
-| `Id` | `int` | PK |
-| `EventSettingsId` | `int` | FK → `EventSettings.Id` (shared date/timezone context) |
+| `Id` | `Guid` | PK |
+| `EventSettingsId` | `Guid` | FK → `EventSettings.Id` (shared date/timezone context) |
 | `SubmissionOpenAt` | `Instant` | When camps can start submitting |
 | `SubmissionCloseAt` | `Instant` | When submission form closes |
 | `GuidePublishAt` | `Instant` | When guide goes live to attendees |
@@ -34,7 +34,7 @@ Lookup table for event categories.
 
 | Column | Type | Notes |
 |--------|------|-------|
-| `Id` | `int` | PK |
+| `Id` | `Guid` | PK |
 | `Name` | `string(60)` | Display name |
 | `Slug` | `string(60)` | URL-safe identifier, unique |
 | `IsSensitive` | `bool` | Triggers opt-out UI (Adult, Spiritual, etc.) |
@@ -46,8 +46,8 @@ Links a Humans `Team` to a camp identity in the guide.
 
 | Column | Type | Notes |
 |--------|------|-------|
-| `Id` | `int` | PK |
-| `TeamId` | `int` | FK → `Teams.Id`, unique |
+| `Id` | `Guid` | PK |
+| `TeamId` | `Guid` | FK → `Teams.Id`, unique |
 | `CampName` | `string(120)` | May differ from team name |
 | `Description` | `string(500)` | nullable |
 | `GridAddress` | `string(60)` | nullable |
@@ -58,7 +58,7 @@ Admin-managed communal spaces (e.g. "Main Stage", "The Middle of Elsewhere").
 
 | Column | Type | Notes |
 |--------|------|-------|
-| `Id` | `int` | PK |
+| `Id` | `Guid` | PK |
 | `Name` | `string(120)` | |
 | `Description` | `string(500)` | nullable |
 | `LocationDescription` | `string(120)` | Grid address or text description |
@@ -70,11 +70,11 @@ A single event submission.
 
 | Column | Type | Notes |
 |--------|------|-------|
-| `Id` | `int` | PK |
-| `GuideCampId` | `int?` | FK → `GuideCamps.Id`, nullable |
-| `GuideSharedVenueId` | `int?` | FK → `GuideSharedVenues.Id`, nullable |
-| `SubmitterUserId` | `int` | FK → `Users.Id` |
-| `CategoryId` | `int` | FK → `EventCategories.Id` |
+| `Id` | `Guid` | PK |
+| `GuideCampId` | `Guid?` | FK → `GuideCamps.Id`, nullable |
+| `GuideSharedVenueId` | `Guid?` | FK → `GuideSharedVenues.Id`, nullable |
+| `SubmitterUserId` | `Guid` | FK → `Users.Id` |
+| `CategoryId` | `Guid` | FK → `EventCategories.Id` |
 | `Title` | `string(80)` | |
 | `Description` | `string(300)` | |
 | `LocationNote` | `string(120)` | nullable, free-text detail within venue |
@@ -95,9 +95,9 @@ Append-only audit log of moderation decisions.
 
 | Column | Type | Notes |
 |--------|------|-------|
-| `Id` | `int` | PK |
-| `GuideEventId` | `int` | FK → `GuideEvents.Id` |
-| `ActorUserId` | `int` | FK → `Users.Id` |
+| `Id` | `Guid` | PK |
+| `GuideEventId` | `Guid` | FK → `GuideEvents.Id` |
+| `ActorUserId` | `Guid` | FK → `Users.Id` |
 | `Action` | `ModerationActionType` | Stored as string |
 | `Reason` | `string(500)` | Required for non-approval actions |
 | `CreatedAt` | `Instant` | |
@@ -109,8 +109,8 @@ Per-account guide preferences.
 
 | Column | Type | Notes |
 |--------|------|-------|
-| `Id` | `int` | PK |
-| `UserId` | `int` | FK → `Users.Id`, unique |
+| `Id` | `Guid` | PK |
+| `UserId` | `Guid` | FK → `Users.Id`, unique |
 | `ExcludedCategorySlugs` | `string` | JSON array of slugs |
 | `UpdatedAt` | `Instant` | |
 
@@ -119,9 +119,9 @@ Links a user to a favourited event.
 
 | Column | Type | Notes |
 |--------|------|-------|
-| `Id` | `int` | PK |
-| `UserId` | `int` | FK → `Users.Id` |
-| `GuideEventId` | `int` | FK → `GuideEvents.Id` |
+| `Id` | `Guid` | PK |
+| `UserId` | `Guid` | FK → `Users.Id` |
+| `GuideEventId` | `Guid` | FK → `GuideEvents.Id` |
 | `CreatedAt` | `Instant` | |
 
 Unique constraint on `(UserId, GuideEventId)`.
