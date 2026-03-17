@@ -41,7 +41,7 @@ No priority rank field for individual events — priority ranking is for camp ev
 
 ### On submit
 - Sets `GuideSharedVenueId` from the selected venue
-- Sets `CampId = null`
+- Sets `GuideCampId = null`
 - Sets `SubmitterUserId` to the current user
 - Sets `Status = Pending`, `SubmittedAt = now`
 - Redirects to "My Event Submissions" page with success message
@@ -54,7 +54,7 @@ Page showing the current user's individual event submissions.
 
 ### Contents
 - Table: title, venue, date/time, category, status badge
-- Edit action (any status except `Withdrawn`)
+- Edit action (if `Draft`, `Rejected`, or `ResubmitRequested`)
 - Withdraw action (if `Draft` or `Pending`)
 - "Submit New Event" link
 
@@ -65,7 +65,7 @@ Page showing the current user's individual event submissions.
 
 ## Edit Form — `/EventGuide/Submit/{eventId}/Edit`
 
-Same fields as the creation form, pre-populated. Available for any status except `Withdrawn`. Saving an edit on an `Approved` or `Pending` event resets status to `Pending`, sending it back through the moderation queue.
+Same fields as the creation form, pre-populated. Available when status is `Draft`, `Rejected`, or `ResubmitRequested`. Resubmitting resets status to `Pending`.
 
 ---
 
@@ -85,7 +85,7 @@ Individual events are attributed to the submitter's display name (profile name) 
 
 - [ ] Any authenticated user can access `/EventGuide/Submit` when the submission window is open
 - [ ] Form shows only active `GuideSharedVenue` records in the venue dropdown
-- [ ] Submission creates a `GuideEvent` with `GuideSharedVenueId` set and `CampId = null`
+- [ ] Submission creates a `GuideEvent` with `GuideSharedVenueId` set and `GuideCampId = null`
 - [ ] "My Event Submissions" page shows only the current user's individual submissions
 - [ ] Edit and withdraw work as specified
 - [ ] Unauthenticated users are redirected to login

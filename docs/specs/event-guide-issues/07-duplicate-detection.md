@@ -15,12 +15,12 @@ The moderation queue automatically flags submissions that appear to be duplicate
 ## Detection Logic
 
 A `GuideEvent` is flagged as a **potential duplicate** if:
-- It belongs to the same `GuideCamp` (same `CampId`), AND
+- It belongs to the same `GuideCamp` (same `GuideCampId`), AND
 - Its time window overlaps with another `GuideEvent` that has `Status = Pending` or `Status = Approved`
 
 Time overlap: `event A` and `event B` overlap if `A.StartAt < B.StartAt + B.Duration` AND `B.StartAt < A.StartAt + A.Duration`.
 
-Individual events (no camp, `CampId = null`) are **not** checked for duplicates — there is no shared identity to deduplicate against.
+Individual events (no camp, `GuideCampId = null`) are **not** checked for duplicates — there is no shared identity to deduplicate against.
 
 ---
 

@@ -22,8 +22,8 @@ Single record per event edition.
 
 | Column | Type | Notes |
 |--------|------|-------|
-| `Id` | `Guid` | PK |
-| `EventSettingsId` | `Guid` | FK → `EventSettings.Id` (shared date/timezone context) |
+| `Id` | `int` | PK |
+| `EventSettingsId` | `int` | FK → `EventSettings.Id` (shared date/timezone context) |
 | `SubmissionOpenAt` | `Instant` | When camps can start submitting |
 | `SubmissionCloseAt` | `Instant` | When submission form closes |
 | `GuidePublishAt` | `Instant` | When guide goes live to attendees |
@@ -34,19 +34,31 @@ Lookup table for event categories.
 
 | Column | Type | Notes |
 |--------|------|-------|
-| `Id` | `Guid` | PK |
+| `Id` | `int` | PK |
 | `Name` | `string(60)` | Display name |
 | `Slug` | `string(60)` | URL-safe identifier, unique |
 | `IsSensitive` | `bool` | Triggers opt-out UI (Adult, Spiritual, etc.) |
 | `DisplayOrder` | `int` | Sort order |
 | `IsActive` | `bool` | Soft disable without deletion |
 
+### `GuideCamp`
+Links a Humans `Team` to a camp identity in the guide.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `Id` | `int` | PK |
+| `TeamId` | `int` | FK → `Teams.Id`, unique |
+| `CampName` | `string(120)` | May differ from team name |
+| `Description` | `string(500)` | nullable |
+| `GridAddress` | `string(60)` | nullable |
+| `IsPublished` | `bool` | Controls visibility in guide |
+
 ### `GuideSharedVenue`
 Admin-managed communal spaces (e.g. "Main Stage", "The Middle of Elsewhere").
 
 | Column | Type | Notes |
 |--------|------|-------|
-| `Id` | `Guid` | PK |
+| `Id` | `int` | PK |
 | `Name` | `string(120)` | |
 | `Description` | `string(500)` | nullable |
 | `LocationDescription` | `string(120)` | Grid address or text description |
@@ -58,11 +70,11 @@ A single event submission.
 
 | Column | Type | Notes |
 |--------|------|-------|
-| `Id` | `Guid` | PK |
-| `CampId` | `Guid?` | FK → `Camps.Id`, nullable (reuses existing Camp entity) |
-| `GuideSharedVenueId` | `Guid?` | FK → `GuideSharedVenues.Id`, nullable |
-| `SubmitterUserId` | `Guid` | FK → `Users.Id` |
-| `CategoryId` | `Guid` | FK → `EventCategories.Id` |
+| `Id` | `int` | PK |
+| `GuideCampId` | `int?` | FK → `GuideCamps.Id`, nullable |
+| `GuideSharedVenueId` | `int?` | FK → `GuideSharedVenues.Id`, nullable |
+| `SubmitterUserId` | `int` | FK → `Users.Id` |
+| `CategoryId` | `int` | FK → `EventCategories.Id` |
 | `Title` | `string(80)` | |
 | `Description` | `string(300)` | |
 | `LocationNote` | `string(120)` | nullable, free-text detail within venue |
@@ -83,9 +95,9 @@ Append-only audit log of moderation decisions.
 
 | Column | Type | Notes |
 |--------|------|-------|
-| `Id` | `Guid` | PK |
-| `GuideEventId` | `Guid` | FK → `GuideEvents.Id` |
-| `ActorUserId` | `Guid` | FK → `Users.Id` |
+| `Id` | `int` | PK |
+| `GuideEventId` | `int` | FK → `GuideEvents.Id` |
+| `ActorUserId` | `int` | FK → `Users.Id` |
 | `Action` | `ModerationActionType` | Stored as string |
 | `Reason` | `string(500)` | Required for non-approval actions |
 | `CreatedAt` | `Instant` | |
@@ -97,8 +109,8 @@ Per-account guide preferences.
 
 | Column | Type | Notes |
 |--------|------|-------|
-| `Id` | `Guid` | PK |
-| `UserId` | `Guid` | FK → `Users.Id`, unique |
+| `Id` | `int` | PK |
+| `UserId` | `int` | FK → `Users.Id`, unique |
 | `ExcludedCategorySlugs` | `string` | JSON array of slugs |
 | `UpdatedAt` | `Instant` | |
 
@@ -107,9 +119,9 @@ Links a user to a favourited event.
 
 | Column | Type | Notes |
 |--------|------|-------|
-| `Id` | `Guid` | PK |
-| `UserId` | `Guid` | FK → `Users.Id` |
-| `GuideEventId` | `Guid` | FK → `GuideEvents.Id` |
+| `Id` | `int` | PK |
+| `UserId` | `int` | FK → `Users.Id` |
+| `GuideEventId` | `int` | FK → `GuideEvents.Id` |
 | `CreatedAt` | `Instant` | |
 
 Unique constraint on `(UserId, GuideEventId)`.
@@ -141,23 +153,23 @@ Add `GuideModerator` to `RoleNames` constants. No new claims transformation need
 ## EF Configuration
 
 One configuration class per entity in `src/Humans.Infrastructure/Data/Configurations/`:
-- Lowercase snake_case table names (`guide_settings`, `event_categories`, `guide_shared_venues`, `guide_events`, `moderation_actions`, `user_guide_preferences`, `user_event_favourites`)
+- Lowercase snake_case table names (`guide_settings`, `event_categories`, `guide_camps`, `guide_shared_venues`, `guide_events`, `moderation_actions`, `user_guide_preferences`, `user_event_favourites`)
 - All string columns with explicit `HasMaxLength`
 - All enum columns with `.HasConversion<string>()`
-- Delete behaviors: `Restrict` on `GuideEvent → Camp` and `GuideEvent → GuideSharedVenue` (don't cascade delete events when a venue/camp is removed)
-- Index on `GuideEvent.Status`, `GuideEvent.CampId`, `GuideEvent.SubmitterUserId`
+- Delete behaviors: `Restrict` on `GuideEvent → GuideCamp` and `GuideEvent → GuideSharedVenue` (don't cascade delete events when a venue/camp is removed)
+- Index on `GuideEvent.Status`, `GuideEvent.GuideCampId`, `GuideEvent.SubmitterUserId`
 
 ---
 
 ## Migration
 
-Single migration covering all 7 new tables. Name: `AddEventGuide`.
+Single migration covering all 8 new tables. Name: `AddEventGuide`.
 
 ---
 
 ## Acceptance Criteria
 
-- [ ] All 7 entities exist in `src/Humans.Domain/Entities/`
+- [ ] All 8 entities exist in `src/Humans.Domain/Entities/`
 - [ ] All enums exist in `src/Humans.Domain/Enums/`
 - [ ] `GuideModerator` added to `RoleNames`
 - [ ] EF configurations exist for all entities
