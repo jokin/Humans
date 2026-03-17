@@ -4954,6 +4954,18 @@ namespace Humans.Infrastructure.Migrations
                     b.Navigation("Messages");
                 });
 
+            modelBuilder.Entity("Humans.Domain.Entities.GuideEvent", b =>
+                {
+                    b.Navigation("ModerationActions");
+
+                    b.Navigation("UserEventFavourites");
+                });
+
+            modelBuilder.Entity("Humans.Domain.Entities.GuideSharedVenue", b =>
+                {
+                    b.Navigation("GuideEvents");
+                });
+
             modelBuilder.Entity("Humans.Domain.Entities.LegalDocument", b =>
                 {
                     b.Navigation("Versions");

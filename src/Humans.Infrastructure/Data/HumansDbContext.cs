@@ -86,6 +86,13 @@ public class HumansDbContext : IdentityDbContext<User, IdentityRole<Guid>, Guid>
     public DbSet<NotificationRecipient> NotificationRecipients => Set<NotificationRecipient>();
     public DbSet<ProfileLanguage> ProfileLanguages => Set<ProfileLanguage>();
     public DbSet<EventParticipation> EventParticipations => Set<EventParticipation>();
+    public DbSet<GuideSettings> GuideSettings => Set<GuideSettings>();
+    public DbSet<EventCategory> EventCategories => Set<EventCategory>();
+    public DbSet<GuideSharedVenue> GuideSharedVenues => Set<GuideSharedVenue>();
+    public DbSet<GuideEvent> GuideEvents => Set<GuideEvent>();
+    public DbSet<ModerationAction> ModerationActions => Set<ModerationAction>();
+    public DbSet<UserGuidePreference> UserGuidePreferences => Set<UserGuidePreference>();
+    public DbSet<UserEventFavourite> UserEventFavourites => Set<UserEventFavourite>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
