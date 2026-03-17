@@ -19,7 +19,7 @@ services:
       - GitHub__AccessToken=${GITHUB_ACCESS_TOKEN}
       - GoogleWorkspace__ServiceAccountKeyJson=${GOOGLE_SA_KEY_JSON}
     ports:
-      - "5000:8080"
+      - "5001:8080"
     volumes:
       - ./uploads:/app/wwwroot/uploads
     depends_on:

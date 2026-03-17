@@ -53,7 +53,8 @@ See `docs/specs/event-guide-proposal-v1.md` for the full design specification.
 **So that** only appropriate content is published in the guide
 
 **Acceptance Criteria:**
-- Queue at `/EventGuide/Moderate` lists all Pending submissions in order of receipt
+
+- Queue at `/Event/Moderate` lists all Pending submissions in order of receipt
 - Duplicate flag shown when a submission shares a camp and overlapping time slot with an existing Pending or Approved event (advisory only — moderator decides)
 - Actions: Approve, Reject (requires reason), Request Edit (requires reason)
 - On Reject or Request Edit: submitter receives email with the reason
@@ -167,9 +168,9 @@ All emails use the existing `EmailOutboxMessage` / `ProcessEmailOutboxJob` infra
 
 | Route | Purpose |
 |-------|---------|
-| `/EventGuide/Submit` | Any human: individual event submission form |
-| `/EventGuide/Moderate` | Moderator: pending submissions queue |
-| `/EventGuide/Admin` | Admin: GuideSettings, categories, venues, exports |
+| `/Event/Submit` | Any human: individual event submission form |
+| `/Event/Moderate` | Moderator: pending submissions queue |
+| `/Event/Admin` | Admin: GuideSettings, categories, venues, exports |
 | `/Teams/{slug}/Events` | Lead: submit and manage camp events for a team |
 | `/api/guide/events` | Public API: approved events (PWA data source) |
 | `/api/guide/camps` | Public API: published camps with hosted events |

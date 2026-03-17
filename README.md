@@ -52,7 +52,7 @@ docker-compose up -d
 ```
 
 This starts:
-- Application (port 5000)
+- Application (port 5001)
 - PostgreSQL (port 5432)
 - Redis (port 6379)
 - OpenTelemetry Collector (port 4317)

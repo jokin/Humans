@@ -50,4 +50,9 @@ public static class RoleNames
     /// Has access to volunteer event profile medical data.
     /// </summary>
     public const string NoInfoAdmin = "NoInfoAdmin";
+
+    /// <summary>
+    /// Guide Moderator — can approve, reject, and request edits on event guide submissions.
+    /// </summary>
+    public const string GuideModerator = "GuideModerator";
 }
