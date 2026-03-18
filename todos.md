@@ -71,6 +71,8 @@ Preview environments clone QA DB but lack access to uploaded images.
 #### #148: Add automated Codex code review on pull requests
 GitHub Action workflow running OpenAI Codex CLI on PRs.
 
+#### #137: Public team pages with editable markdown content, CTAs, and member roster
+Public-facing team pages with editable markdown, calls-to-action, and visible member roster. Label: none.
 
 #### #138: Add Catalan (ca) translation
 New `SharedResource.ca.resx` with all ~805 keys.

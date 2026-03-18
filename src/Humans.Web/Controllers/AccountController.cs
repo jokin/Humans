@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using NodaTime;
 using Humans.Application.Interfaces;
+using Humans.Domain.Helpers;
 using Humans.Domain.Entities;
 
 namespace Humans.Web.Controllers;
@@ -144,7 +145,8 @@ public class AccountController : Controller
         }
 
         // No existing login — try to link to an existing account by email
-        var email = info.Principal.FindFirstValue(ClaimTypes.Email) ?? string.Empty;
+        var email = EmailNormalization.NormalizeForComparison(
+            info.Principal.FindFirstValue(ClaimTypes.Email) ?? string.Empty);
         var name = info.Principal.FindFirstValue(ClaimTypes.Name);
         var pictureUrl = info.Principal.FindFirstValue("urn:google:picture");
 
