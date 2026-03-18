@@ -16,10 +16,15 @@ public class GuideEventTests
         _clock = new FakeClock(Instant.FromUtc(2026, 3, 18, 12, 0));
     }
 
-    [Fact]
-    public void Submit_FromDraft_SetsPendingAndTimestamps()
+    [Theory]
+    [InlineData(GuideEventStatus.Draft)]
+    [InlineData(GuideEventStatus.Rejected)]
+    [InlineData(GuideEventStatus.ResubmitRequested)]
+    [InlineData(GuideEventStatus.Approved)]
+    [InlineData(GuideEventStatus.Pending)]
+    public void Submit_FromValidState_SetsPendingAndTimestamps(GuideEventStatus source)
     {
-        var guideEvent = CreateEvent(GuideEventStatus.Draft);
+        var guideEvent = CreateEvent(source);
 
         guideEvent.Submit(_clock);
 
@@ -39,10 +44,12 @@ public class GuideEventTests
             .WithMessage("Cannot submit event in Withdrawn state");
     }
 
-    [Fact]
-    public void Withdraw_FromPending_SetsWithdrawnAndLastUpdated()
+    [Theory]
+    [InlineData(GuideEventStatus.Draft)]
+    [InlineData(GuideEventStatus.Pending)]
+    public void Withdraw_FromValidState_SetsWithdrawnAndLastUpdated(GuideEventStatus source)
     {
-        var guideEvent = CreateEvent(GuideEventStatus.Pending);
+        var guideEvent = CreateEvent(source);
 
         guideEvent.Withdraw(_clock);
 
@@ -50,15 +57,19 @@ public class GuideEventTests
         guideEvent.LastUpdatedAt.Should().Be(_clock.GetCurrentInstant());
     }
 
-    [Fact]
-    public void Withdraw_FromApproved_Throws()
+    [Theory]
+    [InlineData(GuideEventStatus.Approved)]
+    [InlineData(GuideEventStatus.Rejected)]
+    [InlineData(GuideEventStatus.ResubmitRequested)]
+    [InlineData(GuideEventStatus.Withdrawn)]
+    public void Withdraw_FromInvalidState_Throws(GuideEventStatus source)
     {
-        var guideEvent = CreateEvent(GuideEventStatus.Approved);
+        var guideEvent = CreateEvent(source);
 
         var action = () => guideEvent.Withdraw(_clock);
 
         action.Should().Throw<InvalidOperationException>()
-            .WithMessage("Cannot withdraw event in Approved state");
+            .WithMessage($"Cannot withdraw event in {source} state");
     }
 
     [Theory]
@@ -77,15 +88,20 @@ public class GuideEventTests
         guideEvent.LastUpdatedAt.Should().Be(_clock.GetCurrentInstant());
     }
 
-    [Fact]
-    public void ApplyModerationAction_FromDraft_Throws()
+    [Theory]
+    [InlineData(GuideEventStatus.Draft)]
+    [InlineData(GuideEventStatus.Approved)]
+    [InlineData(GuideEventStatus.Rejected)]
+    [InlineData(GuideEventStatus.ResubmitRequested)]
+    [InlineData(GuideEventStatus.Withdrawn)]
+    public void ApplyModerationAction_FromInvalidState_Throws(GuideEventStatus source)
     {
-        var guideEvent = CreateEvent(GuideEventStatus.Draft);
+        var guideEvent = CreateEvent(source);
 
         var action = () => guideEvent.ApplyModerationAction(ModerationActionType.Approved, _clock);
 
         action.Should().Throw<InvalidOperationException>()
-            .WithMessage("Cannot moderate event in Draft state");
+            .WithMessage($"Cannot moderate event in {source} state");
     }
 
     [Fact]
@@ -96,18 +112,6 @@ public class GuideEventTests
         var action = () => guideEvent.ApplyModerationAction((ModerationActionType)999, _clock);
 
         action.Should().Throw<ArgumentOutOfRangeException>();
-    }
-
-    [Fact]
-    public void Submit_FromApproved_MovesBackToPending()
-    {
-        var guideEvent = CreateEvent(GuideEventStatus.Approved);
-
-        guideEvent.Submit(_clock);
-
-        guideEvent.Status.Should().Be(GuideEventStatus.Pending);
-        guideEvent.SubmittedAt.Should().Be(_clock.GetCurrentInstant());
-        guideEvent.LastUpdatedAt.Should().Be(_clock.GetCurrentInstant());
     }
 
     private GuideEvent CreateEvent(GuideEventStatus status)
