@@ -34,6 +34,7 @@ public class ModerationEventRowViewModel
     public DateTime SubmittedAt { get; set; }
     public GuideEventStatus Status { get; set; }
     public List<ModerationHistoryItemViewModel> History { get; set; } = [];
+    public List<DuplicateCandidateViewModel> DuplicateCandidates { get; set; } = [];
 
     public string StatusBadgeClass => Status switch
     {
@@ -61,6 +62,15 @@ public class ModerationHistoryItemViewModel
         ModerationActionType.ResubmitRequested => "bg-info",
         _ => "bg-secondary"
     };
+}
+
+public class DuplicateCandidateViewModel
+{
+    public Guid Id { get; set; }
+    public string Title { get; set; } = string.Empty;
+    public DateTime StartAt { get; set; }
+    public int DurationMinutes { get; set; }
+    public GuideEventStatus Status { get; set; }
 }
 
 public class ModerationActionFormModel

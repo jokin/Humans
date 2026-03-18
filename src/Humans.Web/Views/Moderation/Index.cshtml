@@ -71,6 +71,10 @@ else
                             <div class="d-flex gap-2 align-items-center">
                                 <span class="badge bg-secondary">@evt.CategoryName</span>
                                 <small class="text-muted">@evt.StartAt.ToString("d MMM HH:mm") &middot; @evt.DurationMinutes min</small>
+                                @if (evt.DuplicateCandidates.Count > 0)
+                                {
+                                    <span class="badge bg-warning text-dark" title="Potential duplicate"><i class="fa-solid fa-triangle-exclamation"></i></span>
+                                }
                                 <span class="badge @evt.StatusBadgeClass">@evt.Status</span>
                             </div>
                         </div>
@@ -127,6 +131,22 @@ else
                                     <dt class="col-sm-3">Submitted</dt>
                                     <dd class="col-sm-9">@evt.SubmittedAt.ToString("d MMM yyyy HH:mm")</dd>
                                 </dl>
+
+                                @if (evt.DuplicateCandidates.Count > 0)
+                                {
+                                    <hr />
+                                    <h6><i class="fa-solid fa-triangle-exclamation text-warning me-1"></i>Potential Duplicates</h6>
+                                    <ul class="list-unstyled">
+                                        @foreach (var dup in evt.DuplicateCandidates)
+                                        {
+                                            <li class="mb-1">
+                                                <strong>@dup.Title</strong>
+                                                — @dup.StartAt.ToString("d MMM HH:mm") (@dup.DurationMinutes min)
+                                                <span class="badge bg-secondary">@dup.Status</span>
+                                            </li>
+                                        }
+                                    </ul>
+                                }
 
                                 @if (evt.History.Count > 0)
                                 {

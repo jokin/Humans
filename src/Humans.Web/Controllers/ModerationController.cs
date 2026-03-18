@@ -86,6 +86,42 @@ public class ModerationController : Controller
             Events = events.Select(e => BuildRow(e, tz)).ToList()
         };
 
+        // Duplicate detection: for camp events, find time-overlapping events from the same camp
+        var campEvents = events.Where(e => e.CampId.HasValue).ToList();
+        if (campEvents.Count > 0)
+        {
+            // Load all pending/approved camp events for overlap checking
+            var allCampEvents = await _dbContext.GuideEvents
+                .Where(e => e.CampId != null &&
+                            (e.Status == GuideEventStatus.Pending || e.Status == GuideEventStatus.Approved))
+                .Select(e => new { e.Id, e.CampId, e.Title, e.StartAt, e.DurationMinutes, e.Status })
+                .ToListAsync();
+
+            foreach (var row in model.Events)
+            {
+                var evt = campEvents.FirstOrDefault(e => e.Id == row.Id);
+                if (evt?.CampId == null) continue;
+
+                var endAt = evt.StartAt.Plus(Duration.FromMinutes(evt.DurationMinutes));
+                var overlaps = allCampEvents
+                    .Where(other => other.Id != evt.Id
+                                 && other.CampId == evt.CampId
+                                 && other.StartAt < endAt
+                                 && evt.StartAt < other.StartAt.Plus(Duration.FromMinutes(other.DurationMinutes)))
+                    .Select(other => new DuplicateCandidateViewModel
+                    {
+                        Id = other.Id,
+                        Title = other.Title,
+                        StartAt = ToLocalDateTime(other.StartAt, tz),
+                        DurationMinutes = other.DurationMinutes,
+                        Status = other.Status
+                    })
+                    .ToList();
+
+                row.DuplicateCandidates = overlaps;
+            }
+        }
+
         return View(model);
     }
 
