@@ -280,6 +280,7 @@ public class EventGuideController : Controller
         return RedirectToAction(nameof(MySubmissions));
     }
 
+<<<<<<< HEAD
     [HttpGet("Schedule")]
     public async Task<IActionResult> Schedule()
     {
