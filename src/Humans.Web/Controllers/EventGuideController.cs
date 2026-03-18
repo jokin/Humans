@@ -1,0 +1,362 @@
+using Humans.Domain.Entities;
+using Humans.Domain.Enums;
+using Humans.Infrastructure.Data;
+using Humans.Web.Models;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using NodaTime;
+
+namespace Humans.Web.Controllers;
+
+[Authorize]
+[Route("EventGuide")]
+public class EventGuideController : Controller
+{
+    private readonly HumansDbContext _dbContext;
+    private readonly UserManager<User> _userManager;
+    private readonly IClock _clock;
+    private readonly ILogger<EventGuideController> _logger;
+
+    public EventGuideController(
+        HumansDbContext dbContext,
+        UserManager<User> userManager,
+        IClock clock,
+        ILogger<EventGuideController> logger)
+    {
+        _dbContext = dbContext;
+        _userManager = userManager;
+        _clock = clock;
+        _logger = logger;
+    }
+
+    [HttpGet("MySubmissions")]
+    public async Task<IActionResult> MySubmissions()
+    {
+        var user = await _userManager.GetUserAsync(User);
+        if (user == null) return Challenge();
+
+        var guideSettings = await _dbContext.GuideSettings
+            .Include(g => g.EventSettings)
+            .FirstOrDefaultAsync();
+
+        var now = _clock.GetCurrentInstant();
+        var isSubmissionOpen = guideSettings != null &&
+                               now >= guideSettings.SubmissionOpenAt &&
+                               now <= guideSettings.SubmissionCloseAt;
+
+        DateTimeZone? tz = guideSettings?.EventSettings != null
+            ? DateTimeZoneProviders.Tzdb.GetZoneOrNull(guideSettings.EventSettings.TimeZoneId)
+            : null;
+
+        // Individual submissions = CampId is null, submitted by this user
+        var events = await _dbContext.GuideEvents
+            .Include(e => e.Category)
+            .Include(e => e.GuideSharedVenue)
+            .Where(e => e.CampId == null && e.SubmitterUserId == user.Id)
+            .OrderByDescending(e => e.SubmittedAt)
+            .ToListAsync();
+
+        var model = new MySubmissionsViewModel
+        {
+            IsSubmissionOpen = isSubmissionOpen,
+            SubmissionOpenAt = guideSettings != null ? ToLocalDateTime(guideSettings.SubmissionOpenAt, tz) : null,
+            SubmissionCloseAt = guideSettings != null ? ToLocalDateTime(guideSettings.SubmissionCloseAt, tz) : null,
+            TimeZoneId = guideSettings?.EventSettings?.TimeZoneId,
+            SubmittedCount = events.Count,
+            ApprovedCount = events.Count(e => e.Status == GuideEventStatus.Approved),
+            PendingCount = events.Count(e => e.Status == GuideEventStatus.Pending),
+            Events = events.Select(e => new IndividualEventRowViewModel
+            {
+                Id = e.Id,
+                Title = e.Title,
+                VenueName = e.GuideSharedVenue?.Name ?? "—",
+                CategoryName = e.Category.Name,
+                StartAt = ToLocalDateTime(e.StartAt, tz),
+                DurationMinutes = e.DurationMinutes,
+                Status = e.Status,
+                CanEdit = e.Status is GuideEventStatus.Draft or GuideEventStatus.Rejected or GuideEventStatus.ResubmitRequested,
+                CanWithdraw = e.Status is GuideEventStatus.Draft or GuideEventStatus.Pending
+            }).ToList()
+        };
+
+        return View(model);
+    }
+
+    [HttpGet("Submit")]
+    public async Task<IActionResult> Submit()
+    {
+        var (open, guideSettings) = await CheckSubmissionWindowAsync();
+        if (!open)
+        {
+            TempData["ErrorMessage"] = "The submission window is not currently open.";
+            return RedirectToAction(nameof(MySubmissions));
+        }
+
+        var model = await BuildFormAsync(guideSettings!);
+        return View("IndividualEventForm", model);
+    }
+
+    [HttpPost("Submit")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Create(IndividualEventFormViewModel model)
+    {
+        var user = await _userManager.GetUserAsync(User);
+        if (user == null) return Challenge();
+
+        var (open, guideSettings) = await CheckSubmissionWindowAsync();
+        if (!open)
+        {
+            TempData["ErrorMessage"] = "The submission window is not currently open.";
+            return RedirectToAction(nameof(MySubmissions));
+        }
+
+        if (!ModelState.IsValid)
+        {
+            await PopulateDropdownsAsync(model, guideSettings!);
+            return View("IndividualEventForm", model);
+        }
+
+        var tz = GetTimeZone(guideSettings!);
+        var now = _clock.GetCurrentInstant();
+
+        var guideEvent = new GuideEvent
+        {
+            Id = Guid.NewGuid(),
+            CampId = null,
+            GuideSharedVenueId = model.VenueId,
+            SubmitterUserId = user.Id,
+            CategoryId = model.CategoryId,
+            Title = model.Title,
+            Description = model.Description,
+            LocationNote = model.LocationNote,
+            StartAt = ToInstant(model.StartDate.Add(model.StartTime), tz),
+            DurationMinutes = model.DurationMinutes,
+            IsRecurring = model.IsRecurring,
+            RecurrenceDays = model.IsRecurring ? model.RecurrenceDays : null,
+            PriorityRank = 0,
+            Status = GuideEventStatus.Pending,
+            SubmittedAt = now,
+            LastUpdatedAt = now
+        };
+
+        _dbContext.GuideEvents.Add(guideEvent);
+        await _dbContext.SaveChangesAsync();
+
+        _logger.LogInformation("User {UserId} submitted individual event '{Title}' at venue {VenueId}",
+            user.Id, model.Title, model.VenueId);
+
+        TempData["SuccessMessage"] = $"Event \"{model.Title}\" submitted for review.";
+        return RedirectToAction(nameof(MySubmissions));
+    }
+
+    [HttpGet("Submit/{eventId:guid}/Edit")]
+    public async Task<IActionResult> Edit(Guid eventId)
+    {
+        var user = await _userManager.GetUserAsync(User);
+        if (user == null) return Challenge();
+
+        var guideEvent = await _dbContext.GuideEvents
+            .FirstOrDefaultAsync(e => e.Id == eventId && e.CampId == null && e.SubmitterUserId == user.Id);
+        if (guideEvent == null) return NotFound();
+
+        if (guideEvent.Status is not (GuideEventStatus.Draft or GuideEventStatus.Rejected or GuideEventStatus.ResubmitRequested))
+        {
+            TempData["ErrorMessage"] = "This event cannot be edited in its current state.";
+            return RedirectToAction(nameof(MySubmissions));
+        }
+
+        var guideSettings = await _dbContext.GuideSettings
+            .Include(g => g.EventSettings)
+            .FirstOrDefaultAsync();
+        if (guideSettings == null)
+        {
+            TempData["ErrorMessage"] = "Guide settings not configured.";
+            return RedirectToAction(nameof(MySubmissions));
+        }
+
+        var tz = GetTimeZone(guideSettings);
+        var localStart = ToLocalDateTime(guideEvent.StartAt, tz);
+
+        var model = await BuildFormAsync(guideSettings);
+        model.Id = guideEvent.Id;
+        model.Title = guideEvent.Title;
+        model.Description = guideEvent.Description;
+        model.CategoryId = guideEvent.CategoryId;
+        model.VenueId = guideEvent.GuideSharedVenueId ?? Guid.Empty;
+        model.StartDate = localStart.Date;
+        model.StartTime = localStart.TimeOfDay;
+        model.DurationMinutes = guideEvent.DurationMinutes;
+        model.LocationNote = guideEvent.LocationNote;
+        model.IsRecurring = guideEvent.IsRecurring;
+        model.RecurrenceDays = guideEvent.RecurrenceDays;
+        model.IsResubmit = guideEvent.Status is GuideEventStatus.Rejected or GuideEventStatus.ResubmitRequested;
+
+        return View("IndividualEventForm", model);
+    }
+
+    [HttpPost("Submit/{eventId:guid}/Edit")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Update(Guid eventId, IndividualEventFormViewModel model)
+    {
+        var user = await _userManager.GetUserAsync(User);
+        if (user == null) return Challenge();
+
+        var guideEvent = await _dbContext.GuideEvents
+            .FirstOrDefaultAsync(e => e.Id == eventId && e.CampId == null && e.SubmitterUserId == user.Id);
+        if (guideEvent == null) return NotFound();
+
+        if (guideEvent.Status is not (GuideEventStatus.Draft or GuideEventStatus.Rejected or GuideEventStatus.ResubmitRequested))
+        {
+            TempData["ErrorMessage"] = "This event cannot be edited in its current state.";
+            return RedirectToAction(nameof(MySubmissions));
+        }
+
+        var guideSettings = await _dbContext.GuideSettings
+            .Include(g => g.EventSettings)
+            .FirstOrDefaultAsync();
+        if (guideSettings == null)
+        {
+            TempData["ErrorMessage"] = "Guide settings not configured.";
+            return RedirectToAction(nameof(MySubmissions));
+        }
+
+        if (!ModelState.IsValid)
+        {
+            model.Id = eventId;
+            await PopulateDropdownsAsync(model, guideSettings);
+            return View("IndividualEventForm", model);
+        }
+
+        var tz = GetTimeZone(guideSettings);
+
+        guideEvent.Title = model.Title;
+        guideEvent.Description = model.Description;
+        guideEvent.CategoryId = model.CategoryId;
+        guideEvent.GuideSharedVenueId = model.VenueId;
+        guideEvent.StartAt = ToInstant(model.StartDate.Add(model.StartTime), tz);
+        guideEvent.DurationMinutes = model.DurationMinutes;
+        guideEvent.LocationNote = model.LocationNote;
+        guideEvent.IsRecurring = model.IsRecurring;
+        guideEvent.RecurrenceDays = model.IsRecurring ? model.RecurrenceDays : null;
+
+        guideEvent.Submit(_clock);
+        await _dbContext.SaveChangesAsync();
+
+        _logger.LogInformation("User {UserId} updated individual event '{Title}' ({EventId})",
+            user.Id, model.Title, eventId);
+
+        TempData["SuccessMessage"] = $"Event \"{model.Title}\" resubmitted for review.";
+        return RedirectToAction(nameof(MySubmissions));
+    }
+
+    [HttpPost("Submit/{eventId:guid}/Withdraw")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Withdraw(Guid eventId)
+    {
+        var user = await _userManager.GetUserAsync(User);
+        if (user == null) return Challenge();
+
+        var guideEvent = await _dbContext.GuideEvents
+            .FirstOrDefaultAsync(e => e.Id == eventId && e.CampId == null && e.SubmitterUserId == user.Id);
+        if (guideEvent == null) return NotFound();
+
+        if (guideEvent.Status is not (GuideEventStatus.Draft or GuideEventStatus.Pending))
+        {
+            TempData["ErrorMessage"] = "This event cannot be withdrawn in its current state.";
+            return RedirectToAction(nameof(MySubmissions));
+        }
+
+        guideEvent.Withdraw(_clock);
+        await _dbContext.SaveChangesAsync();
+
+        _logger.LogInformation("User {UserId} withdrew individual event '{Title}' ({EventId})",
+            user.Id, guideEvent.Title, eventId);
+
+        TempData["SuccessMessage"] = $"Event \"{guideEvent.Title}\" withdrawn.";
+        return RedirectToAction(nameof(MySubmissions));
+    }
+
+    // ─── Helpers ──────────────────────────────────────────────────
+
+    private async Task<(bool IsOpen, GuideSettings? Settings)> CheckSubmissionWindowAsync()
+    {
+        var guideSettings = await _dbContext.GuideSettings
+            .Include(g => g.EventSettings)
+            .FirstOrDefaultAsync();
+
+        if (guideSettings == null) return (false, null);
+
+        var now = _clock.GetCurrentInstant();
+        var isOpen = now >= guideSettings.SubmissionOpenAt && now <= guideSettings.SubmissionCloseAt;
+        return (isOpen, guideSettings);
+    }
+
+    private async Task<IndividualEventFormViewModel> BuildFormAsync(GuideSettings guideSettings)
+    {
+        var model = new IndividualEventFormViewModel
+        {
+            TimeZoneId = guideSettings.EventSettings.TimeZoneId
+        };
+
+        await PopulateDropdownsAsync(model, guideSettings);
+        return model;
+    }
+
+    private async Task PopulateDropdownsAsync(IndividualEventFormViewModel model, GuideSettings guideSettings)
+    {
+        model.Categories = await _dbContext.EventCategories
+            .Where(c => c.IsActive)
+            .OrderBy(c => c.DisplayOrder)
+            .Select(c => new CategoryOptionViewModel { Id = c.Id, Name = c.Name })
+            .ToListAsync();
+
+        model.Venues = await _dbContext.GuideSharedVenues
+            .Where(v => v.IsActive)
+            .OrderBy(v => v.DisplayOrder)
+            .Select(v => new VenueOptionViewModel { Id = v.Id, Name = v.Name })
+            .ToListAsync();
+
+        model.TimeZoneId = guideSettings.EventSettings.TimeZoneId;
+
+        var es = guideSettings.EventSettings;
+        var tz = DateTimeZoneProviders.Tzdb.GetZoneOrNull(es.TimeZoneId);
+
+        model.EventDays = [];
+        for (var offset = 0; offset <= es.EventEndOffset; offset++)
+        {
+            var date = es.GateOpeningDate.PlusDays(offset);
+            var dt = tz != null
+                ? date.AtStartOfDayInZone(tz).ToDateTimeUnspecified()
+                : new DateTime(date.Year, date.Month, date.Day, 0, 0, 0);
+
+            model.EventDays.Add(new EventDayOptionViewModel
+            {
+                DayOffset = offset,
+                Label = date.ToString("ddd d MMM", null),
+                Date = dt
+            });
+        }
+    }
+
+    private static DateTimeZone? GetTimeZone(GuideSettings guideSettings)
+    {
+        return DateTimeZoneProviders.Tzdb.GetZoneOrNull(guideSettings.EventSettings.TimeZoneId);
+    }
+
+    private static DateTime ToLocalDateTime(Instant instant, DateTimeZone? tz)
+    {
+        if (tz == null)
+            return instant.ToDateTimeUtc();
+        return instant.InZone(tz).ToDateTimeUnspecified();
+    }
+
+    private static Instant ToInstant(DateTime dateTime, DateTimeZone? tz)
+    {
+        if (tz == null)
+            return Instant.FromDateTimeUtc(DateTime.SpecifyKind(dateTime, DateTimeKind.Utc));
+        var local = LocalDateTime.FromDateTime(dateTime);
+        return local.InZoneLeniently(tz).ToInstant();
+    }
+}
