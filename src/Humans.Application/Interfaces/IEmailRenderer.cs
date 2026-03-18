@@ -86,6 +86,26 @@ public interface IEmailRenderer
     EmailContent RenderBoardDailyDigest(string boardMemberName, string date, IReadOnlyList<BoardDigestTierGroup> tierGroups, BoardDigestOutstandingCounts? outstandingCounts = null, string? culture = null);
 
     /// <summary>
+    /// Event submission received notification.
+    /// </summary>
+    EmailContent RenderEventSubmitted(string userName, string eventTitle, string viewUrl, string? culture = null);
+
+    /// <summary>
+    /// Event approved notification.
+    /// </summary>
+    EmailContent RenderEventApproved(string userName, string eventTitle, string? culture = null);
+
+    /// <summary>
+    /// Event rejected notification.
+    /// </summary>
+    EmailContent RenderEventRejected(string userName, string eventTitle, string reason, string editUrl, string? culture = null);
+
+    /// <summary>
+    /// Event resubmit-requested notification.
+    /// </summary>
+    EmailContent RenderEventResubmitRequested(string userName, string eventTitle, string reason, string editUrl, string? culture = null);
+
+    /// <summary>
     /// Facilitated message between volunteers.
     /// </summary>
     EmailContent RenderFacilitatedMessage(

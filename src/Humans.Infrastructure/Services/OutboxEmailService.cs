@@ -246,6 +246,42 @@ public class OutboxEmailService : IEmailService
             replyTo: replyTo);
     }
 
+    /// <inheritdoc />
+    public async Task SendEventSubmittedAsync(
+        string userEmail, string userName, string eventTitle, string viewUrl,
+        string? culture = null, CancellationToken cancellationToken = default)
+    {
+        var content = _renderer.RenderEventSubmitted(userName, eventTitle, viewUrl, culture);
+        await EnqueueAsync(userEmail, userName, content, "event_submitted", cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public async Task SendEventApprovedAsync(
+        string userEmail, string userName, string eventTitle,
+        string? culture = null, CancellationToken cancellationToken = default)
+    {
+        var content = _renderer.RenderEventApproved(userName, eventTitle, culture);
+        await EnqueueAsync(userEmail, userName, content, "event_approved", cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public async Task SendEventRejectedAsync(
+        string userEmail, string userName, string eventTitle, string reason, string editUrl,
+        string? culture = null, CancellationToken cancellationToken = default)
+    {
+        var content = _renderer.RenderEventRejected(userName, eventTitle, reason, editUrl, culture);
+        await EnqueueAsync(userEmail, userName, content, "event_rejected", cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public async Task SendEventResubmitRequestedAsync(
+        string userEmail, string userName, string eventTitle, string reason, string editUrl,
+        string? culture = null, CancellationToken cancellationToken = default)
+    {
+        var content = _renderer.RenderEventResubmitRequested(userName, eventTitle, reason, editUrl, culture);
+        await EnqueueAsync(userEmail, userName, content, "event_resubmit_requested", cancellationToken);
+    }
+
     private async Task EnqueueAsync(
         string recipientEmail,
         string recipientName,

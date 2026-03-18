@@ -21,6 +21,7 @@ public class CampEventsController : Controller
     private readonly ICampService _campService;
     private readonly UserManager<User> _userManager;
     private readonly IClock _clock;
+    private readonly IEmailService _emailService;
     private readonly ILogger<CampEventsController> _logger;
 
     public CampEventsController(
@@ -28,12 +29,14 @@ public class CampEventsController : Controller
         ICampService campService,
         UserManager<User> userManager,
         IClock clock,
+        IEmailService emailService,
         ILogger<CampEventsController> logger)
     {
         _dbContext = dbContext;
         _campService = campService;
         _userManager = userManager;
         _clock = clock;
+        _emailService = emailService;
         _logger = logger;
     }
 
@@ -158,6 +161,14 @@ public class CampEventsController : Controller
 
         _logger.LogInformation("User {UserId} submitted event '{Title}' for camp {CampId}",
             ctx.UserId, model.Title, ctx.Camp.Id);
+
+        // Queue submission-received email
+        var submitter = await _dbContext.Users.Include(u => u.Profile).FirstOrDefaultAsync(u => u.Id == ctx.UserId);
+        if (submitter?.Email != null)
+        {
+            var viewUrl = Url.Action(nameof(Index), "CampEvents", new { slug }, Request.Scheme)!;
+            await _emailService.SendEventSubmittedAsync(submitter.Email, submitter.Profile?.BurnerName ?? submitter.Email, model.Title, viewUrl);
+        }
 
         TempData["SuccessMessage"] = $"Event \"{model.Title}\" submitted for review.";
         return RedirectToAction(nameof(Index), new { slug });

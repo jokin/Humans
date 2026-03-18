@@ -1,3 +1,4 @@
+using Humans.Application.Interfaces;
 using Humans.Domain.Constants;
 using Humans.Domain.Entities;
 using Humans.Domain.Enums;
@@ -18,17 +19,20 @@ public class ModerationController : Controller
     private readonly HumansDbContext _dbContext;
     private readonly UserManager<User> _userManager;
     private readonly IClock _clock;
+    private readonly IEmailService _emailService;
     private readonly ILogger<ModerationController> _logger;
 
     public ModerationController(
         HumansDbContext dbContext,
         UserManager<User> userManager,
         IClock clock,
+        IEmailService emailService,
         ILogger<ModerationController> logger)
     {
         _dbContext = dbContext;
         _userManager = userManager;
         _clock = clock;
+        _emailService = emailService;
         _logger = logger;
     }
 
@@ -126,6 +130,8 @@ public class ModerationController : Controller
         if (user == null) return Challenge();
 
         var guideEvent = await _dbContext.GuideEvents
+            .Include(e => e.SubmitterUser).ThenInclude(u => u.Profile)
+            .Include(e => e.Camp)
             .FirstOrDefaultAsync(e => e.Id == eventId);
 
         if (guideEvent == null)
@@ -165,6 +171,30 @@ public class ModerationController : Controller
 
         _logger.LogInformation("Moderator {UserId} {Action} event '{Title}' ({EventId})",
             user.Id, actionLabel, guideEvent.Title, eventId);
+
+        // Queue email notification to submitter
+        var submitterEmail = guideEvent.SubmitterUser.Email;
+        var submitterName = guideEvent.SubmitterUser.Profile?.BurnerName ?? submitterEmail ?? "Unknown";
+        if (submitterEmail != null)
+        {
+            // Build edit URL based on whether this is a camp or individual event
+            var editUrl = guideEvent.CampId.HasValue
+                ? Url.Action("Edit", "CampEvents", new { slug = guideEvent.Camp?.Slug, eventId }, Request.Scheme)!
+                : Url.Action("Edit", "EventGuide", new { eventId }, Request.Scheme)!;
+
+            switch (actionType)
+            {
+                case ModerationActionType.Approved:
+                    await _emailService.SendEventApprovedAsync(submitterEmail, submitterName, guideEvent.Title);
+                    break;
+                case ModerationActionType.Rejected:
+                    await _emailService.SendEventRejectedAsync(submitterEmail, submitterName, guideEvent.Title, reason!, editUrl);
+                    break;
+                case ModerationActionType.ResubmitRequested:
+                    await _emailService.SendEventResubmitRequestedAsync(submitterEmail, submitterName, guideEvent.Title, reason!, editUrl);
+                    break;
+            }
+        }
 
         TempData["SuccessMessage"] = $"Event \"{guideEvent.Title}\" {actionLabel}.";
         return RedirectToAction(nameof(Index));

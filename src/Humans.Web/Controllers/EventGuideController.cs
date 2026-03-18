@@ -1,3 +1,4 @@
+using Humans.Application.Interfaces;
 using Humans.Domain.Entities;
 using Humans.Domain.Enums;
 using Humans.Infrastructure.Data;
@@ -17,17 +18,20 @@ public class EventGuideController : Controller
     private readonly HumansDbContext _dbContext;
     private readonly UserManager<User> _userManager;
     private readonly IClock _clock;
+    private readonly IEmailService _emailService;
     private readonly ILogger<EventGuideController> _logger;
 
     public EventGuideController(
         HumansDbContext dbContext,
         UserManager<User> userManager,
         IClock clock,
+        IEmailService emailService,
         ILogger<EventGuideController> logger)
     {
         _dbContext = dbContext;
         _userManager = userManager;
         _clock = clock;
+        _emailService = emailService;
         _logger = logger;
     }
 
@@ -146,6 +150,14 @@ public class EventGuideController : Controller
 
         _logger.LogInformation("User {UserId} submitted individual event '{Title}' at venue {VenueId}",
             user.Id, model.Title, model.VenueId);
+
+        // Queue submission-received email
+        if (user.Email != null)
+        {
+            var profile = await _dbContext.Users.Include(u => u.Profile).Where(u => u.Id == user.Id).Select(u => u.Profile).FirstOrDefaultAsync();
+            var viewUrl = Url.Action(nameof(MySubmissions), "EventGuide", null, Request.Scheme)!;
+            await _emailService.SendEventSubmittedAsync(user.Email, profile?.BurnerName ?? user.Email, model.Title, viewUrl);
+        }
 
         TempData["SuccessMessage"] = $"Event \"{model.Title}\" submitted for review.";
         return RedirectToAction(nameof(MySubmissions));
