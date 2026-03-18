@@ -1,0 +1,216 @@
+using Humans.Domain.Constants;
+using Humans.Domain.Entities;
+using Humans.Domain.Enums;
+using Humans.Infrastructure.Data;
+using Humans.Web.Models;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using NodaTime;
+
+namespace Humans.Web.Controllers;
+
+[Authorize(Roles = $"{RoleNames.GuideModerator},{RoleNames.Admin}")]
+[Route("EventGuide/Moderate")]
+public class ModerationController : Controller
+{
+    private readonly HumansDbContext _dbContext;
+    private readonly UserManager<User> _userManager;
+    private readonly IClock _clock;
+    private readonly ILogger<ModerationController> _logger;
+
+    public ModerationController(
+        HumansDbContext dbContext,
+        UserManager<User> userManager,
+        IClock clock,
+        ILogger<ModerationController> logger)
+    {
+        _dbContext = dbContext;
+        _userManager = userManager;
+        _clock = clock;
+        _logger = logger;
+    }
+
+    [HttpGet("")]
+    public async Task<IActionResult> Index([FromQuery] GuideEventStatus? tab)
+    {
+        var activeTab = tab ?? GuideEventStatus.Pending;
+
+        var guideSettings = await _dbContext.GuideSettings
+            .Include(g => g.EventSettings)
+            .FirstOrDefaultAsync();
+
+        DateTimeZone? tz = guideSettings?.EventSettings != null
+            ? DateTimeZoneProviders.Tzdb.GetZoneOrNull(guideSettings.EventSettings.TimeZoneId)
+            : null;
+
+        // Get counts for all tabs
+        var allEvents = await _dbContext.GuideEvents
+            .Where(e => e.Status == GuideEventStatus.Pending
+                     || e.Status == GuideEventStatus.Approved
+                     || e.Status == GuideEventStatus.Rejected
+                     || e.Status == GuideEventStatus.ResubmitRequested)
+            .GroupBy(e => e.Status)
+            .Select(g => new { Status = g.Key, Count = g.Count() })
+            .ToListAsync();
+
+        // Get events for the active tab
+        var query = _dbContext.GuideEvents
+            .Include(e => e.Category)
+            .Include(e => e.SubmitterUser).ThenInclude(u => u.Profile)
+            .Include(e => e.Camp).ThenInclude(c => c!.Seasons)
+            .Include(e => e.GuideSharedVenue)
+            .Include(e => e.ModerationActions).ThenInclude(a => a.ActorUser).ThenInclude(u => u.Profile)
+            .Where(e => e.Status == activeTab);
+
+        // Pending: oldest first; others: newest first
+        query = activeTab == GuideEventStatus.Pending
+            ? query.OrderBy(e => e.SubmittedAt)
+            : query.OrderByDescending(e => e.SubmittedAt);
+
+        var events = await query.ToListAsync();
+
+        var model = new ModerationQueueViewModel
+        {
+            ActiveTab = activeTab,
+            PendingCount = allEvents.FirstOrDefault(g => g.Status == GuideEventStatus.Pending)?.Count ?? 0,
+            ApprovedCount = allEvents.FirstOrDefault(g => g.Status == GuideEventStatus.Approved)?.Count ?? 0,
+            RejectedCount = allEvents.FirstOrDefault(g => g.Status == GuideEventStatus.Rejected)?.Count ?? 0,
+            ResubmitRequestedCount = allEvents.FirstOrDefault(g => g.Status == GuideEventStatus.ResubmitRequested)?.Count ?? 0,
+            TimeZoneId = guideSettings?.EventSettings?.TimeZoneId,
+            Events = events.Select(e => BuildRow(e, tz)).ToList()
+        };
+
+        return View(model);
+    }
+
+    [HttpPost("Approve")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Approve(ModerationActionFormModel model)
+    {
+        return await ProcessActionAsync(model.EventId, ModerationActionType.Approved, null);
+    }
+
+    [HttpPost("Reject")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Reject(ModerationActionFormModel model)
+    {
+        if (string.IsNullOrWhiteSpace(model.Reason))
+        {
+            TempData["ErrorMessage"] = "A reason is required when rejecting an event.";
+            return RedirectToAction(nameof(Index));
+        }
+
+        return await ProcessActionAsync(model.EventId, ModerationActionType.Rejected, model.Reason);
+    }
+
+    [HttpPost("RequestEdit")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> RequestEdit(ModerationActionFormModel model)
+    {
+        if (string.IsNullOrWhiteSpace(model.Reason))
+        {
+            TempData["ErrorMessage"] = "A reason is required when requesting edits.";
+            return RedirectToAction(nameof(Index));
+        }
+
+        return await ProcessActionAsync(model.EventId, ModerationActionType.ResubmitRequested, model.Reason);
+    }
+
+    // ─── Helpers ──────────────────────────────────────────────────
+
+    private async Task<IActionResult> ProcessActionAsync(Guid eventId, ModerationActionType actionType, string? reason)
+    {
+        var user = await _userManager.GetUserAsync(User);
+        if (user == null) return Challenge();
+
+        var guideEvent = await _dbContext.GuideEvents
+            .FirstOrDefaultAsync(e => e.Id == eventId);
+
+        if (guideEvent == null)
+        {
+            TempData["ErrorMessage"] = "Event not found.";
+            return RedirectToAction(nameof(Index));
+        }
+
+        if (guideEvent.Status != GuideEventStatus.Pending)
+        {
+            TempData["ErrorMessage"] = "This event is not in a pending state.";
+            return RedirectToAction(nameof(Index));
+        }
+
+        guideEvent.ApplyModerationAction(actionType, _clock);
+
+        var moderationAction = new ModerationAction
+        {
+            Id = Guid.NewGuid(),
+            GuideEventId = eventId,
+            ActorUserId = user.Id,
+            Action = actionType,
+            Reason = reason,
+            CreatedAt = _clock.GetCurrentInstant()
+        };
+
+        _dbContext.ModerationActions.Add(moderationAction);
+        await _dbContext.SaveChangesAsync();
+
+        var actionLabel = actionType switch
+        {
+            ModerationActionType.Approved => "approved",
+            ModerationActionType.Rejected => "rejected",
+            ModerationActionType.ResubmitRequested => "returned for edits",
+            _ => "moderated"
+        };
+
+        _logger.LogInformation("Moderator {UserId} {Action} event '{Title}' ({EventId})",
+            user.Id, actionLabel, guideEvent.Title, eventId);
+
+        TempData["SuccessMessage"] = $"Event \"{guideEvent.Title}\" {actionLabel}.";
+        return RedirectToAction(nameof(Index));
+    }
+
+    private static ModerationEventRowViewModel BuildRow(GuideEvent e, DateTimeZone? tz)
+    {
+        var submitterName = e.SubmitterUser.Profile?.BurnerName ?? e.SubmitterUser.Email ?? "Unknown";
+        var campSeason = e.Camp?.Seasons.OrderByDescending(s => s.Year).FirstOrDefault();
+        var campName = campSeason?.Name ?? e.Camp?.Slug;
+
+        return new ModerationEventRowViewModel
+        {
+            Id = e.Id,
+            Title = e.Title,
+            Description = e.Description,
+            SubmitterName = submitterName,
+            SubmitterUserId = e.SubmitterUserId,
+            CampName = campName,
+            CampSlug = e.Camp?.Slug,
+            VenueName = e.GuideSharedVenue?.Name,
+            CategoryName = e.Category.Name,
+            StartAt = ToLocalDateTime(e.StartAt, tz),
+            DurationMinutes = e.DurationMinutes,
+            LocationNote = e.LocationNote,
+            IsRecurring = e.IsRecurring,
+            RecurrenceDays = e.RecurrenceDays,
+            PriorityRank = e.PriorityRank,
+            SubmittedAt = ToLocalDateTime(e.SubmittedAt, tz),
+            Status = e.Status,
+            History = e.ModerationActions
+                .OrderByDescending(a => a.CreatedAt)
+                .Select(a => new ModerationHistoryItemViewModel
+                {
+                    ActorName = a.ActorUser.Profile?.BurnerName ?? a.ActorUser.Email ?? "Unknown",
+                    Action = a.Action,
+                    Reason = a.Reason,
+                    CreatedAt = ToLocalDateTime(a.CreatedAt, tz)
+                }).ToList()
+        };
+    }
+
+    private static DateTime ToLocalDateTime(Instant instant, DateTimeZone? tz)
+    {
+        if (tz == null)
+            return instant.ToDateTimeUtc();
+        return instant.InZone(tz).ToDateTimeUnspecified();
+    }
+}

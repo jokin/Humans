@@ -86,6 +86,12 @@
                                 <a class="nav-link" asp-area="" asp-controller="Board" asp-action="Index">@Localizer["Nav_Board"]</a>
                             </li>
                         }
+                        @if (User.IsInRole(Humans.Domain.Constants.RoleNames.GuideModerator) || User.IsInRole("Admin"))
+                        {
+                            <li class="nav-item">
+                                <a class="nav-link" asp-area="" asp-controller="Moderation" asp-action="Index">Moderate Events</a>
+                            </li>
+                        }
                         @if (User.IsInRole("Admin"))
                         {
                             <li class="nav-item">
