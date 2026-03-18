@@ -62,7 +62,7 @@
                                     <a class="nav-link" asp-area="" asp-controller="EventGuide" asp-action="Schedule">My Schedule</a>
                                 </li>
                             }
-                            @if (isActiveMember || User.IsInRole(Humans.Domain.Constants.RoleNames.NoInfoAdmin))
+                            @if (isActiveMember || User.IsInRole(Humans.Domain.Constants.RoleNames.NoInfoAdmin) || User.IsInRole(Humans.Domain.Constants.RoleNames.VolunteerCoordinator))
                             {
                                 <li class="nav-item">
                                     <a class="nav-link" asp-area="" asp-controller="Shifts" asp-action="Index">@Localizer["Nav_Shifts"]</a>

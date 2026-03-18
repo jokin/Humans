@@ -59,6 +59,7 @@ public class HumansDbContext : IdentityDbContext<User, IdentityRole<Guid>, Guid>
     public DbSet<Shift> Shifts => Set<Shift>();
     public DbSet<ShiftSignup> ShiftSignups => Set<ShiftSignup>();
     public DbSet<VolunteerEventProfile> VolunteerEventProfiles => Set<VolunteerEventProfile>();
+    public DbSet<GeneralAvailability> GeneralAvailability => Set<GeneralAvailability>();
     public DbSet<GuideSettings> GuideSettings => Set<GuideSettings>();
     public DbSet<EventCategory> EventCategories => Set<EventCategory>();
     public DbSet<GuideSharedVenue> GuideSharedVenues => Set<GuideSharedVenue>();
