@@ -92,6 +92,9 @@
                         @if (User.IsInRole(Humans.Domain.Constants.RoleNames.GuideModerator) || User.IsInRole("Admin"))
                         {
                             <li class="nav-item">
+                                <a class="nav-link" asp-area="" asp-controller="EventGuideDashboard" asp-action="Index">Guide Dashboard</a>
+                            </li>
+                            <li class="nav-item">
                                 <a class="nav-link" asp-area="" asp-controller="Moderation" asp-action="Index">Moderate Events</a>
                             </li>
                         }
