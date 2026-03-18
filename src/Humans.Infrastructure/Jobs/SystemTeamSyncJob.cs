@@ -529,6 +529,7 @@ public class SystemTeamSyncJob : ISystemTeamSync
             }
         }
 
+
         var eligibleUserIds = isLeadAnywhere ? [userId] : new List<Guid>();
         await SyncTeamMembershipAsync(team, eligibleUserIds, cancellationToken, singleUserSync: userId);
     }
@@ -574,6 +575,7 @@ public class SystemTeamSyncJob : ISystemTeamSync
 
         report?.Steps.Add(step);
     }
+
 
     private async Task<Team?> GetSystemTeamAsync(SystemTeamType systemTeamType, CancellationToken cancellationToken)
     {
