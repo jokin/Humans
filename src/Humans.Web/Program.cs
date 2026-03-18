@@ -60,6 +60,17 @@ builder.Host.UseSerilog();
 // Configure NodaTime clock
 builder.Services.AddSingleton<IClock>(SystemClock.Instance);
 
+// CORS policy for public Guide API (consumed by PWA from different origin)
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("GuideApi", policy =>
+    {
+        policy.AllowAnyOrigin()
+              .AllowAnyHeader()
+              .WithMethods("GET");
+    });
+});
+
 // Configure JSON options with NodaTime support
 builder.Services.ConfigureHttpJsonOptions(options =>
 {
@@ -405,6 +416,7 @@ app.Use(async (context, next) =>
 app.UseMiddleware<CspNonceMiddleware>();
 
 app.UseRouting();
+app.UseCors();
 
 // Rate limiting
 app.UseRateLimiter();

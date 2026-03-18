@@ -1,0 +1,265 @@
+using Humans.Domain.Enums;
+using Humans.Infrastructure.Data;
+using Microsoft.AspNetCore.Cors;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using NodaTime;
+using NodaTime.Text;
+
+namespace Humans.Web.Controllers.Api;
+
+[ApiController]
+[Route("api/guide")]
+[EnableCors("GuideApi")]
+public class GuideApiController : ControllerBase
+{
+    private readonly HumansDbContext _dbContext;
+
+    public GuideApiController(HumansDbContext dbContext)
+    {
+        _dbContext = dbContext;
+    }
+
+    [HttpGet("events")]
+    public async Task<IActionResult> GetEvents(
+        [FromQuery] int? day,
+        [FromQuery] string? categorySlug,
+        [FromQuery] Guid? campId,
+        [FromQuery] string? q)
+    {
+        var guideSettings = await _dbContext.GuideSettings
+            .Include(g => g.EventSettings)
+            .FirstOrDefaultAsync();
+
+        DateTimeZone? tz = guideSettings?.EventSettings != null
+            ? DateTimeZoneProviders.Tzdb.GetZoneOrNull(guideSettings.EventSettings.TimeZoneId)
+            : null;
+
+        var query = _dbContext.GuideEvents
+            .Include(e => e.Category)
+            .Include(e => e.Camp).ThenInclude(c => c!.Seasons)
+            .Include(e => e.GuideSharedVenue)
+            .Include(e => e.SubmitterUser).ThenInclude(u => u.Profile)
+            .Where(e => e.Status == GuideEventStatus.Approved);
+
+        if (categorySlug != null)
+            query = query.Where(e => e.Category.Slug == categorySlug);
+
+        if (campId.HasValue)
+            query = query.Where(e => e.CampId == campId.Value);
+
+        if (!string.IsNullOrWhiteSpace(q))
+            query = query.Where(e => EF.Functions.ILike(e.Title, $"%{q}%") ||
+                                     EF.Functions.ILike(e.Description, $"%{q}%"));
+
+        var events = await query.OrderBy(e => e.StartAt).ToListAsync();
+
+        var gateOpeningDate = guideSettings?.EventSettings.GateOpeningDate;
+
+        // Expand recurring events and apply day filter
+        var results = new List<object>();
+        foreach (var e in events)
+        {
+            var campSeason = e.Camp?.Seasons.OrderByDescending(s => s.Year).FirstOrDefault();
+            var campName = campSeason?.Name ?? e.Camp?.Slug;
+            var submitterName = e.CampId == null
+                ? (e.SubmitterUser.Profile?.BurnerName ?? e.SubmitterUser.Email)
+                : null;
+
+            if (e.IsRecurring && !string.IsNullOrEmpty(e.RecurrenceDays))
+            {
+                var offsets = e.RecurrenceDays.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                foreach (var offsetStr in offsets)
+                {
+                    if (!int.TryParse(offsetStr, System.Globalization.CultureInfo.InvariantCulture, out var dayOffset)) continue;
+
+                    var occurrenceStart = e.StartAt.Plus(Duration.FromDays(dayOffset));
+                    var eventDayOffset = ComputeDayOffset(occurrenceStart, gateOpeningDate, tz);
+
+                    if (day.HasValue && eventDayOffset != day.Value) continue;
+
+                    results.Add(BuildEventDto(e, occurrenceStart, eventDayOffset, campName, submitterName));
+                }
+            }
+            else
+            {
+                var eventDayOffset = ComputeDayOffset(e.StartAt, gateOpeningDate, tz);
+                if (day.HasValue && eventDayOffset != day.Value) continue;
+
+                results.Add(BuildEventDto(e, e.StartAt, eventDayOffset, campName, submitterName));
+            }
+        }
+
+        return Ok(results);
+    }
+
+    [HttpGet("events/{id:guid}")]
+    public async Task<IActionResult> GetEvent(Guid id)
+    {
+        var guideSettings = await _dbContext.GuideSettings
+            .Include(g => g.EventSettings)
+            .FirstOrDefaultAsync();
+
+        DateTimeZone? tz = guideSettings?.EventSettings != null
+            ? DateTimeZoneProviders.Tzdb.GetZoneOrNull(guideSettings.EventSettings.TimeZoneId)
+            : null;
+
+        var e = await _dbContext.GuideEvents
+            .Include(ev => ev.Category)
+            .Include(ev => ev.Camp).ThenInclude(c => c!.Seasons)
+            .Include(ev => ev.GuideSharedVenue)
+            .Include(ev => ev.SubmitterUser).ThenInclude(u => u.Profile)
+            .FirstOrDefaultAsync(ev => ev.Id == id && ev.Status == GuideEventStatus.Approved);
+
+        if (e == null) return NotFound();
+
+        var gateOpeningDate = guideSettings?.EventSettings.GateOpeningDate;
+        var campSeason = e.Camp?.Seasons.OrderByDescending(s => s.Year).FirstOrDefault();
+        var campName = campSeason?.Name ?? e.Camp?.Slug;
+        var submitterName = e.CampId == null
+            ? (e.SubmitterUser.Profile?.BurnerName ?? e.SubmitterUser.Email)
+            : null;
+        var dayOffset = ComputeDayOffset(e.StartAt, gateOpeningDate, tz);
+
+        return Ok(BuildEventDto(e, e.StartAt, dayOffset, campName, submitterName));
+    }
+
+    [HttpGet("camps")]
+    public async Task<IActionResult> GetCamps()
+    {
+        // Return camps that have at least one approved event
+        var campIds = await _dbContext.GuideEvents
+            .Where(e => e.Status == GuideEventStatus.Approved && e.CampId != null)
+            .Select(e => e.CampId!.Value)
+            .Distinct()
+            .ToListAsync();
+
+        var camps = await _dbContext.Camps
+            .Include(c => c.Seasons)
+            .Where(c => campIds.Contains(c.Id))
+            .ToListAsync();
+
+        var result = camps.Select(c =>
+        {
+            var season = c.Seasons.OrderByDescending(s => s.Year).FirstOrDefault();
+            return new
+            {
+                id = c.Id,
+                name = season?.Name ?? c.Slug,
+                slug = c.Slug
+            };
+        }).ToList();
+
+        return Ok(result);
+    }
+
+    [HttpGet("camps/{id:guid}")]
+    public async Task<IActionResult> GetCamp(Guid id)
+    {
+        var guideSettings = await _dbContext.GuideSettings
+            .Include(g => g.EventSettings)
+            .FirstOrDefaultAsync();
+
+        DateTimeZone? tz = guideSettings?.EventSettings != null
+            ? DateTimeZoneProviders.Tzdb.GetZoneOrNull(guideSettings.EventSettings.TimeZoneId)
+            : null;
+
+        var camp = await _dbContext.Camps
+            .Include(c => c.Seasons)
+            .FirstOrDefaultAsync(c => c.Id == id);
+
+        if (camp == null) return NotFound();
+
+        var season = camp.Seasons.OrderByDescending(s => s.Year).FirstOrDefault();
+        var campName = season?.Name ?? camp.Slug;
+
+        var events = await _dbContext.GuideEvents
+            .Include(e => e.Category)
+            .Where(e => e.CampId == id && e.Status == GuideEventStatus.Approved)
+            .OrderBy(e => e.StartAt)
+            .ToListAsync();
+
+        var gateOpeningDate = guideSettings?.EventSettings.GateOpeningDate;
+
+        return Ok(new
+        {
+            id = camp.Id,
+            name = campName,
+            slug = camp.Slug,
+            events = events.Select(e =>
+            {
+                var dayOffset = ComputeDayOffset(e.StartAt, gateOpeningDate, tz);
+                return BuildEventDto(e, e.StartAt, dayOffset, campName, null);
+            }).ToList()
+        });
+    }
+
+    [HttpGet("categories")]
+    public async Task<IActionResult> GetCategories()
+    {
+        var categories = await _dbContext.EventCategories
+            .Where(c => c.IsActive)
+            .OrderBy(c => c.DisplayOrder)
+            .Select(c => new
+            {
+                id = c.Id,
+                name = c.Name,
+                slug = c.Slug,
+                isSensitive = c.IsSensitive,
+                displayOrder = c.DisplayOrder
+            })
+            .ToListAsync();
+
+        return Ok(categories);
+    }
+
+    // ─── Helpers ──────────────────────────────────────────────────
+
+    private static object BuildEventDto(
+        Domain.Entities.GuideEvent e,
+        Instant startAt,
+        int dayOffset,
+        string? campName,
+        string? submitterName)
+    {
+        return new
+        {
+            id = e.Id,
+            title = e.Title,
+            description = e.Description,
+            category = new
+            {
+                id = e.Category.Id,
+                name = e.Category.Name,
+                slug = e.Category.Slug,
+                isSensitive = e.Category.IsSensitive
+            },
+            startAt = InstantPattern.General.Format(startAt),
+            durationMinutes = e.DurationMinutes,
+            dayOffset,
+            isRecurring = e.IsRecurring,
+            camp = e.CampId.HasValue
+                ? new { id = e.CampId.Value, name = campName }
+                : null,
+            venue = e.GuideSharedVenueId.HasValue && e.GuideSharedVenue != null
+                ? new { id = e.GuideSharedVenueId.Value, name = e.GuideSharedVenue.Name }
+                : null,
+            submitterName,
+            locationNote = e.LocationNote,
+            priorityRank = e.PriorityRank
+        };
+    }
+
+    private static int ComputeDayOffset(Instant instant, LocalDate? gateOpeningDate, DateTimeZone? tz)
+    {
+        if (gateOpeningDate == null) return 0;
+
+        LocalDate eventDate;
+        if (tz != null)
+            eventDate = instant.InZone(tz).Date;
+        else
+            eventDate = LocalDate.FromDateTime(instant.ToDateTimeUtc());
+
+        return Period.Between(gateOpeningDate.Value, eventDate, PeriodUnits.Days).Days;
+    }
+}
