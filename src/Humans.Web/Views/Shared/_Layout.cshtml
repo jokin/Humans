@@ -53,6 +53,7 @@
                             <li class="nav-item">
                                 <a class="nav-link" asp-area="" asp-controller="Consent" asp-action="Index">@Localizer["Nav_Consents"]</a>
                             </li>
+<<<<<<< HEAD
                             @if (Configuration.GetValue<bool>("Features:EventGuide"))
                             {
                                 <li class="nav-item dropdown">
@@ -72,6 +73,8 @@
                                     </ul>
                                 </li>
                             }
+=======
+>>>>>>> 60bad9d9 (feat: shift management v2, role auth fixes, dev stats (#140))
                             @if (isActiveMember || User.IsInRole(Humans.Domain.Constants.RoleNames.NoInfoAdmin) || User.IsInRole(Humans.Domain.Constants.RoleNames.VolunteerCoordinator))
                             {
                                 <li class="nav-item">

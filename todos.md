@@ -1,7 +1,11 @@
 # Release TODOs
 
 Audit date: 2026-02-05
+<<<<<<< HEAD
 Last synced: 2026-03-18T01:55
+=======
+Last synced: 2026-03-17T17:00
+>>>>>>> 60bad9d9 (feat: shift management v2, role auth fixes, dev stats (#140))
 
 ---
 
@@ -9,6 +13,15 @@ Last synced: 2026-03-18T01:55
 
 ### Priority 1: Bugs / User-Reported Issues
 
+<<<<<<< HEAD
+=======
+#### #136: Add camp application self-service: cancel, change lead, undo skip season
+User-reported UX dead-ends: no way to cancel a pending camp application, can't change primary lead, "Skip this season" has no undo, and "Add co-lead" button crashes. Labels: bug, enhancement.
+
+#### #139: Fix googlemail.com/gmail.com mismatch in Google sync drift detection
+Google normalizes `@googlemail.com` to `@gmail.com` in group memberships, causing false drift positives and potential add/remove loops. Normalize on storage preferred. Label: bug.
+
+>>>>>>> 60bad9d9 (feat: shift management v2, role auth fixes, dev stats (#140))
 #### #134: Standardize role authorization to prevent Identity/RoleAssignments mismatch
 Two role-checking systems (ASP.NET Identity claims vs RoleAssignments table) can disagree. Need a single source of truth. Label: bug.
 
@@ -17,12 +30,21 @@ Two role-checking systems (ASP.NET Identity claims vs RoleAssignments table) can
 #### #77: Reasons why an Asociado is accepted (or applying)
 Board members voting on Asociado applications should be required to select which bylaw criteria the applicant meets. Optionally, the applicant could also state their reasons when applying.
 
+<<<<<<< HEAD
 #### #127: Add incomplete signup lifecycle — reminders and auto-deletion
 Send reminders to humans who signed up but never completed profile/consent, auto-delete after configurable period. Label: enhancement.
 
 #### #137: Public team pages with editable markdown content, CTAs, and member roster
 Public-facing team pages with editable markdown, calls-to-action, and visible member roster. Label: none.
 
+=======
+#### #133: Add clickable lead profiles on barrio pages and auto-create Camp Leads system team
+Camp/barrio pages should link lead names to their profiles. Auto-create a "Camp Leads" system team for the season. Label: enhancement.
+
+#### #127: Add incomplete signup lifecycle — reminders and auto-deletion
+Send reminders to humans who signed up but never completed profile/consent, auto-delete after configurable period. Label: enhancement.
+
+>>>>>>> 60bad9d9 (feat: shift management v2, role auth fixes, dev stats (#140))
 #### #138: Add Catalan (ca) translation
 New `SharedResource.ca.resx` with all ~805 keys, register `"ca"` culture in `Program.cs`, language selector, and Catalan email templates.
 
@@ -153,8 +175,31 @@ Two OpenTelemetry packages pinned to beta versions. Check for stable releases or
 
 ## Completed
 
+<<<<<<< HEAD
 ### #133: Add clickable lead profiles on barrio pages and auto-create Barrio Leads system team DONE
 Clickable lead links on camp detail pages, removed "at Nowhere" event name references, added Barrio Leads system team auto-populated from active CampLead assignments. Committed `d3a40c8`.
+=======
+### #135: Add shift management system (Slices 1-3) DONE
+Shift management for camps/events: shift definitions, volunteer signup, coordinator management. Committed `23b0ec1`.
+
+### #130: Add team hierarchy (departments) and rename Leads to Coordinators DONE
+Teams can now be sub-teams of departments. Leads renamed to Coordinators. IsManagement flag on roles. Multiple follow-up fixes for slugs, checkbox state, demotion logic. Committed across 15+ commits, closed 2026-03-16.
+
+### #117: Add ticket vendor integration — coupon tracking, purchase matching, code generation DONE
+Ticket vendor integration for coupon tracking and purchase matching. Closed 2026-03-15.
+
+### #115: Fix membership status model — dashboard counts don't match admin page DONE
+Fixed membership status model discrepancies between dashboard and admin counts. Closed 2026-03-15.
+
+### #113: Show campaign grants on admin human detail page DONE
+Campaign grant information visible on admin human detail page. Closed 2026-03-15.
+
+### #112: Add preferred language distribution chart to board dashboard DONE
+Language distribution chart on board dashboard. Closed 2026-03-15.
+
+### #93: Merge pending requests into Manage Members page DONE
+Consolidated `/Teams/{slug}/Requests` into `/Teams/{slug}/Members`. Pending requests shown at top with approve/reject, members below. Removed standalone Requests page and view. Updated all navigation links. Committed `88c1065`.
+>>>>>>> 60bad9d9 (feat: shift management v2, role auth fixes, dev stats (#140))
 
 ### #136: Camp self-service — flatten leads, fix withdraw, add rejoin DONE
 Fixed UX dead-ends: withdraw/rejoin season, flattened leads display. Committed `929d64e`.

@@ -51,7 +51,7 @@ Several system operations need to run automatically without user interaction: sy
 - GitHub API failures: Retry with backoff
 - Parse failures: Log and skip, alert admin
 - Partial sync: Continue with remaining docs
-- N+1 Protection: Users loaded in batches for notification loop
+- N+1 Protection: Users loaded in batches for notification loop 
 
 ---
 
