@@ -1,6 +1,10 @@
+using System.Text.Json;
+using Humans.Domain.Entities;
 using Humans.Domain.Enums;
 using Humans.Infrastructure.Data;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Cors;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using NodaTime;
@@ -14,10 +18,14 @@ namespace Humans.Web.Controllers.Api;
 public class GuideApiController : ControllerBase
 {
     private readonly HumansDbContext _dbContext;
+    private readonly UserManager<User> _userManager;
+    private readonly IClock _clock;
 
-    public GuideApiController(HumansDbContext dbContext)
+    public GuideApiController(HumansDbContext dbContext, UserManager<User> userManager, IClock clock)
     {
         _dbContext = dbContext;
+        _userManager = userManager;
+        _clock = clock;
     }
 
     [HttpGet("events")]
@@ -51,6 +59,11 @@ public class GuideApiController : ControllerBase
         if (!string.IsNullOrWhiteSpace(q))
             query = query.Where(e => EF.Functions.ILike(e.Title, $"%{q}%") ||
                                      EF.Functions.ILike(e.Description, $"%{q}%"));
+
+        // Apply category opt-out for authenticated users
+        var excludedSlugs = await GetExcludedCategorySlugsAsync();
+        if (excludedSlugs.Count > 0)
+            query = query.Where(e => !excludedSlugs.Contains(e.Category.Slug));
 
         var events = await query.OrderBy(e => e.StartAt).ToListAsync();
 
@@ -213,7 +226,95 @@ public class GuideApiController : ControllerBase
         return Ok(categories);
     }
 
+    // ─── Preferences (authenticated) ──────────────────────────────
+
+    [Authorize]
+    [HttpGet("preferences")]
+    public async Task<IActionResult> GetPreferences()
+    {
+        var user = await _userManager.GetUserAsync(User);
+        if (user == null) return Unauthorized();
+
+        var pref = await _dbContext.UserGuidePreferences
+            .FirstOrDefaultAsync(p => p.UserId == user.Id);
+
+        var slugs = pref != null
+            ? JsonSerializer.Deserialize<List<string>>(pref.ExcludedCategorySlugs) ?? []
+            : new List<string>();
+
+        return Ok(new { excludedCategorySlugs = slugs });
+    }
+
+    [Authorize]
+    [HttpPut("preferences")]
+    public async Task<IActionResult> UpdatePreferences([FromBody] UpdatePreferencesRequest request)
+    {
+        var user = await _userManager.GetUserAsync(User);
+        if (user == null) return Unauthorized();
+
+        // Validate slugs
+        var activeSlugs = await _dbContext.EventCategories
+            .Where(c => c.IsActive)
+            .Select(c => c.Slug)
+            .ToListAsync();
+
+        var invalidSlugs = request.ExcludedCategorySlugs
+            .Where(s => !activeSlugs.Contains(s, StringComparer.OrdinalIgnoreCase))
+            .ToList();
+
+        if (invalidSlugs.Count > 0)
+            return BadRequest(new { error = $"Invalid category slugs: {string.Join(", ", invalidSlugs)}" });
+
+        var pref = await _dbContext.UserGuidePreferences
+            .FirstOrDefaultAsync(p => p.UserId == user.Id);
+
+        var slugsJson = JsonSerializer.Serialize(request.ExcludedCategorySlugs);
+
+        if (pref == null)
+        {
+            pref = new UserGuidePreference
+            {
+                Id = Guid.NewGuid(),
+                UserId = user.Id,
+                ExcludedCategorySlugs = slugsJson,
+                UpdatedAt = _clock.GetCurrentInstant()
+            };
+            _dbContext.UserGuidePreferences.Add(pref);
+        }
+        else
+        {
+            pref.ExcludedCategorySlugs = slugsJson;
+            pref.UpdatedAt = _clock.GetCurrentInstant();
+        }
+
+        await _dbContext.SaveChangesAsync();
+
+        return Ok(new { excludedCategorySlugs = request.ExcludedCategorySlugs });
+    }
+
+    public sealed class UpdatePreferencesRequest
+    {
+        public List<string> ExcludedCategorySlugs { get; set; } = [];
+    }
+
     // ─── Helpers ──────────────────────────────────────────────────
+
+    private async Task<List<string>> GetExcludedCategorySlugsAsync()
+    {
+        if (User.Identity?.IsAuthenticated != true)
+            return [];
+
+        var user = await _userManager.GetUserAsync(User);
+        if (user == null) return [];
+
+        var pref = await _dbContext.UserGuidePreferences
+            .FirstOrDefaultAsync(p => p.UserId == user.Id);
+
+        if (pref == null) return [];
+
+        return JsonSerializer.Deserialize<List<string>>(pref.ExcludedCategorySlugs) ?? [];
+    }
+
 
     private static object BuildEventDto(
         Domain.Entities.GuideEvent e,
