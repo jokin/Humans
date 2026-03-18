@@ -93,34 +93,6 @@ public class IndividualEventFormViewModel
     public bool IsResubmit { get; set; }
 }
 
-public class ScheduleViewModel
-{
-    public string? TimeZoneId { get; set; }
-    public List<ScheduleDayGroup> DayGroups { get; set; } = [];
-}
-
-public class ScheduleDayGroup
-{
-    public string DayLabel { get; set; } = string.Empty;
-    public List<ScheduleItemViewModel> Items { get; set; } = [];
-}
-
-public class ScheduleItemViewModel
-{
-    public Guid EventId { get; set; }
-    public string Title { get; set; } = string.Empty;
-    public string CategoryName { get; set; } = string.Empty;
-    public string? CampName { get; set; }
-    public string? VenueName { get; set; }
-    public string? LocationNote { get; set; }
-    public DateTime StartAt { get; set; }
-    public int DurationMinutes { get; set; }
-    public int DayOffset { get; set; }
-    public string DayLabel { get; set; } = string.Empty;
-    public NodaTime.Instant StartInstant { get; set; }
-    public bool HasConflict { get; set; }
-}
-
 public class VenueOptionViewModel
 {
     public Guid Id { get; set; }

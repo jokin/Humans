@@ -1,4 +1,3 @@
-using Humans.Application.Interfaces;
 using Humans.Domain.Entities;
 using Humans.Domain.Enums;
 using Humans.Infrastructure.Data;
@@ -8,32 +7,27 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using NodaTime;
-using Humans.Web.Filters;
 
 namespace Humans.Web.Controllers;
 
 [Authorize]
 [Route("EventGuide")]
-[ServiceFilter(typeof(EventGuideFeatureFilter))]
 public class EventGuideController : Controller
 {
     private readonly HumansDbContext _dbContext;
     private readonly UserManager<User> _userManager;
     private readonly IClock _clock;
-    private readonly IEmailService _emailService;
     private readonly ILogger<EventGuideController> _logger;
 
     public EventGuideController(
         HumansDbContext dbContext,
         UserManager<User> userManager,
         IClock clock,
-        IEmailService emailService,
         ILogger<EventGuideController> logger)
     {
         _dbContext = dbContext;
         _userManager = userManager;
         _clock = clock;
-        _emailService = emailService;
         _logger = logger;
     }
 
@@ -82,7 +76,7 @@ public class EventGuideController : Controller
                 StartAt = ToLocalDateTime(e.StartAt, tz),
                 DurationMinutes = e.DurationMinutes,
                 Status = e.Status,
-                CanEdit = e.Status is not GuideEventStatus.Withdrawn,
+                CanEdit = e.Status is GuideEventStatus.Draft or GuideEventStatus.Rejected or GuideEventStatus.ResubmitRequested,
                 CanWithdraw = e.Status is GuideEventStatus.Draft or GuideEventStatus.Pending
             }).ToList()
         };
@@ -153,14 +147,6 @@ public class EventGuideController : Controller
         _logger.LogInformation("User {UserId} submitted individual event '{Title}' at venue {VenueId}",
             user.Id, model.Title, model.VenueId);
 
-        // Queue submission-received email
-        if (user.Email != null)
-        {
-            var profile = await _dbContext.Users.Include(u => u.Profile).Where(u => u.Id == user.Id).Select(u => u.Profile).FirstOrDefaultAsync();
-            var viewUrl = Url.Action(nameof(MySubmissions), "EventGuide", null, Request.Scheme)!;
-            await _emailService.SendEventSubmittedAsync(user.Email, profile?.BurnerName ?? user.Email, model.Title, viewUrl);
-        }
-
         TempData["SuccessMessage"] = $"Event \"{model.Title}\" submitted for review.";
         return RedirectToAction(nameof(MySubmissions));
     }
@@ -175,7 +161,7 @@ public class EventGuideController : Controller
             .FirstOrDefaultAsync(e => e.Id == eventId && e.CampId == null && e.SubmitterUserId == user.Id);
         if (guideEvent == null) return NotFound();
 
-        if (guideEvent.Status is GuideEventStatus.Withdrawn)
+        if (guideEvent.Status is not (GuideEventStatus.Draft or GuideEventStatus.Rejected or GuideEventStatus.ResubmitRequested))
         {
             TempData["ErrorMessage"] = "This event cannot be edited in its current state.";
             return RedirectToAction(nameof(MySubmissions));
@@ -205,7 +191,7 @@ public class EventGuideController : Controller
         model.LocationNote = guideEvent.LocationNote;
         model.IsRecurring = guideEvent.IsRecurring;
         model.RecurrenceDays = guideEvent.RecurrenceDays;
-        model.IsResubmit = guideEvent.Status is not GuideEventStatus.Draft;
+        model.IsResubmit = guideEvent.Status is GuideEventStatus.Rejected or GuideEventStatus.ResubmitRequested;
 
         return View("IndividualEventForm", model);
     }
@@ -221,7 +207,7 @@ public class EventGuideController : Controller
             .FirstOrDefaultAsync(e => e.Id == eventId && e.CampId == null && e.SubmitterUserId == user.Id);
         if (guideEvent == null) return NotFound();
 
-        if (guideEvent.Status is GuideEventStatus.Withdrawn)
+        if (guideEvent.Status is not (GuideEventStatus.Draft or GuideEventStatus.Rejected or GuideEventStatus.ResubmitRequested))
         {
             TempData["ErrorMessage"] = "This event cannot be edited in its current state.";
             return RedirectToAction(nameof(MySubmissions));
@@ -290,119 +276,6 @@ public class EventGuideController : Controller
 
         TempData["SuccessMessage"] = $"Event \"{guideEvent.Title}\" withdrawn.";
         return RedirectToAction(nameof(MySubmissions));
-    }
-
-    [HttpGet("Schedule")]
-    public async Task<IActionResult> Schedule()
-    {
-        var user = await _userManager.GetUserAsync(User);
-        if (user == null) return Challenge();
-
-        var guideSettings = await _dbContext.GuideSettings
-            .Include(g => g.EventSettings)
-            .FirstOrDefaultAsync();
-
-        DateTimeZone? tz = guideSettings?.EventSettings != null
-            ? DateTimeZoneProviders.Tzdb.GetZoneOrNull(guideSettings.EventSettings.TimeZoneId)
-            : null;
-
-        var gateOpeningDate = guideSettings?.EventSettings.GateOpeningDate;
-
-        var favourites = await _dbContext.UserEventFavourites
-            .Include(f => f.GuideEvent).ThenInclude(e => e.Category)
-            .Include(f => f.GuideEvent).ThenInclude(e => e.Camp!).ThenInclude(c => c.Seasons)
-            .Include(f => f.GuideEvent).ThenInclude(e => e.GuideSharedVenue)
-            .Where(f => f.UserId == user.Id && f.GuideEvent.Status == GuideEventStatus.Approved)
-            .OrderBy(f => f.GuideEvent.StartAt)
-            .ToListAsync();
-
-        var scheduleItems = favourites.Select(f =>
-        {
-            var e = f.GuideEvent;
-            var campSeason = e.Camp?.Seasons.OrderByDescending(s => s.Year).FirstOrDefault();
-            var campName = campSeason?.Name ?? e.Camp?.Slug;
-            var localStart = ToLocalDateTime(e.StartAt, tz);
-
-            var dayOffset = 0;
-            if (gateOpeningDate != null)
-            {
-                LocalDate eventDate = tz != null
-                    ? e.StartAt.InZone(tz).Date
-                    : LocalDate.FromDateTime(e.StartAt.ToDateTimeUtc());
-                dayOffset = Period.Between(gateOpeningDate.Value, eventDate, PeriodUnits.Days).Days;
-            }
-
-            return new ScheduleItemViewModel
-            {
-                EventId = e.Id,
-                Title = e.Title,
-                CategoryName = e.Category.Name,
-                CampName = campName,
-                VenueName = e.GuideSharedVenue?.Name,
-                LocationNote = e.LocationNote,
-                StartAt = localStart,
-                DurationMinutes = e.DurationMinutes,
-                DayOffset = dayOffset,
-                DayLabel = gateOpeningDate != null
-                    ? gateOpeningDate.Value.PlusDays(dayOffset).ToString("ddd d MMM", null)
-                    : localStart.ToString("ddd d MMM", System.Globalization.CultureInfo.InvariantCulture),
-                StartInstant = e.StartAt,
-                HasConflict = false
-            };
-        }).ToList();
-
-        // Detect time conflicts between favourited events
-        for (var i = 0; i < scheduleItems.Count; i++)
-        {
-            for (var j = i + 1; j < scheduleItems.Count; j++)
-            {
-                var a = scheduleItems[i];
-                var b = scheduleItems[j];
-                var aEnd = a.StartInstant.Plus(Duration.FromMinutes(a.DurationMinutes));
-                var bEnd = b.StartInstant.Plus(Duration.FromMinutes(b.DurationMinutes));
-
-                if (a.StartInstant < bEnd && b.StartInstant < aEnd)
-                {
-                    a.HasConflict = true;
-                    b.HasConflict = true;
-                }
-            }
-        }
-
-        var model = new ScheduleViewModel
-        {
-            TimeZoneId = guideSettings?.EventSettings?.TimeZoneId,
-            DayGroups = scheduleItems
-                .GroupBy(i => i.DayOffset)
-                .OrderBy(g => g.Key)
-                .Select(g => new ScheduleDayGroup
-                {
-                    DayLabel = g.First().DayLabel,
-                    Items = g.OrderBy(i => i.StartAt).ToList()
-                }).ToList()
-        };
-
-        return View(model);
-    }
-
-    [HttpPost("Schedule/Unfavourite/{eventId:guid}")]
-    [ValidateAntiForgeryToken]
-    public async Task<IActionResult> Unfavourite(Guid eventId)
-    {
-        var user = await _userManager.GetUserAsync(User);
-        if (user == null) return Challenge();
-
-        var favourite = await _dbContext.UserEventFavourites
-            .FirstOrDefaultAsync(f => f.UserId == user.Id && f.GuideEventId == eventId);
-
-        if (favourite != null)
-        {
-            _dbContext.UserEventFavourites.Remove(favourite);
-            await _dbContext.SaveChangesAsync();
-            TempData["SuccessMessage"] = "Event removed from your schedule.";
-        }
-
-        return RedirectToAction(nameof(Schedule));
     }
 
     // ─── Helpers ──────────────────────────────────────────────────
