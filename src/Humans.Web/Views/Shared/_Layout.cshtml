@@ -65,6 +65,20 @@
                         <li class="nav-item" authorize-policy="IsActiveMember">
                             <a class="nav-link" asp-area="" asp-controller="CityPlanning" asp-action="Index">@Localizer["Nav_City"]</a>
                         </li>
+                        @if (Configuration.GetValue<bool>("Features:EventGuide"))
+                        {
+                            <li class="nav-item dropdown" authorize-policy="IsActiveMember">
+                                <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">Events</a>
+                                <ul class="dropdown-menu">
+                                    <li><a class="dropdown-item" asp-area="" asp-controller="EventGuide" asp-action="Browse">Browse Events</a></li>
+                                    <li><a class="dropdown-item" asp-area="" asp-controller="EventGuide" asp-action="MySubmissions">My Submissions</a></li>
+                                    <li><a class="dropdown-item" asp-area="" asp-controller="EventGuide" asp-action="Schedule">My Schedule</a></li>
+                                    <li authorize-policy="IsGuideModerator"><hr class="dropdown-divider" /></li>
+                                    <li><a class="dropdown-item" asp-area="" asp-controller="EventGuide" asp-action="Dashboard" authorize-policy="IsGuideModerator">Guide Dashboard</a></li>
+                                    <li><a class="dropdown-item" asp-area="" asp-controller="EventGuide" asp-action="Moderate" authorize-policy="IsGuideModerator">Moderate Events</a></li>
+                                </ul>
+                            </li>
+                        }
                         @if (!isAuthenticated || !hasProfile)
                         {
                             <li class="nav-item">
