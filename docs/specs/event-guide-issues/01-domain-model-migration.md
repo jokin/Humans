@@ -41,18 +41,6 @@ Lookup table for event categories.
 | `DisplayOrder` | `int` | Sort order |
 | `IsActive` | `bool` | Soft disable without deletion |
 
-### `GuideCamp`
-Links a Humans `Team` to a camp identity in the guide.
-
-| Column | Type | Notes |
-|--------|------|-------|
-| `Id` | `Guid` | PK |
-| `TeamId` | `Guid` | FK → `Teams.Id`, unique |
-| `CampName` | `string(120)` | May differ from team name |
-| `Description` | `string(500)` | nullable |
-| `GridAddress` | `string(60)` | nullable |
-| `IsPublished` | `bool` | Controls visibility in guide |
-
 ### `GuideSharedVenue`
 Admin-managed communal spaces (e.g. "Main Stage", "The Middle of Elsewhere").
 
@@ -71,7 +59,7 @@ A single event submission.
 | Column | Type | Notes |
 |--------|------|-------|
 | `Id` | `Guid` | PK |
-| `GuideCampId` | `Guid?` | FK → `GuideCamps.Id`, nullable |
+| `CampId` | `Guid?` | FK → `Camps.Id`, nullable (reuses existing Camp entity) |
 | `GuideSharedVenueId` | `Guid?` | FK → `GuideSharedVenues.Id`, nullable |
 | `SubmitterUserId` | `Guid` | FK → `Users.Id` |
 | `CategoryId` | `Guid` | FK → `EventCategories.Id` |
@@ -153,23 +141,23 @@ Add `GuideModerator` to `RoleNames` constants. No new claims transformation need
 ## EF Configuration
 
 One configuration class per entity in `src/Humans.Infrastructure/Data/Configurations/`:
-- Lowercase snake_case table names (`guide_settings`, `event_categories`, `guide_camps`, `guide_shared_venues`, `guide_events`, `moderation_actions`, `user_guide_preferences`, `user_event_favourites`)
+- Lowercase snake_case table names (`guide_settings`, `event_categories`, `guide_shared_venues`, `guide_events`, `moderation_actions`, `user_guide_preferences`, `user_event_favourites`)
 - All string columns with explicit `HasMaxLength`
 - All enum columns with `.HasConversion<string>()`
-- Delete behaviors: `Restrict` on `GuideEvent → GuideCamp` and `GuideEvent → GuideSharedVenue` (don't cascade delete events when a venue/camp is removed)
-- Index on `GuideEvent.Status`, `GuideEvent.GuideCampId`, `GuideEvent.SubmitterUserId`
+- Delete behaviors: `Restrict` on `GuideEvent → Camp` and `GuideEvent → GuideSharedVenue` (don't cascade delete events when a venue/camp is removed)
+- Index on `GuideEvent.Status`, `GuideEvent.CampId`, `GuideEvent.SubmitterUserId`
 
 ---
 
 ## Migration
 
-Single migration covering all 8 new tables. Name: `AddEventGuide`.
+Single migration covering all 7 new tables. Name: `AddEventGuide`.
 
 ---
 
 ## Acceptance Criteria
 
-- [ ] All 8 entities exist in `src/Humans.Domain/Entities/`
+- [ ] All 7 entities exist in `src/Humans.Domain/Entities/`
 - [ ] All enums exist in `src/Humans.Domain/Enums/`
 - [ ] `GuideModerator` added to `RoleNames`
 - [ ] EF configurations exist for all entities
