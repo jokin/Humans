@@ -54,7 +54,7 @@ Page showing the current user's individual event submissions.
 
 ### Contents
 - Table: title, venue, date/time, category, status badge
-- Edit action (if `Draft`, `Rejected`, or `ResubmitRequested`)
+- Edit action (any status except `Withdrawn`)
 - Withdraw action (if `Draft` or `Pending`)
 - "Submit New Event" link
 
@@ -65,7 +65,7 @@ Page showing the current user's individual event submissions.
 
 ## Edit Form — `/EventGuide/Submit/{eventId}/Edit`
 
-Same fields as the creation form, pre-populated. Available when status is `Draft`, `Rejected`, or `ResubmitRequested`. Resubmitting resets status to `Pending`.
+Same fields as the creation form, pre-populated. Available for any status except `Withdrawn`. Saving an edit on an `Approved` or `Pending` event resets status to `Pending`, sending it back through the moderation queue.
 
 ---
 

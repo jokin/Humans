@@ -135,7 +135,8 @@ public class GuideEvent
     /// </summary>
     public void Submit(IClock clock)
     {
-        if (Status is not (GuideEventStatus.Draft or GuideEventStatus.Rejected or GuideEventStatus.ResubmitRequested))
+        if (Status is not (GuideEventStatus.Draft or GuideEventStatus.Rejected
+            or GuideEventStatus.ResubmitRequested or GuideEventStatus.Approved or GuideEventStatus.Pending))
             throw new InvalidOperationException($"Cannot submit event in {Status} state");
         var now = clock.GetCurrentInstant();
         Status = GuideEventStatus.Pending;

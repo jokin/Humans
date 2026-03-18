@@ -87,7 +87,7 @@ public class CampEventsController : Controller
                 DurationMinutes = e.DurationMinutes,
                 Status = e.Status,
                 PriorityRank = e.PriorityRank,
-                CanEdit = e.Status is GuideEventStatus.Draft or GuideEventStatus.Rejected or GuideEventStatus.ResubmitRequested,
+                CanEdit = e.Status is not GuideEventStatus.Withdrawn,
                 CanWithdraw = e.Status is GuideEventStatus.Draft or GuideEventStatus.Pending
             }).ToList()
         };
@@ -185,7 +185,7 @@ public class CampEventsController : Controller
             .FirstOrDefaultAsync(e => e.Id == eventId && e.CampId == ctx.Camp.Id);
         if (guideEvent == null) return NotFound();
 
-        if (guideEvent.Status is not (GuideEventStatus.Draft or GuideEventStatus.Rejected or GuideEventStatus.ResubmitRequested))
+        if (guideEvent.Status is GuideEventStatus.Withdrawn)
         {
             TempData["ErrorMessage"] = "This event cannot be edited in its current state.";
             return RedirectToAction(nameof(Index), new { slug });
@@ -215,7 +215,7 @@ public class CampEventsController : Controller
         model.IsRecurring = guideEvent.IsRecurring;
         model.RecurrenceDays = guideEvent.RecurrenceDays;
         model.PriorityRank = guideEvent.PriorityRank;
-        model.IsResubmit = guideEvent.Status is GuideEventStatus.Rejected or GuideEventStatus.ResubmitRequested;
+        model.IsResubmit = guideEvent.Status is not GuideEventStatus.Draft;
 
         return View("CampEventForm", model);
     }
@@ -232,7 +232,7 @@ public class CampEventsController : Controller
             .FirstOrDefaultAsync(e => e.Id == eventId && e.CampId == ctx.Camp.Id);
         if (guideEvent == null) return NotFound();
 
-        if (guideEvent.Status is not (GuideEventStatus.Draft or GuideEventStatus.Rejected or GuideEventStatus.ResubmitRequested))
+        if (guideEvent.Status is GuideEventStatus.Withdrawn)
         {
             TempData["ErrorMessage"] = "This event cannot be edited in its current state.";
             return RedirectToAction(nameof(Index), new { slug });

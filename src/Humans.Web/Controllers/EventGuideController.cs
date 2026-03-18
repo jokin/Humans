@@ -80,7 +80,7 @@ public class EventGuideController : Controller
                 StartAt = ToLocalDateTime(e.StartAt, tz),
                 DurationMinutes = e.DurationMinutes,
                 Status = e.Status,
-                CanEdit = e.Status is GuideEventStatus.Draft or GuideEventStatus.Rejected or GuideEventStatus.ResubmitRequested,
+                CanEdit = e.Status is not GuideEventStatus.Withdrawn,
                 CanWithdraw = e.Status is GuideEventStatus.Draft or GuideEventStatus.Pending
             }).ToList()
         };
@@ -173,7 +173,7 @@ public class EventGuideController : Controller
             .FirstOrDefaultAsync(e => e.Id == eventId && e.CampId == null && e.SubmitterUserId == user.Id);
         if (guideEvent == null) return NotFound();
 
-        if (guideEvent.Status is not (GuideEventStatus.Draft or GuideEventStatus.Rejected or GuideEventStatus.ResubmitRequested))
+        if (guideEvent.Status is GuideEventStatus.Withdrawn)
         {
             TempData["ErrorMessage"] = "This event cannot be edited in its current state.";
             return RedirectToAction(nameof(MySubmissions));
@@ -203,7 +203,7 @@ public class EventGuideController : Controller
         model.LocationNote = guideEvent.LocationNote;
         model.IsRecurring = guideEvent.IsRecurring;
         model.RecurrenceDays = guideEvent.RecurrenceDays;
-        model.IsResubmit = guideEvent.Status is GuideEventStatus.Rejected or GuideEventStatus.ResubmitRequested;
+        model.IsResubmit = guideEvent.Status is not GuideEventStatus.Draft;
 
         return View("IndividualEventForm", model);
     }
@@ -219,7 +219,7 @@ public class EventGuideController : Controller
             .FirstOrDefaultAsync(e => e.Id == eventId && e.CampId == null && e.SubmitterUserId == user.Id);
         if (guideEvent == null) return NotFound();
 
-        if (guideEvent.Status is not (GuideEventStatus.Draft or GuideEventStatus.Rejected or GuideEventStatus.ResubmitRequested))
+        if (guideEvent.Status is GuideEventStatus.Withdrawn)
         {
             TempData["ErrorMessage"] = "This event cannot be edited in its current state.";
             return RedirectToAction(nameof(MySubmissions));

@@ -26,7 +26,7 @@ Events are linked to the existing `Camp` entity via `GuideEvent.CampId`. Authori
 - Summary: submitted count, approved count, pending count
 - Table of all events submitted for this camp:
   - Title, category, date/time, status badge, priority rank
-  - Edit action (if status is `Draft`, `Rejected`, or `ResubmitRequested`)
+  - Edit action (any status except `Withdrawn`)
   - Withdraw action (if status is `Pending` or `Draft`)
 - "Submit New Event" button (visible when submission window is open per `GuideSettings.SubmissionOpenAt / SubmissionCloseAt`)
 - If submission window is closed, show a read-only message with the window dates
@@ -64,8 +64,8 @@ Events are linked to the existing `Camp` entity via `GuideEvent.CampId`. Authori
 ### Edit form — `/Camps/{slug}/Events/{eventId}/Edit`
 
 - Same fields, pre-populated
-- Only available when `Status` is `Draft`, `Rejected`, or `ResubmitRequested`
-- On resubmit: sets `Status = Pending`, `SubmittedAt = now`
+- Available for any status except `Withdrawn`
+- Saving an edit on an `Approved` or `Pending` event resets `Status = Pending`, `SubmittedAt = now`, sending it back through moderation
 
 ### Withdraw
 
