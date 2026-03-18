@@ -5,11 +5,13 @@ using Humans.Infrastructure.Data;
 using Humans.Domain.Entities;
 using Humans.Web.Models;
 using NodaTime;
+using Humans.Web.Filters;
 
 namespace Humans.Web.Controllers;
 
 [Authorize(Roles = "Admin")]
 [Route("Admin")]
+[ServiceFilter(typeof(EventGuideFeatureFilter))]
 public class GuideAdminController : Controller
 {
     private readonly HumansDbContext _dbContext;

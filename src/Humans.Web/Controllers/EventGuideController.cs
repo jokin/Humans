@@ -8,11 +8,13 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using NodaTime;
+using Humans.Web.Filters;
 
 namespace Humans.Web.Controllers;
 
 [Authorize]
 [Route("EventGuide")]
+[ServiceFilter(typeof(EventGuideFeatureFilter))]
 public class EventGuideController : Controller
 {
     private readonly HumansDbContext _dbContext;

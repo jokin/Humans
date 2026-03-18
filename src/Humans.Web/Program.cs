@@ -269,6 +269,8 @@ builder.Services.AddRateLimiter(options =>
 // Configure Localization
 builder.Services.AddLocalization();
 
+builder.Services.AddScoped<Humans.Web.Filters.EventGuideFeatureFilter>();
+
 // Add Controllers with Views
 builder.Services.AddControllersWithViews(options =>
     {

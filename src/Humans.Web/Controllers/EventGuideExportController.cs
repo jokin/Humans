@@ -7,11 +7,13 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using NodaTime;
+using Humans.Web.Filters;
 
 namespace Humans.Web.Controllers;
 
 [Authorize(Roles = $"{RoleNames.GuideModerator},{RoleNames.Admin}")]
 [Route("EventGuide/Export")]
+[ServiceFilter(typeof(EventGuideFeatureFilter))]
 public class EventGuideExportController : Controller
 {
     private readonly HumansDbContext _dbContext;

@@ -1,3 +1,4 @@
+@inject IConfiguration Configuration
 <!DOCTYPE html>
 <html lang="@System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName">
 <head>
@@ -52,12 +53,15 @@
                             <li class="nav-item">
                                 <a class="nav-link" asp-area="" asp-controller="Consent" asp-action="Index">@Localizer["Nav_Consents"]</a>
                             </li>
-                            <li class="nav-item">
-                                <a class="nav-link" asp-area="" asp-controller="EventGuide" asp-action="MySubmissions">Event Guide</a>
-                            </li>
-                            <li class="nav-item">
-                                <a class="nav-link" asp-area="" asp-controller="EventGuide" asp-action="Schedule">My Schedule</a>
-                            </li>
+                            @if (Configuration.GetValue<bool>("Features:EventGuide"))
+                            {
+                                <li class="nav-item">
+                                    <a class="nav-link" asp-area="" asp-controller="EventGuide" asp-action="MySubmissions">Event Guide</a>
+                                </li>
+                                <li class="nav-item">
+                                    <a class="nav-link" asp-area="" asp-controller="EventGuide" asp-action="Schedule">My Schedule</a>
+                                </li>
+                            }
                             @if (isActiveMember || User.IsInRole(Humans.Domain.Constants.RoleNames.NoInfoAdmin))
                             {
                                 <li class="nav-item">
@@ -89,7 +93,7 @@
                                 <a class="nav-link" asp-area="" asp-controller="Board" asp-action="Index">@Localizer["Nav_Board"]</a>
                             </li>
                         }
-                        @if (User.IsInRole(Humans.Domain.Constants.RoleNames.GuideModerator) || User.IsInRole("Admin"))
+                        @if (Configuration.GetValue<bool>("Features:EventGuide") && (User.IsInRole(Humans.Domain.Constants.RoleNames.GuideModerator) || User.IsInRole("Admin")))
                         {
                             <li class="nav-item">
                                 <a class="nav-link" asp-area="" asp-controller="EventGuideDashboard" asp-action="Index">Guide Dashboard</a>
