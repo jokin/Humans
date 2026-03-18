@@ -373,6 +373,209 @@ public class EventGuideController : Controller
         return View(model);
     }
 
+    [HttpGet("Browse")]
+    public async Task<IActionResult> Browse(
+        int? day, Guid? categoryId, Guid? campId, string? q, bool favouritesOnly = false)
+    {
+        var user = await _userManager.GetUserAsync(User);
+        if (user == null) return Challenge();
+
+        var guideSettings = await _dbContext.GuideSettings
+            .Include(g => g.EventSettings)
+            .FirstOrDefaultAsync();
+
+        DateTimeZone? tz = guideSettings?.EventSettings != null
+            ? DateTimeZoneProviders.Tzdb.GetZoneOrNull(guideSettings.EventSettings.TimeZoneId)
+            : null;
+
+        var gateOpeningDate = guideSettings?.EventSettings?.GateOpeningDate;
+
+        // Load user's excluded categories
+        var userPref = await _dbContext.UserGuidePreferences
+            .FirstOrDefaultAsync(p => p.UserId == user.Id);
+        var excludedSlugs = userPref != null
+            ? System.Text.Json.JsonSerializer.Deserialize<List<string>>(userPref.ExcludedCategorySlugs) ?? []
+            : new List<string>();
+
+        // Load user's favourites
+        var favouriteEventIds = await _dbContext.UserEventFavourites
+            .Where(f => f.UserId == user.Id)
+            .Select(f => f.GuideEventId)
+            .ToHashSetAsync();
+
+        // Query approved events
+        var query = _dbContext.GuideEvents
+            .Include(e => e.Category)
+            .Include(e => e.Camp!).ThenInclude(c => c.Seasons)
+            .Include(e => e.GuideSharedVenue)
+            .Include(e => e.SubmitterUser).ThenInclude(u => u.Profile)
+            .Where(e => e.Status == GuideEventStatus.Approved);
+
+        // Apply category opt-out
+        if (excludedSlugs.Count > 0)
+            query = query.Where(e => !excludedSlugs.Contains(e.Category.Slug));
+
+        if (categoryId.HasValue)
+            query = query.Where(e => e.CategoryId == categoryId.Value);
+
+        if (campId.HasValue)
+            query = query.Where(e => e.CampId == campId.Value);
+
+        if (!string.IsNullOrWhiteSpace(q))
+            query = query.Where(e => EF.Functions.ILike(e.Title, $"%{q}%") ||
+                                     EF.Functions.ILike(e.Description, $"%{q}%"));
+
+        var events = await query.OrderBy(e => e.StartAt).ToListAsync();
+
+        // Build browse items, expanding recurring events
+        var items = new List<BrowseEventItem>();
+        foreach (var e in events)
+        {
+            var campSeason = e.Camp?.Seasons.OrderByDescending(s => s.Year).FirstOrDefault();
+            var campName = campSeason?.Name ?? e.Camp?.Slug;
+            var submitterName = e.CampId == null
+                ? (e.SubmitterUser?.Profile?.BurnerName ?? e.SubmitterUser?.Email)
+                : null;
+
+            var occurrences = new List<Instant> { e.StartAt };
+            if (e.IsRecurring && !string.IsNullOrEmpty(e.RecurrenceDays))
+            {
+                occurrences.Clear();
+                foreach (var offsetStr in e.RecurrenceDays.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                {
+                    if (int.TryParse(offsetStr, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var dayOffset))
+                        occurrences.Add(e.StartAt.Plus(Duration.FromDays(dayOffset)));
+                }
+            }
+
+            foreach (var startInstant in occurrences)
+            {
+                var eventDayOffset = 0;
+                if (gateOpeningDate != null)
+                {
+                    LocalDate eventDate = tz != null
+                        ? startInstant.InZone(tz).Date
+                        : LocalDate.FromDateTime(startInstant.ToDateTimeUtc());
+                    eventDayOffset = Period.Between(gateOpeningDate.Value, eventDate, PeriodUnits.Days).Days;
+                }
+
+                if (day.HasValue && eventDayOffset != day.Value)
+                    continue;
+
+                items.Add(new BrowseEventItem
+                {
+                    EventId = e.Id,
+                    Title = e.Title,
+                    Description = e.Description,
+                    CategoryName = e.Category.Name,
+                    CampName = campName,
+                    VenueName = e.GuideSharedVenue?.Name,
+                    LocationNote = e.LocationNote,
+                    StartAt = ToLocalDateTime(startInstant, tz),
+                    DurationMinutes = e.DurationMinutes,
+                    DayOffset = eventDayOffset,
+                    IsFavourited = favouriteEventIds.Contains(e.Id),
+                    SubmitterName = submitterName
+                });
+            }
+        }
+
+        if (favouritesOnly)
+            items = items.Where(i => i.IsFavourited).ToList();
+
+        // Build filter options
+        var categories = await _dbContext.EventCategories
+            .Where(c => c.IsActive)
+            .OrderBy(c => c.DisplayOrder)
+            .Select(c => new CategoryOptionViewModel { Id = c.Id, Name = c.Name })
+            .ToListAsync();
+
+        var camps = await _dbContext.GuideEvents
+            .Where(e => e.Status == GuideEventStatus.Approved && e.CampId != null)
+            .Include(e => e.Camp!).ThenInclude(c => c.Seasons)
+            .Select(e => e.Camp!)
+            .Distinct()
+            .Select(c => new BrowseCampOption
+            {
+                Id = c.Id,
+                Name = c.Seasons.OrderByDescending(s => s.Year).FirstOrDefault()!.Name ?? c.Slug
+            })
+            .OrderBy(c => c.Name)
+            .ToListAsync();
+
+        var eventDays = new List<EventDayOptionViewModel>();
+        if (guideSettings?.EventSettings != null)
+        {
+            var es = guideSettings.EventSettings;
+            for (var offset = 0; offset <= es.EventEndOffset; offset++)
+            {
+                var date = es.GateOpeningDate.PlusDays(offset);
+                eventDays.Add(new EventDayOptionViewModel
+                {
+                    DayOffset = offset,
+                    Label = date.ToString("ddd d MMM", null)
+                });
+            }
+        }
+
+        var model = new BrowseViewModel
+        {
+            TimeZoneId = guideSettings?.EventSettings?.TimeZoneId,
+            FavouritedEventIds = favouriteEventIds,
+            Categories = categories,
+            Camps = camps,
+            Days = eventDays,
+            FilterDay = day,
+            FilterCategoryId = categoryId,
+            FilterCampId = campId,
+            SearchQuery = q,
+            FavouritesOnly = favouritesOnly,
+            DayGroups = items
+                .GroupBy(i => i.DayOffset)
+                .OrderBy(g => g.Key)
+                .Select(g => new BrowseDayGroup
+                {
+                    DayOffset = g.Key,
+                    DayLabel = gateOpeningDate != null
+                        ? gateOpeningDate.Value.PlusDays(g.Key).ToString("ddd d MMM", null)
+                        : g.First().StartAt.ToString("ddd d MMM", System.Globalization.CultureInfo.InvariantCulture),
+                    Items = g.OrderBy(i => i.StartAt).ToList()
+                }).ToList()
+        };
+
+        return View(model);
+    }
+
+    [HttpPost("Browse/Favourite/{eventId:guid}")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> ToggleFavourite(Guid eventId, int? day, Guid? categoryId, Guid? campId, string? q, bool favouritesOnly = false)
+    {
+        var user = await _userManager.GetUserAsync(User);
+        if (user == null) return Challenge();
+
+        var existing = await _dbContext.UserEventFavourites
+            .FirstOrDefaultAsync(f => f.UserId == user.Id && f.GuideEventId == eventId);
+
+        if (existing != null)
+        {
+            _dbContext.UserEventFavourites.Remove(existing);
+        }
+        else
+        {
+            _dbContext.UserEventFavourites.Add(new UserEventFavourite
+            {
+                Id = Guid.NewGuid(),
+                UserId = user.Id,
+                GuideEventId = eventId,
+                CreatedAt = _clock.GetCurrentInstant()
+            });
+        }
+
+        await _dbContext.SaveChangesAsync();
+
+        return RedirectToAction(nameof(Browse), new { day, categoryId, campId, q, favouritesOnly });
+    }
+
     [HttpPost("Schedule/Unfavourite/{eventId:guid}")]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Unfavourite(Guid eventId)

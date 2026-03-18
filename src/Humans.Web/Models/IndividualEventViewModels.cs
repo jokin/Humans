@@ -126,3 +126,49 @@ public class VenueOptionViewModel
     public Guid Id { get; set; }
     public string Name { get; set; } = string.Empty;
 }
+
+public class BrowseViewModel
+{
+    public string? TimeZoneId { get; set; }
+    public List<BrowseDayGroup> DayGroups { get; set; } = [];
+    public List<CategoryOptionViewModel> Categories { get; set; } = [];
+    public List<BrowseCampOption> Camps { get; set; } = [];
+    public List<EventDayOptionViewModel> Days { get; set; } = [];
+    public HashSet<Guid> FavouritedEventIds { get; set; } = [];
+
+    // Active filters (round-tripped via query string)
+    public int? FilterDay { get; set; }
+    public Guid? FilterCategoryId { get; set; }
+    public Guid? FilterCampId { get; set; }
+    public string? SearchQuery { get; set; }
+    public bool FavouritesOnly { get; set; }
+}
+
+public class BrowseDayGroup
+{
+    public int DayOffset { get; set; }
+    public string DayLabel { get; set; } = string.Empty;
+    public List<BrowseEventItem> Items { get; set; } = [];
+}
+
+public class BrowseEventItem
+{
+    public Guid EventId { get; set; }
+    public string Title { get; set; } = string.Empty;
+    public string Description { get; set; } = string.Empty;
+    public string CategoryName { get; set; } = string.Empty;
+    public string? CampName { get; set; }
+    public string? VenueName { get; set; }
+    public string? LocationNote { get; set; }
+    public DateTime StartAt { get; set; }
+    public int DurationMinutes { get; set; }
+    public int DayOffset { get; set; }
+    public bool IsFavourited { get; set; }
+    public string? SubmitterName { get; set; }
+}
+
+public class BrowseCampOption
+{
+    public Guid Id { get; set; }
+    public string Name { get; set; } = string.Empty;
+}
