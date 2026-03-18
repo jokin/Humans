@@ -297,6 +297,92 @@ public class GuideApiController : ControllerBase
         public List<string> ExcludedCategorySlugs { get; set; } = [];
     }
 
+    // ─── Favourites (authenticated) ────────────────────────────────
+
+    [Authorize]
+    [HttpGet("favourites")]
+    public async Task<IActionResult> GetFavourites()
+    {
+        var user = await _userManager.GetUserAsync(User);
+        if (user == null) return Unauthorized();
+
+        var guideSettings = await _dbContext.GuideSettings
+            .Include(g => g.EventSettings)
+            .FirstOrDefaultAsync();
+
+        DateTimeZone? tz = guideSettings?.EventSettings != null
+            ? DateTimeZoneProviders.Tzdb.GetZoneOrNull(guideSettings.EventSettings.TimeZoneId)
+            : null;
+        var gateOpeningDate = guideSettings?.EventSettings.GateOpeningDate;
+
+        var favourites = await _dbContext.UserEventFavourites
+            .Include(f => f.GuideEvent).ThenInclude(e => e.Category)
+            .Include(f => f.GuideEvent).ThenInclude(e => e.Camp!).ThenInclude(c => c.Seasons)
+            .Include(f => f.GuideEvent).ThenInclude(e => e.GuideSharedVenue)
+            .Include(f => f.GuideEvent).ThenInclude(e => e.SubmitterUser).ThenInclude(u => u.Profile)
+            .Where(f => f.UserId == user.Id && f.GuideEvent.Status == GuideEventStatus.Approved)
+            .OrderBy(f => f.GuideEvent.StartAt)
+            .ToListAsync();
+
+        var results = favourites.Select(f =>
+        {
+            var e = f.GuideEvent;
+            var campSeason = e.Camp?.Seasons.OrderByDescending(s => s.Year).FirstOrDefault();
+            var campName = campSeason?.Name ?? e.Camp?.Slug;
+            var submitterName = e.CampId == null
+                ? (e.SubmitterUser.Profile?.BurnerName ?? e.SubmitterUser.Email)
+                : null;
+            var dayOffset = ComputeDayOffset(e.StartAt, gateOpeningDate, tz);
+            return BuildEventDto(e, e.StartAt, dayOffset, campName, submitterName);
+        }).ToList();
+
+        return Ok(results);
+    }
+
+    [Authorize]
+    [HttpPost("favourites/{eventId:guid}")]
+    public async Task<IActionResult> AddFavourite(Guid eventId)
+    {
+        var user = await _userManager.GetUserAsync(User);
+        if (user == null) return Unauthorized();
+
+        var eventExists = await _dbContext.GuideEvents
+            .AnyAsync(e => e.Id == eventId && e.Status == GuideEventStatus.Approved);
+        if (!eventExists) return NotFound();
+
+        var alreadyFavourited = await _dbContext.UserEventFavourites
+            .AnyAsync(f => f.UserId == user.Id && f.GuideEventId == eventId);
+        if (alreadyFavourited) return Conflict(new { error = "Already favourited" });
+
+        _dbContext.UserEventFavourites.Add(new UserEventFavourite
+        {
+            Id = Guid.NewGuid(),
+            UserId = user.Id,
+            GuideEventId = eventId,
+            CreatedAt = _clock.GetCurrentInstant()
+        });
+        await _dbContext.SaveChangesAsync();
+
+        return Ok(new { favourited = true });
+    }
+
+    [Authorize]
+    [HttpDelete("favourites/{eventId:guid}")]
+    public async Task<IActionResult> RemoveFavourite(Guid eventId)
+    {
+        var user = await _userManager.GetUserAsync(User);
+        if (user == null) return Unauthorized();
+
+        var favourite = await _dbContext.UserEventFavourites
+            .FirstOrDefaultAsync(f => f.UserId == user.Id && f.GuideEventId == eventId);
+        if (favourite == null) return NotFound();
+
+        _dbContext.UserEventFavourites.Remove(favourite);
+        await _dbContext.SaveChangesAsync();
+
+        return Ok(new { unfavourited = true });
+    }
+
     // ─── Helpers ──────────────────────────────────────────────────
 
     private async Task<List<string>> GetExcludedCategorySlugsAsync()
