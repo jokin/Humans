@@ -278,6 +278,119 @@ public class EventGuideController : Controller
         return RedirectToAction(nameof(MySubmissions));
     }
 
+    [HttpGet("Schedule")]
+    public async Task<IActionResult> Schedule()
+    {
+        var user = await _userManager.GetUserAsync(User);
+        if (user == null) return Challenge();
+
+        var guideSettings = await _dbContext.GuideSettings
+            .Include(g => g.EventSettings)
+            .FirstOrDefaultAsync();
+
+        DateTimeZone? tz = guideSettings?.EventSettings != null
+            ? DateTimeZoneProviders.Tzdb.GetZoneOrNull(guideSettings.EventSettings.TimeZoneId)
+            : null;
+
+        var gateOpeningDate = guideSettings?.EventSettings.GateOpeningDate;
+
+        var favourites = await _dbContext.UserEventFavourites
+            .Include(f => f.GuideEvent).ThenInclude(e => e.Category)
+            .Include(f => f.GuideEvent).ThenInclude(e => e.Camp!).ThenInclude(c => c.Seasons)
+            .Include(f => f.GuideEvent).ThenInclude(e => e.GuideSharedVenue)
+            .Where(f => f.UserId == user.Id && f.GuideEvent.Status == GuideEventStatus.Approved)
+            .OrderBy(f => f.GuideEvent.StartAt)
+            .ToListAsync();
+
+        var scheduleItems = favourites.Select(f =>
+        {
+            var e = f.GuideEvent;
+            var campSeason = e.Camp?.Seasons.OrderByDescending(s => s.Year).FirstOrDefault();
+            var campName = campSeason?.Name ?? e.Camp?.Slug;
+            var localStart = ToLocalDateTime(e.StartAt, tz);
+
+            var dayOffset = 0;
+            if (gateOpeningDate != null)
+            {
+                LocalDate eventDate = tz != null
+                    ? e.StartAt.InZone(tz).Date
+                    : LocalDate.FromDateTime(e.StartAt.ToDateTimeUtc());
+                dayOffset = Period.Between(gateOpeningDate.Value, eventDate, PeriodUnits.Days).Days;
+            }
+
+            return new ScheduleItemViewModel
+            {
+                EventId = e.Id,
+                Title = e.Title,
+                CategoryName = e.Category.Name,
+                CampName = campName,
+                VenueName = e.GuideSharedVenue?.Name,
+                LocationNote = e.LocationNote,
+                StartAt = localStart,
+                DurationMinutes = e.DurationMinutes,
+                DayOffset = dayOffset,
+                DayLabel = gateOpeningDate != null
+                    ? gateOpeningDate.Value.PlusDays(dayOffset).ToString("ddd d MMM", null)
+                    : localStart.ToString("ddd d MMM", System.Globalization.CultureInfo.InvariantCulture),
+                StartInstant = e.StartAt,
+                HasConflict = false
+            };
+        }).ToList();
+
+        // Detect time conflicts between favourited events
+        for (var i = 0; i < scheduleItems.Count; i++)
+        {
+            for (var j = i + 1; j < scheduleItems.Count; j++)
+            {
+                var a = scheduleItems[i];
+                var b = scheduleItems[j];
+                var aEnd = a.StartInstant.Plus(Duration.FromMinutes(a.DurationMinutes));
+                var bEnd = b.StartInstant.Plus(Duration.FromMinutes(b.DurationMinutes));
+
+                if (a.StartInstant < bEnd && b.StartInstant < aEnd)
+                {
+                    a.HasConflict = true;
+                    b.HasConflict = true;
+                }
+            }
+        }
+
+        var model = new ScheduleViewModel
+        {
+            TimeZoneId = guideSettings?.EventSettings?.TimeZoneId,
+            DayGroups = scheduleItems
+                .GroupBy(i => i.DayOffset)
+                .OrderBy(g => g.Key)
+                .Select(g => new ScheduleDayGroup
+                {
+                    DayLabel = g.First().DayLabel,
+                    Items = g.OrderBy(i => i.StartAt).ToList()
+                }).ToList()
+        };
+
+        return View(model);
+    }
+
+    [HttpPost("Schedule/Unfavourite/{eventId:guid}")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Unfavourite(Guid eventId)
+    {
+        var user = await _userManager.GetUserAsync(User);
+        if (user == null) return Challenge();
+
+        var favourite = await _dbContext.UserEventFavourites
+            .FirstOrDefaultAsync(f => f.UserId == user.Id && f.GuideEventId == eventId);
+
+        if (favourite != null)
+        {
+            _dbContext.UserEventFavourites.Remove(favourite);
+            await _dbContext.SaveChangesAsync();
+            TempData["SuccessMessage"] = "Event removed from your schedule.";
+        }
+
+        return RedirectToAction(nameof(Schedule));
+    }
+
     // ─── Helpers ──────────────────────────────────────────────────
 
     private async Task<(bool IsOpen, GuideSettings? Settings)> CheckSubmissionWindowAsync()
