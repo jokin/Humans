@@ -42,6 +42,15 @@ New `SharedResource.ca.resx` with all ~805 keys, register `"ca"` culture in `Pro
 #### #97: Add communication preference management with magic-link unsubscribe
 Let humans manage email notification preferences with magic-link unsubscribe support. Label: enhancement.
 
+#### #161: Add shift exports, iCal feed, and post-event stats
+Slice 4 of shift management: CSV exports (department/all rotas, EE list, cantina), iCal personal feed, post-event stats dashboard. Depends on #135 (slices 1-3, complete). Independent of #162.
+
+#### #162: Add shift notification emails and signup cleanup jobs
+Slice 5 of shift management: 8 email triggers, DutySignupId FK dedup, reminder cron job, signup GC job, notification preferences. Depends on #135 (slices 1-3, complete). Independent of #161.
+
+#### #163: Gather feedback on shift management UX before slices 4-5
+Get coordinator and volunteer feedback on slices 1-3 before building #161 and #162. Deploy to QA, gather hands-on testing feedback, adjust scope if needed.
+
 ---
 
 ### Priority 3: Medium Features
