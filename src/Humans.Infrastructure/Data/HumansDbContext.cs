@@ -60,7 +60,6 @@ public class HumansDbContext : IdentityDbContext<User, IdentityRole<Guid>, Guid>
     public DbSet<ShiftSignup> ShiftSignups => Set<ShiftSignup>();
     public DbSet<VolunteerEventProfile> VolunteerEventProfiles => Set<VolunteerEventProfile>();
     public DbSet<GeneralAvailability> GeneralAvailability => Set<GeneralAvailability>();
-<<<<<<< HEAD
     public DbSet<GuideSettings> GuideSettings => Set<GuideSettings>();
     public DbSet<EventCategory> EventCategories => Set<EventCategory>();
     public DbSet<GuideSharedVenue> GuideSharedVenues => Set<GuideSharedVenue>();
@@ -68,8 +67,7 @@ public class HumansDbContext : IdentityDbContext<User, IdentityRole<Guid>, Guid>
     public DbSet<ModerationAction> ModerationActions => Set<ModerationAction>();
     public DbSet<UserGuidePreference> UserGuidePreferences => Set<UserGuidePreference>();
     public DbSet<UserEventFavourite> UserEventFavourites => Set<UserEventFavourite>();
-=======
->>>>>>> 60bad9d9 (feat: shift management v2, role auth fixes, dev stats (#140))
+    public DbSet<FeedbackReport> FeedbackReports => Set<FeedbackReport>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {

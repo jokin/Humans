@@ -106,6 +106,11 @@ public interface IEmailRenderer
     EmailContent RenderEventResubmitRequested(string userName, string eventTitle, string reason, string editUrl, string? culture = null);
 
     /// <summary>
+    /// Feedback response notification.
+    /// </summary>
+    EmailContent RenderFeedbackResponse(string userName, string originalDescription, string responseMessage, string? culture = null);
+
+    /// <summary>
     /// Facilitated message between volunteers.
     /// </summary>
     EmailContent RenderFacilitatedMessage(
