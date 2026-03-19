@@ -55,6 +55,15 @@ Three parts: (1) Associate @nobodies.team emails with humans and force as primar
 #### #126: Add Stripe fee tracking to ticket vendor integration
 Track Stripe processing fees on ticket purchases for financial reporting. Label: enhancement.
 
+#### #157: Add bus ticket sales for event transport
+First Stripe write integration. Departures, capacity, per-passenger booking, QR codes, scanner, manifests. Shared Stripe checkout/webhook layer reusable by future stores. Builds on #126. Design spec: `docs/specs/2026-03-19-bus-ticketing-platform-design.md`.
+
+#### #158: Add barrio services store for at-cost supplies
+Container transport, water, ice, butane — at-cost services for barrios. Second store on the shared Stripe payment layer built for #157. Buyers can be individuals or barrios.
+
+#### #159: Add invoice generation for Stripe payments
+Official invoices for people and barrios against Stripe payments. Spanish nonprofit requirements (NIF/CIF, sequential numbering). PDF generation. Covers all stores (#157, #158). Depends on both prior issues.
+
 #### #116: Add per-team Google Drive permission level configuration
 Configure Drive permission levels (viewer/commenter/editor) per team instead of global default. Label: enhancement.
 
