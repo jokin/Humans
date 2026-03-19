@@ -63,7 +63,7 @@ Registration (`/Vol/Register`) is standalone — not in sub-nav.
 
 | Figma Role | Humans Role/Claim |
 |-----------|------------------|
-| volunteer | ActiveMember claim |
+| volunteer | `ActiveMember` custom claim (checked via `User.HasClaim(ActiveMemberClaimType, ActiveClaimValue)`, NOT `IsInRole`) |
 | lead | Team Coordinator (TeamMemberRole.Coordinator on specific team) |
 | metalead | Coordinator of a ParentTeam (team with ChildTeams) |
 | noinfo | NoInfoAdmin global role |
@@ -85,7 +85,7 @@ Current user's shift signups in a Bootstrap card with table layout.
 | Team | `Shift.Rota.Team.Name` |
 | Date & Time | Computed from `Shift.DayOffset`, `Shift.StartTime`, `Shift.Duration`, `EventSettings.GateOpeningDate` |
 | Status | `ShiftSignup.Status` — badge: Confirmed=green, Pending=amber, Bailed=red, Refused=gray, Cancelled=gray, NoShow=red |
-| Action | Bail button on Confirmed signups (with confirmation modal) |
+| Action | Bail button on Confirmed and Pending signups (with confirmation modal) |
 
 **Data:** `IShiftSignupService.GetByUserAsync(userId)` joined to Shift/Rota.
 **Mobile:** Stacked card layout (duty+team top, status badge right, date+bail bottom).
@@ -110,7 +110,7 @@ Shift browser with filters and rota cards grouped by department.
 - Team label, rota name (from `Rota.Name`), description (`Rota.Description`)
 - Fill bar (slots filled / total across all shifts in rota)
 - Expandable "Show shifts" → shift rows:
-  - Date (from DayOffset), Time, Volunteers (filled/total), Priority badge, Policy (AutoConfirm=Instant, RequiresApproval=Approval), Sign Up / Bail button
+  - Date (from DayOffset), Time, Volunteers (filled/total), Priority badge, Policy (Public=Instant, RequireApproval=Approval), Sign Up / Bail button
 
 **Data:** `IShiftManagementService.GetBrowseShiftsAsync()` with filters. Rota metadata from `GetRotasByDepartmentAsync()`.
 
@@ -209,7 +209,10 @@ Multi-step wizard (server-side with form state in TempData or hidden fields):
 6. **If specific:** Team picker (accordion by department with checkboxes) + notes → submit
 7. **Done** — confirmation message with links to dashboard and shift browser
 
-**Data:** Creates `GeneralAvailability` record. For specific teams: creates `TeamJoinRequest` per selected team. May update `VolunteerEventProfile`.
+**Data:**
+- **General path:** Creates `GeneralAvailability` with `AvailableDayOffsets` derived from selected periods (e.g., Build → all day offsets in Build range from EventSettings). The availability type (on-site/year-round) and "general volunteer" preference are not captured by existing entities — store as a note in the `TeamJoinRequest.Message` field by creating a join request to the Volunteer Coordination team.
+- **Specific path:** Creates `TeamJoinRequest` per selected team, with the notes field populated from the wizard textarea.
+- No new entities or schema changes required. Period selection maps to concrete day offsets via EventSettings period boundaries.
 
 **Note:** This supplements (does not replace) existing membership onboarding. It captures shift volunteering interest and team preferences.
 
@@ -252,18 +255,39 @@ Claims-first pattern (per CODING_RULES):
 
 ## POST Actions
 
-| Action | Route | Service Call |
-|--------|-------|-------------|
-| Sign up | `POST /Vol/SignUp` | `IShiftSignupService.SignUpAsync` |
-| Bail | `POST /Vol/Bail` | `IShiftSignupService.BailAsync` |
-| Approve signup | `POST /Vol/Approve` | `IShiftSignupService.ApproveAsync` |
-| Refuse signup | `POST /Vol/Refuse` | `IShiftSignupService.RefuseAsync` |
-| Voluntell | `POST /Vol/Voluntell` | `IShiftSignupService.VoluntellAsync` |
-| Update settings | `POST /Vol/Settings` | Update `EventSettings` |
-| Register | `POST /Vol/Register` | Create `GeneralAvailability` / `TeamJoinRequest` |
-| Export Rotas | `GET /Vol/Export/Rotas` | FileResult CSV |
-| Export Early Entry | `GET /Vol/Export/EarlyEntry` | FileResult CSV |
-| Export Cantina | `GET /Vol/Export/Cantina` | FileResult CSV |
+All POST endpoints require `[ValidateAntiForgeryToken]` per codebase convention.
+
+| Action | Route | Auth Required | Service Call |
+|--------|-------|--------------|-------------|
+| Sign up | `POST /Vol/SignUp` | ActiveMember + `IsShiftBrowsingOpen` (or privileged role) | `IShiftSignupService.SignUpAsync` |
+| Bail | `POST /Vol/Bail` | ActiveMember (own signup) or CanApproveSignups (any signup) | `IShiftSignupService.BailAsync` |
+| Approve signup | `POST /Vol/Approve` | `CanApproveSignupsAsync` (VolCoord, DeptCoordinator, Admin) | `IShiftSignupService.ApproveAsync` |
+| Refuse signup | `POST /Vol/Refuse` | `CanApproveSignupsAsync` (VolCoord, DeptCoordinator, Admin) | `IShiftSignupService.RefuseAsync` |
+| Voluntell | `POST /Vol/Voluntell` | `CanAccessDashboard` (Admin, NoInfoAdmin, VolCoord) | `IShiftSignupService.VoluntellAsync` |
+| Mark no-show | `POST /Vol/NoShow` | `CanApproveSignupsAsync` (VolCoord, DeptCoordinator, Admin) | `IShiftSignupService.MarkNoShowAsync` |
+| Update settings | `POST /Vol/Settings` | Admin only | Update `EventSettings` |
+| Register | `POST /Vol/Register` | Authenticated | Create `GeneralAvailability` / `TeamJoinRequest` |
+| Export Rotas | `GET /Vol/Export/Rotas` | Admin or VolunteerCoordinator | FileResult CSV |
+| Export Early Entry | `GET /Vol/Export/EarlyEntry` | Admin or VolunteerCoordinator | FileResult CSV |
+| Export Cantina | `GET /Vol/Export/Cantina` | Admin or VolunteerCoordinator | FileResult CSV |
+
+## Empty States & Edge Cases
+
+- **No active EventSettings:** Redirect to a "No active event" message (matching existing `ShiftsController` pattern)
+- **Shift browsing closed:** All Shifts tab shows "Browsing is currently closed" for non-privileged users (matching existing `BrowsingClosed` view)
+- **Zero signups (My Shifts):** "No shifts booked yet" centered message with link to All Shifts
+- **Zero rotas matching filters (All Shifts):** "No rotas match your filters" with clear-filters link
+- **Zero departments with rotas (Teams):** Show departments but with "No rotas configured" on empty ones
+- **Zero urgent shifts:** "All duties are fully staffed!" success message
+- **Zero volunteer search results:** "No volunteers match your search" with avatar icon
+
+## Implementation Notes
+
+- **Controller size:** If `VolController` exceeds ~500 lines, split into `VolShiftsController`, `VolTeamsController`, `VolAdminController` — all sharing `_VolLayout.cshtml`
+- **`_ViewStart.cshtml`:** Use `Views/Vol/_ViewStart.cshtml` to set `Layout = "_VolLayout"` so individual views don't need to declare it
+- **NodaTime:** View models should use `LocalDate`, `LocalTime`, `Duration` from NodaTime for date/time fields; formatting happens in the Razor views
+- **Localization:** Vol pages are user-facing — use existing localization patterns (`IStringLocalizer<SharedResource>`) for display strings
+- **Icons:** Use existing icon approach (Bootstrap Icons / Font Awesome as used elsewhere in the app)
 
 ## New Files
 
