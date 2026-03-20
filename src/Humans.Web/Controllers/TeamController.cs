@@ -586,7 +586,7 @@ public class TeamController : HumansControllerBase
 
         try
         {
-            var team = await _teamService.CreateTeamAsync(model.Name, model.Description, model.RequiresApproval, model.ParentTeamId, model.GoogleGroupPrefix);
+            var team = await _teamService.CreateTeamAsync(model.Name, model.Description, model.RequiresApproval, model.ParentTeamId, model.GoogleGroupPrefix, model.DrivePermissionLevel);
             var currentUser = await GetCurrentUserAsync();
             _logger.LogInformation("Admin {AdminId} created team {TeamId} ({TeamName})", currentUser?.Id, team.Id, team.Name);
 
@@ -642,6 +642,7 @@ public class TeamController : HumansControllerBase
             Description = team.Description,
             GoogleGroupPrefix = team.GoogleGroupPrefix,
             GoogleGroupEmail = team.GoogleGroupEmail,
+            DrivePermissionLevel = team.DrivePermissionLevel,
             Slug = team.Slug,
             CustomSlug = team.CustomSlug,
             RequiresApproval = team.RequiresApproval,
@@ -672,7 +673,7 @@ public class TeamController : HumansControllerBase
 
         try
         {
-            await _teamService.UpdateTeamAsync(id, model.Name, model.Description, model.RequiresApproval, model.IsActive, model.ParentTeamId, model.GoogleGroupPrefix, model.CustomSlug);
+            await _teamService.UpdateTeamAsync(id, model.Name, model.Description, model.RequiresApproval, model.IsActive, model.ParentTeamId, model.GoogleGroupPrefix, model.CustomSlug, model.DrivePermissionLevel);
             var currentUser = await GetCurrentUserAsync();
             _logger.LogInformation("Admin {AdminId} updated team {TeamId}", currentUser?.Id, id);
 

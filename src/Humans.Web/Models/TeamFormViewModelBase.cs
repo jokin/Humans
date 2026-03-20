@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using Humans.Domain.Enums;
 using Microsoft.AspNetCore.Mvc.Rendering;
 
 namespace Humans.Web.Models;
@@ -17,6 +18,11 @@ public abstract class TeamFormViewModelBase
     public string? GoogleGroupPrefix { get; set; }
 
     public bool RequiresApproval { get; set; } = true;
+
+    /// <summary>
+    /// Google Drive permission level for team members. Null means Writer (default).
+    /// </summary>
+    public DrivePermissionLevel? DrivePermissionLevel { get; set; }
 
     public Guid? ParentTeamId { get; set; }
 

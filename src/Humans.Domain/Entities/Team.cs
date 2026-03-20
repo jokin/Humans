@@ -105,6 +105,12 @@ public class Team
     public List<CallToAction>? CallsToAction { get; set; }
 
     /// <summary>
+    /// Google Drive permission level for team members on linked Drive resources.
+    /// Null means "Writer" (the historical default).
+    /// </summary>
+    public DrivePermissionLevel? DrivePermissionLevel { get; set; }
+
+    /// <summary>
     /// Optional parent team ID for one-level hierarchy (departments).
     /// A team with a parent cannot itself be a parent.
     /// </summary>
@@ -155,4 +161,22 @@ public class Team
     /// Requires ParentTeam navigation to be loaded.
     /// </summary>
     public string DisplayName => ParentTeam != null ? $"{ParentTeam.Name} - {Name}" : Name;
+
+    /// <summary>
+    /// Effective Drive permission level: uses configured value, or "Writer" when null
+    /// (the historical default before per-team configuration was added).
+    /// </summary>
+    public DrivePermissionLevel EffectiveDrivePermissionLevel =>
+        DrivePermissionLevel ?? Enums.DrivePermissionLevel.Writer;
+
+    /// <summary>
+    /// Google Drive API role string for this team's permission level.
+    /// </summary>
+    public string DriveRoleString => EffectiveDrivePermissionLevel switch
+    {
+        Enums.DrivePermissionLevel.Reader => "reader",
+        Enums.DrivePermissionLevel.Commenter => "commenter",
+        Enums.DrivePermissionLevel.Writer => "writer",
+        _ => "writer"
+    };
 }

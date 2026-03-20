@@ -1,4 +1,5 @@
 @model Humans.Web.Models.TeamFormViewModelBase
+@using Humans.Domain.Enums
 @{
     var isReadOnly = (bool?)ViewData["IsReadOnly"] ?? false;
     var showParentTeam = (bool?)ViewData["ShowParentTeam"] ?? true;
@@ -22,6 +23,17 @@
     {
         <div class="form-text">Leave empty if this team doesn't need a Google Group.</div>
     }
+</div>
+
+<div class="mb-3">
+    <label asp-for="DrivePermissionLevel" class="form-label">Drive Permission Level</label>
+    <select asp-for="DrivePermissionLevel" class="form-select" disabled="@isReadOnly">
+        <option value="">Writer (default)</option>
+        <option value="@nameof(DrivePermissionLevel.Reader)">Reader (view only)</option>
+        <option value="@nameof(DrivePermissionLevel.Commenter)">Commenter (view + comment)</option>
+        <option value="@nameof(DrivePermissionLevel.Writer)">Writer (full edit)</option>
+    </select>
+    <div class="form-text">Permission level for team members on linked Google Drive folders. Changes apply on next sync.</div>
 </div>
 
 @if (showParentTeam)
