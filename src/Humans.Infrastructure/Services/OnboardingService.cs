@@ -4,6 +4,7 @@ using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using NodaTime;
 using Humans.Application;
+using Humans.Application.Extensions;
 using Humans.Application.Interfaces;
 using Humans.Domain.Constants;
 using Humans.Domain.Entities;
@@ -174,14 +175,11 @@ public class OnboardingService : IOnboardingService
             reviewerId, reviewerDisplayName);
 
         await _dbContext.SaveChangesAsync(ct);
-        _cache.Remove(CacheKeys.NavBadgeCounts);
+        _cache.InvalidateNavBadgeCounts();
 
         // Add to profile cache (profile is now approved and not suspended)
-        if (_cache.TryGetValue(CacheKeys.ApprovedProfiles, out ConcurrentDictionary<Guid, CachedProfile>? profileCache) && profileCache != null)
-        {
-            await _dbContext.Entry(profile).Collection(p => p.VolunteerHistory).LoadAsync(ct);
-            profileCache[userId] = CachedProfile.Create(profile, profile.User);
-        }
+        await _dbContext.Entry(profile).Collection(p => p.VolunteerHistory).LoadAsync(ct);
+        _cache.UpdateApprovedProfile(userId, CachedProfile.Create(profile, profile.User));
 
         // Sync Volunteers team membership (adds to team + sends welcome email)
         await _syncJob.SyncVolunteersMembershipForUserAsync(userId, CancellationToken.None);
@@ -230,13 +228,10 @@ public class OnboardingService : IOnboardingService
             reviewerId, reviewerDisplayName);
 
         await _dbContext.SaveChangesAsync(ct);
-        _cache.Remove(CacheKeys.NavBadgeCounts);
+        _cache.InvalidateNavBadgeCounts();
 
         // Remove from profile cache (no longer approved)
-        if (_cache.TryGetValue(CacheKeys.ApprovedProfiles, out ConcurrentDictionary<Guid, CachedProfile>? flagCache) && flagCache != null)
-        {
-            flagCache.TryRemove(userId, out _);
-        }
+        _cache.UpdateApprovedProfile(userId, null);
 
         await DeprovisionApprovalGatedSystemTeamsAsync(userId);
 
@@ -321,13 +316,10 @@ public class OnboardingService : IOnboardingService
             reviewerId, reviewerDisplayName);
 
         await _dbContext.SaveChangesAsync(ct);
-        _cache.Remove(CacheKeys.NavBadgeCounts);
+        _cache.InvalidateNavBadgeCounts();
 
         // Remove from profile cache (no longer approved)
-        if (_cache.TryGetValue(CacheKeys.ApprovedProfiles, out ConcurrentDictionary<Guid, CachedProfile>? rejectCache) && rejectCache != null)
-        {
-            rejectCache.TryRemove(userId, out _);
-        }
+        _cache.UpdateApprovedProfile(userId, null);
 
         // FIX: Both Admin and OnboardingReview paths now deprovision
         await DeprovisionApprovalGatedSystemTeamsAsync(userId);
@@ -373,14 +365,11 @@ public class OnboardingService : IOnboardingService
         await _dbContext.SaveChangesAsync(ct);
 
         // FIX: cache eviction was missing in AdminController
-        _cache.Remove(CacheKeys.NavBadgeCounts);
+        _cache.InvalidateNavBadgeCounts();
 
         // Add to profile cache (profile is now approved)
-        if (_cache.TryGetValue(CacheKeys.ApprovedProfiles, out ConcurrentDictionary<Guid, CachedProfile>? approveCache) && approveCache != null)
-        {
-            await _dbContext.Entry(user.Profile).Collection(p => p.VolunteerHistory).LoadAsync(ct);
-            approveCache[userId] = CachedProfile.Create(user.Profile, user);
-        }
+        await _dbContext.Entry(user.Profile).Collection(p => p.VolunteerHistory).LoadAsync(ct);
+        _cache.UpdateApprovedProfile(userId, CachedProfile.Create(user.Profile, user));
 
         // Sync Volunteers team membership (adds user if they also have all required consents)
         await _syncJob.SyncVolunteersMembershipForUserAsync(userId);
@@ -413,10 +402,7 @@ public class OnboardingService : IOnboardingService
         await _dbContext.SaveChangesAsync(ct);
 
         // Remove from profile cache (suspended)
-        if (_cache.TryGetValue(CacheKeys.ApprovedProfiles, out ConcurrentDictionary<Guid, CachedProfile>? suspendCache) && suspendCache != null)
-        {
-            suspendCache.TryRemove(userId, out _);
-        }
+        _cache.UpdateApprovedProfile(userId, null);
 
         _metrics.RecordMemberSuspended("admin");
         _logger.LogInformation("Admin {AdminId} suspended human {HumanId}", adminId, userId);
@@ -447,11 +433,8 @@ public class OnboardingService : IOnboardingService
         // Re-add to profile cache if approved
         if (user.Profile.IsApproved)
         {
-            if (_cache.TryGetValue(CacheKeys.ApprovedProfiles, out ConcurrentDictionary<Guid, CachedProfile>? unsuspendCache) && unsuspendCache != null)
-            {
-                await _dbContext.Entry(user.Profile).Collection(p => p.VolunteerHistory).LoadAsync(ct);
-                unsuspendCache[userId] = CachedProfile.Create(user.Profile, user);
-            }
+            await _dbContext.Entry(user.Profile).Collection(p => p.VolunteerHistory).LoadAsync(ct);
+            _cache.UpdateApprovedProfile(userId, CachedProfile.Create(user.Profile, user));
         }
 
         _logger.LogInformation("Admin {AdminId} unsuspended human {HumanId}", adminId, userId);
@@ -473,7 +456,7 @@ public class OnboardingService : IOnboardingService
         profile.ConsentCheckStatus = ConsentCheckStatus.Pending;
         profile.UpdatedAt = _clock.GetCurrentInstant();
         await _dbContext.SaveChangesAsync(ct);
-        _cache.Remove(CacheKeys.NavBadgeCounts);
+        _cache.InvalidateNavBadgeCounts();
         _logger.LogInformation("User {UserId} has all consents signed, consent check set to Pending", userId);
 
         return true;

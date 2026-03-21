@@ -25,7 +25,22 @@ public interface ICampService
     // Queries
     Task<Camp?> GetCampBySlugAsync(string slug, CancellationToken cancellationToken = default);
     Task<Camp?> GetCampByIdAsync(Guid campId, CancellationToken cancellationToken = default);
+    Task<CampDetailData?> GetCampDetailAsync(
+        string slug,
+        int? preferredYear = null,
+        bool fallbackToLatestSeason = true,
+        CancellationToken cancellationToken = default);
+    Task<CampEditData?> GetCampEditDataAsync(
+        Guid campId,
+        int? preferredYear = null,
+        CancellationToken cancellationToken = default);
+    Task<CampDirectoryResult> GetCampDirectoryAsync(
+        Guid? userId,
+        CampDirectoryFilter? filter = null,
+        CancellationToken cancellationToken = default);
     Task<List<Camp>> GetCampsForYearAsync(int year, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<CampPublicSummary>> GetCampPublicSummariesForYearAsync(int year, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<CampPlacementSummary>> GetCampPlacementSummariesForYearAsync(int year, CancellationToken cancellationToken = default);
     Task<CampSettings> GetSettingsAsync(CancellationToken cancellationToken = default);
     Task<List<Camp>> GetCampsByLeadUserIdAsync(Guid userId, CancellationToken cancellationToken = default);
     Task<List<CampSeason>> GetPendingSeasonsAsync(CancellationToken cancellationToken = default);
@@ -85,3 +100,135 @@ public record CampSeasonData(
     int ContainerCount,
     string? ContainerNotes,
     ElectricalGrid? ElectricalGrid);
+
+public record CampDirectoryFilter(
+    CampVibe? Vibe = null,
+    SoundZone? SoundZone = null,
+    bool KidsFriendly = false,
+    bool AcceptingMembers = false);
+
+public record CampDirectoryCard(
+    Guid Id,
+    string Slug,
+    string Name,
+    string BlurbShort,
+    string? ImageUrl,
+    IReadOnlyList<CampVibe> Vibes,
+    YesNoMaybe AcceptingMembers,
+    YesNoMaybe KidsWelcome,
+    SoundZone? SoundZone,
+    CampSeasonStatus Status,
+    int TimesAtNowhere);
+
+public record CampDirectoryResult(
+    int Year,
+    int PendingCount,
+    IReadOnlyList<CampDirectoryCard> Camps,
+    IReadOnlyList<CampDirectoryCard> MyCamps);
+
+public record CampDetailData(
+    Guid Id,
+    string Slug,
+    string Name,
+    IReadOnlyList<CampLink> Links,
+    bool IsSwissCamp,
+    int TimesAtNowhere,
+    IReadOnlyList<string> HistoricalNames,
+    IReadOnlyList<string> ImageUrls,
+    IReadOnlyList<CampLeadSummary> Leads,
+    CampSeasonDetailData? CurrentSeason);
+
+public record CampLeadSummary(
+    Guid LeadId,
+    Guid UserId,
+    string DisplayName);
+
+public record CampEditData(
+    Guid CampId,
+    string Slug,
+    Guid SeasonId,
+    int Year,
+    bool IsNameLocked,
+    string Name,
+    string ContactEmail,
+    string ContactPhone,
+    IReadOnlyList<string> Links,
+    bool IsSwissCamp,
+    int TimesAtNowhere,
+    string BlurbLong,
+    string BlurbShort,
+    string Languages,
+    YesNoMaybe AcceptingMembers,
+    YesNoMaybe KidsWelcome,
+    KidsVisitingPolicy KidsVisiting,
+    string? KidsAreaDescription,
+    PerformanceSpaceStatus HasPerformanceSpace,
+    string? PerformanceTypes,
+    IReadOnlyList<CampVibe> Vibes,
+    AdultPlayspacePolicy AdultPlayspace,
+    int MemberCount,
+    SpaceSize? SpaceRequirement,
+    SoundZone? SoundZone,
+    int ContainerCount,
+    string? ContainerNotes,
+    ElectricalGrid? ElectricalGrid,
+    IReadOnlyList<CampLeadSummary> Leads,
+    IReadOnlyList<CampImageSummary> Images);
+
+public record CampImageSummary(
+    Guid Id,
+    string Url,
+    int SortOrder);
+
+public record CampSeasonDetailData(
+    Guid Id,
+    int Year,
+    string Name,
+    CampSeasonStatus Status,
+    string BlurbLong,
+    string BlurbShort,
+    string Languages,
+    YesNoMaybe AcceptingMembers,
+    YesNoMaybe KidsWelcome,
+    KidsVisitingPolicy KidsVisiting,
+    string? KidsAreaDescription,
+    PerformanceSpaceStatus HasPerformanceSpace,
+    string? PerformanceTypes,
+    IReadOnlyList<CampVibe> Vibes,
+    AdultPlayspacePolicy AdultPlayspace,
+    int MemberCount,
+    SpaceSize? SpaceRequirement,
+    SoundZone? SoundZone,
+    int ContainerCount,
+    string? ContainerNotes,
+    ElectricalGrid? ElectricalGrid,
+    bool IsNameLocked);
+
+public record CampPublicSummary(
+    Guid Id,
+    string Slug,
+    string Name,
+    string BlurbShort,
+    string BlurbLong,
+    string? ImageUrl,
+    IReadOnlyList<string> Vibes,
+    string AcceptingMembers,
+    string KidsWelcome,
+    string? SoundZone,
+    string Status,
+    int TimesAtNowhere,
+    bool IsSwissCamp,
+    IReadOnlyList<CampLink>? Links,
+    string? WebOrSocialUrl);
+
+public record CampPlacementSummary(
+    Guid Id,
+    string Slug,
+    string Name,
+    int MemberCount,
+    string? SpaceRequirement,
+    string? SoundZone,
+    int ContainerCount,
+    string? ContainerNotes,
+    string Status,
+    string? ElectricalGrid);
