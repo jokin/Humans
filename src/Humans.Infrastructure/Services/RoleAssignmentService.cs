@@ -3,6 +3,7 @@ using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using NodaTime;
 using Humans.Application;
+using Humans.Application.Extensions;
 using Humans.Application.Interfaces;
 using Humans.Domain.Constants;
 using Humans.Domain.Entities;
@@ -150,7 +151,8 @@ public class RoleAssignmentService : IRoleAssignmentService
             assignerId, assignerDisplayName);
 
         await _dbContext.SaveChangesAsync(ct);
-        _cache.Remove(CacheKeys.NavBadgeCounts);
+        _cache.InvalidateNavBadgeCounts();
+        _cache.InvalidateRoleAssignmentClaims(userId);
 
         _logger.LogInformation("Admin {AdminId} assigned role {Role} to user {UserId}",
             assignerId, roleName, userId);
@@ -198,7 +200,8 @@ public class RoleAssignmentService : IRoleAssignmentService
             enderId, enderDisplayName);
 
         await _dbContext.SaveChangesAsync(ct);
-        _cache.Remove(CacheKeys.NavBadgeCounts);
+        _cache.InvalidateNavBadgeCounts();
+        _cache.InvalidateRoleAssignmentClaims(roleAssignment.UserId);
 
         _logger.LogInformation("Admin {AdminId} ended role {Role} for user {UserId}",
             enderId, roleAssignment.RoleName, roleAssignment.UserId);
