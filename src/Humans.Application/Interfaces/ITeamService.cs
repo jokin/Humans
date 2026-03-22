@@ -120,7 +120,6 @@ public interface ITeamService
         bool requiresApproval,
         Guid? parentTeamId = null,
         string? googleGroupPrefix = null,
-        DrivePermissionLevel? drivePermissionLevel = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -178,7 +177,6 @@ public interface ITeamService
         Guid? parentTeamId = null,
         string? googleGroupPrefix = null,
         string? customSlug = null,
-        DrivePermissionLevel? drivePermissionLevel = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>

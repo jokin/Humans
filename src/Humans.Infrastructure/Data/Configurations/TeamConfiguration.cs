@@ -80,10 +80,6 @@ public class TeamConfiguration : IEntityTypeConfiguration<Team>
                     v => v == null ? 0 : v.Aggregate(0, (hash, item) => HashCode.Combine(hash, item.Text, item.Url, item.Style)),
                     v => v == null ? null! : v.Select(c => new CallToAction { Text = c.Text, Url = c.Url, Style = c.Style }).ToList()));
 
-        builder.Property(t => t.DrivePermissionLevel)
-            .HasConversion<string>()
-            .HasMaxLength(20);
-
         builder.Property(t => t.ParentTeamId);
 
         builder.HasOne(t => t.ParentTeam)
@@ -125,8 +121,6 @@ public class TeamConfiguration : IEntityTypeConfiguration<Team>
         builder.Ignore(t => t.IsSystemTeam);
         builder.Ignore(t => t.GoogleGroupEmail);
         builder.Ignore(t => t.DisplayName);
-        builder.Ignore(t => t.EffectiveDrivePermissionLevel);
-        builder.Ignore(t => t.DriveRoleString);
 
         // Seed system teams
         builder.HasData(
@@ -149,8 +143,7 @@ public class TeamConfiguration : IEntityTypeConfiguration<Team>
                 PageContentUpdatedByUserId = (Guid?)null,
                 CallsToAction = (List<CallToAction>?)null,
                 CustomSlug = (string?)null,
-                ShowCoordinatorsOnPublicPage = true,
-                DrivePermissionLevel = (DrivePermissionLevel?)null
+                ShowCoordinatorsOnPublicPage = true
             },
             new
             {
@@ -171,8 +164,7 @@ public class TeamConfiguration : IEntityTypeConfiguration<Team>
                 PageContentUpdatedByUserId = (Guid?)null,
                 CallsToAction = (List<CallToAction>?)null,
                 CustomSlug = (string?)null,
-                ShowCoordinatorsOnPublicPage = true,
-                DrivePermissionLevel = (DrivePermissionLevel?)null
+                ShowCoordinatorsOnPublicPage = true
             },
             new
             {
@@ -193,8 +185,7 @@ public class TeamConfiguration : IEntityTypeConfiguration<Team>
                 PageContentUpdatedByUserId = (Guid?)null,
                 CallsToAction = (List<CallToAction>?)null,
                 CustomSlug = (string?)null,
-                ShowCoordinatorsOnPublicPage = true,
-                DrivePermissionLevel = (DrivePermissionLevel?)null
+                ShowCoordinatorsOnPublicPage = true
             },
             new
             {
@@ -215,8 +206,7 @@ public class TeamConfiguration : IEntityTypeConfiguration<Team>
                 PageContentUpdatedByUserId = (Guid?)null,
                 CallsToAction = (List<CallToAction>?)null,
                 CustomSlug = (string?)null,
-                ShowCoordinatorsOnPublicPage = true,
-                DrivePermissionLevel = (DrivePermissionLevel?)null
+                ShowCoordinatorsOnPublicPage = true
             },
             new
             {
@@ -237,8 +227,7 @@ public class TeamConfiguration : IEntityTypeConfiguration<Team>
                 PageContentUpdatedByUserId = (Guid?)null,
                 CallsToAction = (List<CallToAction>?)null,
                 CustomSlug = (string?)null,
-                ShowCoordinatorsOnPublicPage = true,
-                DrivePermissionLevel = (DrivePermissionLevel?)null
+                ShowCoordinatorsOnPublicPage = true
             },
             new
             {
@@ -259,8 +248,7 @@ public class TeamConfiguration : IEntityTypeConfiguration<Team>
                 PageContentUpdatedByUserId = (Guid?)null,
                 CallsToAction = (List<CallToAction>?)null,
                 CustomSlug = (string?)null,
-                ShowCoordinatorsOnPublicPage = true,
-                DrivePermissionLevel = (DrivePermissionLevel?)null
+                ShowCoordinatorsOnPublicPage = true
             });
     }
 }
