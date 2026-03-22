@@ -147,10 +147,6 @@ public class EnumStringStabilityTests
         {
             typeof(RolePeriod),
             new[] { "YearRound", "Build", "Event", "Strike" }
-        },
-        {
-            typeof(DrivePermissionLevel),
-            new[] { "Reader", "Commenter", "Writer" }
         }
     };
 }

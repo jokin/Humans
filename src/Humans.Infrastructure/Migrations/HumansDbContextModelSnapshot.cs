@@ -1969,10 +1969,6 @@ namespace Humans.Infrastructure.Migrations
                         .HasMaxLength(2000)
                         .HasColumnType("character varying(2000)");
 
-                    b.Property<string>("DrivePermissionLevel")
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
-
                     b.Property<string>("GoogleGroupPrefix")
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");

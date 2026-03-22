@@ -49,7 +49,6 @@ public class TeamService : ITeamService
         bool requiresApproval,
         Guid? parentTeamId = null,
         string? googleGroupPrefix = null,
-        DrivePermissionLevel? drivePermissionLevel = null,
         CancellationToken cancellationToken = default)
     {
         var baseSlug = Helpers.SlugHelper.GenerateSlug(name);
@@ -95,7 +94,6 @@ public class TeamService : ITeamService
                 RequiresApproval = requiresApproval,
                 ParentTeamId = parentTeamId,
                 GoogleGroupPrefix = googleGroupPrefix,
-                DrivePermissionLevel = drivePermissionLevel,
                 SystemTeamType = SystemTeamType.None,
                 CreatedAt = now,
                 UpdatedAt = now
@@ -369,7 +367,6 @@ public class TeamService : ITeamService
         Guid? parentTeamId = null,
         string? googleGroupPrefix = null,
         string? customSlug = null,
-        DrivePermissionLevel? drivePermissionLevel = null,
         CancellationToken cancellationToken = default)
     {
         var team = await _dbContext.Teams.FindAsync(new object[] { teamId }, cancellationToken)
@@ -452,7 +449,6 @@ public class TeamService : ITeamService
         team.ParentTeamId = parentTeamId;
         team.GoogleGroupPrefix = googleGroupPrefix;
         team.CustomSlug = customSlug;
-        team.DrivePermissionLevel = drivePermissionLevel;
         team.UpdatedAt = _clock.GetCurrentInstant();
 
         if (becomingChild)

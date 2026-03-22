@@ -430,14 +430,9 @@ public class GoogleWorkspaceSyncService : IGoogleSyncService
     /// All code paths (outbox, reconciliation, manual sync) must call this method.
     /// Respects SyncSettings — skips if GoogleDrive mode is None.
     /// </summary>
-    /// <param name="resource">The Google Drive resource to grant access on.</param>
-    /// <param name="userEmail">The user's email address.</param>
-    /// <param name="driveRole">Google Drive API role string (reader/commenter/writer).</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
     private async Task AddUserToDriveAsync(
         GoogleResource resource,
         string userEmail,
-        string driveRole = "writer",
         CancellationToken cancellationToken = default)
     {
         var mode = await _syncSettingsService.GetModeAsync(SyncServiceType.GoogleDrive, cancellationToken);
@@ -451,7 +446,7 @@ public class GoogleWorkspaceSyncService : IGoogleSyncService
         var permission = new Google.Apis.Drive.v3.Data.Permission
         {
             Type = "user",
-            Role = driveRole,
+            Role = "writer",
             EmailAddress = userEmail
         };
 
@@ -463,12 +458,11 @@ public class GoogleWorkspaceSyncService : IGoogleSyncService
 
             await _auditLogService.LogGoogleSyncAsync(
                 AuditAction.GoogleResourceAccessGranted, resource.Id,
-                $"Granted Drive access ({driveRole}) to {userEmail} ({resource.Name})",
+                $"Granted Drive access to {userEmail} ({resource.Name})",
                 nameof(GoogleWorkspaceSyncService),
-                userEmail, driveRole, GoogleSyncSource.ManualSync, success: true);
+                userEmail, "writer", GoogleSyncSource.ManualSync, success: true);
 
-            _logger.LogInformation("Granted Drive access ({Role}) to {Email} on {GoogleId}",
-                driveRole, userEmail, resource.GoogleId);
+            _logger.LogInformation("Granted Drive access to {Email} on {GoogleId}", userEmail, resource.GoogleId);
         }
         catch (Google.GoogleApiException ex) when (ex.Error?.Code == 400)
         {
@@ -611,7 +605,6 @@ public class GoogleWorkspaceSyncService : IGoogleSyncService
         }
 
         var resources = await _dbContext.GoogleResources
-            .Include(r => r.Team)
             .Where(r => r.TeamId == teamId && r.IsActive)
             .ToListAsync(cancellationToken);
 
@@ -623,7 +616,7 @@ public class GoogleWorkspaceSyncService : IGoogleSyncService
             }
             else
             {
-                await AddUserToDriveAsync(resource, user.Email, resource.Team.DriveRoleString, cancellationToken);
+                await AddUserToDriveAsync(resource, user.Email, cancellationToken);
             }
         }
 
@@ -685,17 +678,6 @@ public class GoogleWorkspaceSyncService : IGoogleSyncService
 
         return true;
     }
-
-    /// <summary>
-    /// Converts a DrivePermissionLevel enum to the Google Drive API role string.
-    /// </summary>
-    private static string DrivePermissionLevelToRole(DrivePermissionLevel level) => level switch
-    {
-        DrivePermissionLevel.Reader => "reader",
-        DrivePermissionLevel.Commenter => "commenter",
-        DrivePermissionLevel.Writer => "writer",
-        _ => "writer"
-    };
 
     private static async Task<List<Google.Apis.Drive.v3.Data.Permission>> ListDrivePermissionsAsync(
         DriveService drive, string fileId, CancellationToken cancellationToken)
@@ -986,14 +968,12 @@ public class GoogleWorkspaceSyncService : IGoogleSyncService
         try
         {
             // Expected: union of all linked teams' active members
-            // Track the most permissive drive role per member (Writer > Commenter > Reader)
-            var membersByEmail = new Dictionary<string, (string DisplayName, List<string> TeamNames, DrivePermissionLevel Level)>(
+            var membersByEmail = new Dictionary<string, (string DisplayName, List<string> TeamNames)>(
                 StringComparer.OrdinalIgnoreCase);
 
             foreach (var resource in resources)
             {
                 var teamName = resource.Team.Name;
-                var teamLevel = resource.Team.EffectiveDrivePermissionLevel;
                 foreach (var tm in resource.Team.Members)
                 {
                     if (tm.User.Email == null) continue;
@@ -1002,13 +982,10 @@ public class GoogleWorkspaceSyncService : IGoogleSyncService
                     {
                         if (!existing.TeamNames.Contains(teamName, StringComparer.Ordinal))
                             existing.TeamNames.Add(teamName);
-                        // Use the most permissive level across all linked teams
-                        if (teamLevel > existing.Level)
-                            membersByEmail[tm.User.Email] = (existing.DisplayName, existing.TeamNames, teamLevel);
                     }
                     else
                     {
-                        membersByEmail[tm.User.Email] = (tm.User.DisplayName, new List<string> { teamName }, teamLevel);
+                        membersByEmail[tm.User.Email] = (tm.User.DisplayName, new List<string> { teamName });
                     }
                 }
             }
@@ -1033,7 +1010,7 @@ public class GoogleWorkspaceSyncService : IGoogleSyncService
             // Build member sync status list
             var members = new List<MemberSyncStatus>();
 
-            foreach (var (email, (displayName, teamNames, _)) in membersByEmail)
+            foreach (var (email, (displayName, teamNames)) in membersByEmail)
             {
                 var state = allEmails.Contains(email)
                     ? MemberSyncState.Correct
@@ -1064,10 +1041,7 @@ public class GoogleWorkspaceSyncService : IGoogleSyncService
                 {
                     try
                     {
-                        var driveRole = membersByEmail.TryGetValue(member.Email, out var info)
-                            ? DrivePermissionLevelToRole(info.Level)
-                            : "writer";
-                        await AddUserToDriveAsync(primary, member.Email, driveRole, cancellationToken);
+                        await AddUserToDriveAsync(primary, member.Email, cancellationToken);
                     }
                     catch (Exception ex)
                     {
