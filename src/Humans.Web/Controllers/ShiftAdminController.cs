@@ -196,6 +196,7 @@ public class ShiftAdminController : HumansTeamControllerBase
         }
         catch (InvalidOperationException ex)
         {
+            _logger.LogWarning(ex, "Failed to configure staffing for rota {RotaId} in team {TeamId}", rotaId, team.Id);
             SetError(ex.Message);
         }
 
@@ -239,6 +240,7 @@ public class ShiftAdminController : HumansTeamControllerBase
         }
         catch (InvalidOperationException ex)
         {
+            _logger.LogWarning(ex, "Failed to generate shifts for rota {RotaId} in team {TeamId}", rotaId, team.Id);
             SetError(ex.Message);
         }
 
@@ -289,6 +291,7 @@ public class ShiftAdminController : HumansTeamControllerBase
         }
         catch (InvalidOperationException ex)
         {
+            _logger.LogWarning(ex, "Failed to create shift for rota {RotaId} in team {TeamId}", model.RotaId, team.Id);
             SetError(ex.Message);
         }
 
@@ -339,6 +342,7 @@ public class ShiftAdminController : HumansTeamControllerBase
         }
         catch (InvalidOperationException ex)
         {
+            _logger.LogWarning(ex, "Failed to delete rota {RotaId} in team {Slug}", rotaId, slug);
             SetError(ex.Message);
         }
 
@@ -359,6 +363,7 @@ public class ShiftAdminController : HumansTeamControllerBase
         }
         catch (InvalidOperationException ex)
         {
+            _logger.LogWarning(ex, "Failed to delete shift {ShiftId} in team {Slug}", shiftId, slug);
             SetError(ex.Message);
         }
 
@@ -379,6 +384,7 @@ public class ShiftAdminController : HumansTeamControllerBase
         }
         catch (InvalidOperationException ex)
         {
+            _logger.LogWarning(ex, "Failed to bail signup block {SignupBlockId} in team {Slug}", signupBlockId, slug);
             SetError(ex.Message);
         }
 
