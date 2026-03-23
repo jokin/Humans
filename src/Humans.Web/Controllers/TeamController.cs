@@ -609,6 +609,13 @@ public class TeamController : HumansControllerBase
             SetSuccess(string.Format(_localizer["Admin_TeamCreated"].Value, team.Name));
             return RedirectToAction(nameof(Summary));
         }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogWarning(ex, "Failed to create team: {Message}", ex.Message);
+            SetError(ex.Message);
+            await PopulateEligibleParentsAsync(model, excludeTeamId: null);
+            return View(model);
+        }
         catch (DbUpdateException ex)
         {
             _logger.LogWarning(ex, "Failed to create team with Google group prefix {GoogleGroupPrefix}", model.GoogleGroupPrefix);
