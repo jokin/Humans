@@ -34,7 +34,7 @@
 
 <div class="container py-4">
     <div class="d-flex justify-content-between align-items-center mb-4">
-        <h2>Browse Shifts</h2>
+        <h2>Browse Volunteer Options</h2>
         <div class="d-flex gap-2">
             <vc:access-matrix section="Shifts" />
             @if (User.IsInRole(Humans.Domain.Constants.RoleNames.NoInfoAdmin) || User.IsInRole(Humans.Domain.Constants.RoleNames.Admin) || User.IsInRole(Humans.Domain.Constants.RoleNames.VolunteerCoordinator))
@@ -99,7 +99,27 @@
                     <h5 class="mb-0">@dept.TeamName</h5>
                 </div>
                 <div class="card-body">
-                    @foreach (var rotaGroup in dept.Rotas)
+                    @{
+                        var rotasByPeriod = dept.Rotas
+                            .GroupBy(r => r.Rota.Period)
+                            .OrderBy(g => g.Key)
+                            .ToList();
+                    }
+                    @foreach (var periodGroup in rotasByPeriod)
+                    {
+                        var periodName = periodGroup.Key == RotaPeriod.Build ? "Set-up"
+                            : periodGroup.Key == RotaPeriod.Strike ? "Strike"
+                            : "Event";
+                        <h5 class="mt-4 mb-2 border-bottom pb-1">
+                            <span class="badge @(periodGroup.Key == RotaPeriod.Build ? "bg-info" : periodGroup.Key == RotaPeriod.Strike ? "bg-secondary" : "bg-success") me-1">@periodName</span>
+                            @periodName
+                        </h5>
+                        var hasAvailable = periodGroup.Any(r => r.Shifts.Any(s => s.RemainingSlots > 0));
+                        @if (!hasAvailable)
+                        {
+                            <p class="text-muted fst-italic">All @periodName.ToLowerInvariant() shifts are full.</p>
+                        }
+                    @foreach (var rotaGroup in periodGroup)
                     {
                         var hasAllDayShifts = rotaGroup.Shifts.Any(s => s.Shift.IsAllDay);
                         var hasTimedShifts = rotaGroup.Shifts.Any(s => !s.Shift.IsAllDay);
@@ -153,7 +173,7 @@
                                         </select>
                                     </div>
                                     <div class="col-auto">
-                                        <button type="submit" class="btn btn-sm btn-success">Sign Up for Range</button>
+                                        <button type="submit" class="btn btn-sm btn-success">Sign up for @(rotaGroup.Rota.Period == RotaPeriod.Build ? "set-up" : "strike") dates</button>
                                     </div>
                                 </form>
                             }
@@ -303,6 +323,7 @@
                                 </table>
                             </div>
                         }
+                    }
                     }
                 </div>
             </div>
