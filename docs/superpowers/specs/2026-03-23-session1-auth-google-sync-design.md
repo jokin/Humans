@@ -22,11 +22,12 @@ Add an `OnRemoteFailure` handler to the Google OAuth configuration:
 
 - Register `Events.OnRemoteFailure` in the `AddGoogle()` options block
 - Handler: log the error at Warning level, redirect to `/Account/Login?error=sign-in-failed`
-- The login view already supports displaying error messages via query string
 
 **File:** `src/Humans.Web/Views/Account/Login.cshtml`
 
-- Add a localized error message for the `sign-in-failed` error code (e.g., "Sign-in failed. Please try again.")
+- Add error display markup that reads `Request.Query["error"]`
+- Show a localized, dismissible alert for the `sign-in-failed` error code (e.g., "Sign-in failed. Please try again.")
+- The login view currently has no error display — this is new scaffolding
 
 ### Scope
 
@@ -53,7 +54,7 @@ A previous fix (#139) canonicalized `@googlemail.com` → `@gmail.com` at storag
 
 Remove `EmailNormalization.Canonicalize()` calls from:
 - `UserEmailService.cs` (lines ~100, ~336) — email creation/update paths
-- `AccountController.cs` — OAuth callback path (if applicable)
+- `AccountController.cs` (line ~95) — OAuth callback path
 
 Store whatever email address Google returns, preserving the user's real domain.
 
@@ -63,8 +64,7 @@ Add `EmailNormalization.NormalizeForComparison(string email)` that lowercases an
 
 Update comparison sites to use it:
 - `GoogleWorkspaceSyncService.SyncGroupResourceAsync` (lines ~814-894) — the HashSets that determine extra/missing members
-- `GoogleWorkspaceSyncService` Drive sync comparisons (lines ~972-1000)
-- Any other email matching in sync code
+- `GoogleWorkspaceSyncService` Drive sync comparisons (lines ~972-1000) — same HashSet pattern for Drive permission sync
 
 **Part 3: Admin backfill with review**
 
@@ -94,18 +94,21 @@ When editing a team's Google Group prefix, `EnsureTeamGroupAsync` (line ~1135 of
 
 #### Fix — Validation Before Linking
 
+`EnsureTeamGroupAsync` currently returns `Task` (void). Change it to return a result object (e.g., `GroupLinkResult` with `Success`, `Warning`, `ErrorMessage` properties) so the controller can relay validation messages to the view.
+
 Before linking a Google Group to a team, check for existing active `GoogleResource` records:
 
-1. **Same group already active on this team:** Show warning "This group is already linked to this team." Block the duplicate.
-2. **Same group active on a different team:** Show warning "This group is already linked to [Team Name]." Block the action — two teams should not share a Google Group.
-3. **Same group exists but inactive on this team:** Show warning "This group was previously linked to this team. Reactivate it?" Require confirmation before reactivating.
+1. **Same group already active on this team:** Return error "This group is already linked to this team." Block the duplicate.
+2. **Same group active on a different team:** Return error "This group is already linked to [Team Name]." Block the action — two teams should not share a Google Group.
+3. **Same group exists but inactive on this team:** Return warning "This group was previously linked to this team. Reactivate it?" Require confirmation before reactivating.
 
 Surface these as validation messages in the team edit UI, not raw database errors.
 
 **Files involved:**
-- `src/Humans.Infrastructure/Services/GoogleWorkspaceSyncService.cs` — add pre-check in `EnsureTeamGroupAsync`
+- `src/Humans.Infrastructure/Services/GoogleWorkspaceSyncService.cs` — add pre-check in `EnsureTeamGroupAsync`, change return type to result object
 - `src/Humans.Web/Controllers/TeamController.cs` (lines ~657-717) — handle validation result, pass messages to view
 - `src/Humans.Web/Views/Team/EditTeam.cshtml` — display validation warnings
+- `src/Humans.Application/DTOs/` — add `GroupLinkResult` DTO
 
 ---
 
@@ -116,9 +119,10 @@ Surface these as validation messages in the team edit UI, not raw database error
 The `/Admin/GroupSettingsResults` page detects Google Groups settings drift but:
 1. Has no way to fix drifted settings (admin must fix manually in Google Admin console)
 2. Shows only a subset of the 14 expected settings in the reference table
-3. Has incorrect expected values for `WhoCanViewMembership` and `IsArchived`
+3. Has an incorrect expected value for `WhoCanViewMembership`
+4. Only checks groups linked to teams — groups created outside the system (manually in Google Admin, by other tools) are invisible
 
-#### Fix — Three Parts
+#### Fix — Four Parts
 
 **Part 1: Add remediation capability**
 
@@ -129,22 +133,36 @@ The `/Admin/GroupSettingsResults` page detects Google Groups settings drift but:
 - New POST action `RemediateGroupSettings` on `AdminController`
 - Per-group "Fix" button on the results page, plus "Fix All" for bulk remediation
 
-**Part 2: Expand expected settings reference**
+**Part 2: Domain-wide "All Groups" table**
+
+New view mode that queries the Google Admin SDK Directory API for **all groups on the domain**, not just team-linked ones. Flat table, no pagination (~500 user org, group count is small):
+
+- One row per group
+- Columns: group email, display name, linked team (name if linked, blank if unlinked), member count, and each of the 14 expected settings as individual columns
+- Drift indicator per-setting (highlight cells that don't match expected values)
+- Per-row "Fix" button (same remediation as Part 1)
+- Groups not linked to any team are clearly visible — most are pre-existing groups created before Humans, not rogue
+- Per-row "Link to Team" action on unlinked groups: team dropdown → calls `EnsureTeamGroupAsync` (with #173 validation guards) to bring legacy groups under management
+- This makes the all-groups view the single place to discover unlinked groups and fold them into the team system
+
+This replaces or augments the existing per-team drift view. The team-linked view can remain as a filtered subset.
+
+**Part 3: Expand expected settings reference**
 
 Update the reference table to show all 14 expected settings, including the currently hardcoded ones (`IsArchived`, `MembersCanPostAsTheGroup`, etc.).
 
-**Part 3: Correct two default values**
+**Part 4: Correct default value**
 
 - `WhoCanViewMembership`: change from current value to `OWNERS_AND_MANAGERS`
-- `IsArchived`: change to `true` (enables conversation archiving/history)
+- `IsArchived`: keep at `false` (current value is correct — `true` would make groups read-only/archived, preventing new posts)
 
-Update `BuildExpectedSettingsDictionary()` accordingly.
+Update consistently in all three locations: `BuildExpectedSettingsDictionary()`, `GoogleWorkspaceSettings.cs` default, and `appsettings.json`.
 
 **Files involved:**
-- `src/Humans.Infrastructure/Services/GoogleWorkspaceSyncService.cs` — add `RemediateGroupSettingsAsync`, update `BuildExpectedSettingsDictionary()`
-- `src/Humans.Application/Interfaces/IGoogleSyncService.cs` — add interface method
-- `src/Humans.Web/Controllers/AdminController.cs` — add POST action
-- `src/Humans.Web/Views/Admin/GroupSettingsResults.cshtml` — add Fix buttons, expand reference table
+- `src/Humans.Infrastructure/Services/GoogleWorkspaceSyncService.cs` — add `RemediateGroupSettingsAsync`, add `GetAllDomainGroupsWithSettingsAsync`, update `BuildExpectedSettingsDictionary()`
+- `src/Humans.Application/Interfaces/IGoogleSyncService.cs` — add interface methods
+- `src/Humans.Web/Controllers/AdminController.cs` — add POST action, add all-groups GET action
+- `src/Humans.Web/Views/Admin/GroupSettingsResults.cshtml` — add Fix buttons, expand reference table, add domain-wide groups table
 
 ---
 

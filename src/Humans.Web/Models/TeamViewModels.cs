@@ -391,6 +391,8 @@ public class RoleManagementViewModel
 public class CreateRoleDefinitionModel
 {
     public string Name { get; set; } = string.Empty;
+
+    [MaxLength(2000)]
     public string? Description { get; set; }
     public int SlotCount { get; set; } = 1;
     public List<string> Priorities { get; set; } = ["None"];
@@ -401,6 +403,8 @@ public class CreateRoleDefinitionModel
 public class EditRoleDefinitionModel
 {
     public string Name { get; set; } = string.Empty;
+
+    [MaxLength(2000)]
     public string? Description { get; set; }
     public int SlotCount { get; set; }
     public List<string> Priorities { get; set; } = [];
