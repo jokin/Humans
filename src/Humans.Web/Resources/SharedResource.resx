@@ -320,11 +320,17 @@
   <data name="Governance_AsociadoDescription" xml:space="preserve"><value>Asociados are the formal voting members of Nobodies Collective. As an asociado, you can attend general assemblies, vote on collective decisions, and participate in elections.</value></data>
   <data name="Governance_Optional" xml:space="preserve"><value>This is optional. Most volunteers don't need to become asociados. You already have access to resources once you've completed your profile and consents.</value></data>
   <data name="Governance_ApplyButton" xml:space="preserve"><value>Apply to Become an Asociado</value></data>
+  <data name="Governance_ColaboradorCanApply" xml:space="preserve"><value>Colaboradores may also apply for Asociado status if they wish to participate in governance.</value></data>
+  <data name="Governance_ApplyForAsociado" xml:space="preserve"><value>Apply for Asociado</value></data>
   <data name="Governance_YourApplication" xml:space="preserve"><value>Your Application</value></data>
   <data name="Governance_Submitted" xml:space="preserve"><value>Submitted</value></data>
   <data name="Governance_Resolved" xml:space="preserve"><value>Resolved</value></data>
   <data name="Governance_UnderReviewMessage" xml:space="preserve"><value>Your application is being reviewed. We'll notify you by email once a decision is made.</value></data>
   <data name="Governance_ApprovedMessage" xml:space="preserve"><value>Welcome! You are now an asociado of Nobodies Collective.</value></data>
+  <data name="Governance_ApprovedMessageColaborador" xml:space="preserve"><value>You are an approved Colaborador of Nobodies Collective.</value></data>
+  <data name="Governance_ApprovedMessageAsociado" xml:space="preserve"><value>Welcome! You are now an Asociado of Nobodies Collective.</value></data>
+  <data name="Governance_Tier" xml:space="preserve"><value>Tier</value></data>
+  <data name="Governance_TermExpiry" xml:space="preserve"><value>Term expires</value></data>
   <data name="Governance_RejectedMessage" xml:space="preserve"><value>Your application was not approved. If you have questions, please contact the board.</value></data>
   <data name="Governance_WhatIsAsociado" xml:space="preserve"><value>What is an Asociado?</value></data>
   <data name="Governance_AsociadoLawDescription" xml:space="preserve"><value>Asociados are the formal voting members of the association under Spanish law.</value></data>
