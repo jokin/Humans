@@ -89,14 +89,7 @@ public class ProfileController : HumansControllerBase
 
         var (profile, latestApplication, pendingConsentCount) =
             await _profileService.GetProfileIndexDataAsync(user.Id);
-
-        var campaignGrants = await _dbContext.CampaignGrants
-            .Include(g => g.Campaign)
-            .Include(g => g.Code)
-            .Where(g => g.UserId == user.Id
-                && (g.Campaign.Status == CampaignStatus.Active || g.Campaign.Status == CampaignStatus.Completed))
-            .OrderByDescending(g => g.AssignedAt)
-            .ToListAsync();
+        var campaignGrants = await _profileService.GetActiveOrCompletedCampaignGrantsAsync(user.Id);
 
         var viewModel = new ProfileViewModel
         {
@@ -113,7 +106,7 @@ public class ProfileController : HumansControllerBase
         // Show tier application status (skip Withdrawn — not interesting)
         if (latestApplication != null && latestApplication.Status != ApplicationStatus.Withdrawn)
         {
-            viewModel.TierApplicationStatus = latestApplication.Status.ToString();
+            viewModel.TierApplicationStatus = latestApplication.Status;
             viewModel.TierApplicationTier = latestApplication.MembershipTier;
             viewModel.TierApplicationBadgeClass = latestApplication.Status.GetBadgeClass();
         }
@@ -402,6 +395,7 @@ public class ProfileController : HumansControllerBase
         }
         catch (ValidationException ex)
         {
+            _logger.LogWarning(ex, "Failed to save contact fields for user {UserId} and profile {ProfileId}", user.Id, profileId);
             ModelState.AddModelError(string.Empty, ex.Message);
             ViewData["GoogleMapsApiKey"] = _configuration["GoogleMaps:ApiKey"];
             return View(model);
@@ -466,13 +460,13 @@ public class ProfileController : HumansControllerBase
 
         try
         {
-            var token = await _userEmailService.AddEmailAsync(user.Id, model.NewEmail);
+            var result = await _userEmailService.AddEmailAsync(user.Id, model.NewEmail);
 
             // Build verification URL
             var verificationUrl = Url.Action(
                 nameof(VerifyEmail),
                 "Profile",
-                new { userId = user.Id, token = HttpUtility.UrlEncode(token) },
+                new { userId = user.Id, token = HttpUtility.UrlEncode(result.Token) },
                 Request.Scheme);
 
             // Send verification email
@@ -480,16 +474,25 @@ public class ProfileController : HumansControllerBase
                 model.NewEmail.Trim(),
                 user.DisplayName,
                 verificationUrl!,
+                result.IsConflict,
                 user.PreferredLanguage);
 
             _logger.LogInformation(
-                "Sent email verification to {Email} for user {UserId}",
-                model.NewEmail, user.Id);
+                "Sent email verification to {Email} for user {UserId} (conflict: {IsConflict})",
+                model.NewEmail, user.Id, result.IsConflict);
 
-            SetSuccess(string.Format(CultureInfo.CurrentCulture, _localizer["Profile_VerificationSent"].Value, model.NewEmail.Trim()));
+            if (result.IsConflict)
+            {
+                SetInfo("This email is linked to another account. Verifying it will request an account merge. Check your inbox for the verification link.");
+            }
+            else
+            {
+                SetSuccess(string.Format(CultureInfo.CurrentCulture, _localizer["Profile_VerificationSent"].Value, model.NewEmail.Trim()));
+            }
         }
         catch (ValidationException ex)
         {
+            _logger.LogWarning(ex, "Failed to add email address for user {UserId}", user.Id);
             ModelState.AddModelError(nameof(model.NewEmail), ex.Message);
             return View(nameof(Emails), await BuildEmailsViewModelAsync(user));
         }
@@ -509,22 +512,35 @@ public class ProfileController : HumansControllerBase
         try
         {
             var decodedToken = HttpUtility.UrlDecode(token);
-            var verifiedEmail = await _userEmailService.VerifyEmailAsync(userId, decodedToken);
+            var result = await _userEmailService.VerifyEmailAsync(userId, decodedToken);
+
+            if (result.MergeRequestCreated)
+            {
+                _logger.LogInformation(
+                    "User {UserId} verified email {Email} — merge request created",
+                    userId, result.Email);
+
+                ViewData["Success"] = true;
+                ViewData["Message"] = $"Email verified. A merge request has been submitted for admin review. The email {result.Email} will be added to your account once approved.";
+                return View("VerifyEmailResult");
+            }
 
             _logger.LogInformation(
                 "User {UserId} verified email {Email}",
-                userId, verifiedEmail);
+                userId, result.Email);
 
             ViewData["Success"] = true;
-            ViewData["Message"] = string.Format(_localizer["Profile_EmailVerified"].Value, verifiedEmail);
+            ViewData["Message"] = string.Format(_localizer["Profile_EmailVerified"].Value, result.Email);
             return View("VerifyEmailResult");
         }
-        catch (InvalidOperationException)
+        catch (InvalidOperationException ex)
         {
+            _logger.LogWarning(ex, "Email verification failed for user {UserId}", userId);
             return VerifyEmailError(_localizer["Profile_InvalidVerificationLink"].Value);
         }
         catch (ValidationException ex)
         {
+            _logger.LogWarning(ex, "Email verification validation failed for user {UserId}", userId);
             return VerifyEmailError(ex.Message);
         }
     }
@@ -551,6 +567,7 @@ public class ProfileController : HumansControllerBase
         }
         catch (Exception ex) when (ex is ValidationException or InvalidOperationException)
         {
+            _logger.LogWarning(ex, "Failed to set notification target {EmailId} for user {UserId}", emailId, user.Id);
             SetError(ex.Message);
         }
 
@@ -566,7 +583,7 @@ public class ProfileController : HumansControllerBase
             return NotFound();
 
         ContactFieldVisibility? parsedVisibility = null;
-        if (!string.IsNullOrEmpty(visibility) && Enum.TryParse<ContactFieldVisibility>(visibility, out var v))
+        if (!string.IsNullOrEmpty(visibility) && Enum.TryParse<ContactFieldVisibility>(visibility, ignoreCase: true, out var v))
         {
             parsedVisibility = v;
         }
@@ -578,6 +595,7 @@ public class ProfileController : HumansControllerBase
         }
         catch (Exception ex) when (ex is ValidationException or InvalidOperationException)
         {
+            _logger.LogWarning(ex, "Failed to set email visibility for email {EmailId} and user {UserId}", emailId, user.Id);
             SetError(ex.Message);
         }
 
@@ -599,6 +617,7 @@ public class ProfileController : HumansControllerBase
         }
         catch (Exception ex) when (ex is ValidationException or InvalidOperationException)
         {
+            _logger.LogWarning(ex, "Failed to delete email {EmailId} for user {UserId}", emailId, user.Id);
             SetError(ex.Message);
         }
 
@@ -631,7 +650,8 @@ public class ProfileController : HumansControllerBase
                 IsOAuth = e.IsOAuth,
                 IsNotificationTarget = e.IsNotificationTarget,
                 Visibility = e.Visibility,
-                IsPendingVerification = e.IsPendingVerification
+                IsPendingVerification = e.IsPendingVerification,
+                IsMergePending = e.IsMergePending
             }).ToList(),
             CanAddEmail = canAdd,
             MinutesUntilResend = minutesUntilResend

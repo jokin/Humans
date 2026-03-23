@@ -44,7 +44,7 @@ public class TeamDetailViewModel
     public bool IsActive { get; set; }
     public bool RequiresApproval { get; set; }
     public bool IsSystemTeam { get; set; }
-    public string? SystemTeamType { get; set; }
+    public SystemTeamType? SystemTeamType { get; set; }
     public DateTime CreatedAt { get; set; }
 
     public Team? ParentTeam { get; init; }
@@ -56,6 +56,7 @@ public class TeamDetailViewModel
 
     // Public page content
     public bool IsPublicPage { get; set; }
+    public bool ShowCoordinatorsOnPublicPage { get; set; }
     public string? PageContent { get; set; }
     public string? PageContentHtml { get; set; }
     public List<CallToAction>? CallsToAction { get; set; }
@@ -86,7 +87,7 @@ public class TeamMemberViewModel
     public string? ProfilePictureUrl { get; set; }
     public bool HasCustomProfilePicture { get; set; }
     public string? CustomProfilePictureUrl { get; set; }
-    public string Role { get; set; } = string.Empty;
+    public TeamMemberRole Role { get; set; }
     public DateTime JoinedAt { get; set; }
     public bool IsCoordinator { get; set; }
 
@@ -110,7 +111,7 @@ public class MyTeamMembershipViewModel
     public string TeamName { get; set; } = string.Empty;
     public string TeamSlug { get; set; } = string.Empty;
     public bool IsSystemTeam { get; set; }
-    public string Role { get; set; } = string.Empty;
+    public TeamMemberRole Role { get; set; }
     public bool IsCoordinator { get; set; }
     public DateTime JoinedAt { get; set; }
     public bool CanLeave { get; set; }
@@ -123,7 +124,7 @@ public class TeamJoinRequestSummaryViewModel
     public Guid TeamId { get; set; }
     public string TeamName { get; set; } = string.Empty;
     public string TeamSlug { get; set; } = string.Empty;
-    public string Status { get; set; } = string.Empty;
+    public TeamJoinRequestStatus Status { get; set; }
     public string StatusBadgeClass { get; set; } = "bg-secondary";
     public DateTime RequestedAt { get; set; }
 }
@@ -148,7 +149,7 @@ public class TeamJoinRequestViewModel
     public string UserDisplayName { get; set; } = string.Empty;
     public string UserEmail { get; set; } = string.Empty;
     public string? UserProfilePictureUrl { get; set; }
-    public string Status { get; set; } = string.Empty;
+    public TeamJoinRequestStatus Status { get; set; }
     public string? Message { get; set; }
     public DateTime RequestedAt { get; set; }
     public DateTime? ResolvedAt { get; set; }
@@ -179,6 +180,13 @@ public class EditTeamViewModel : TeamFormViewModelBase
     public string? GoogleGroupEmail { get; set; }
     public string Slug { get; set; } = string.Empty;
 
+    /// <summary>
+    /// Optional custom slug that overrides the auto-generated slug for external URL stability.
+    /// </summary>
+    [StringLength(256)]
+    [RegularExpression(@"^[a-z0-9]([a-z0-9-]*[a-z0-9])?$", ErrorMessage = "Only lowercase letters, numbers, and hyphens allowed")]
+    public string? CustomSlug { get; set; }
+
     public bool IsActive { get; set; }
     public bool IsSystemTeam { get; set; }
 }
@@ -189,6 +197,7 @@ public class EditTeamPageViewModel
     public string Slug { get; set; } = string.Empty;
     public string TeamName { get; set; } = string.Empty;
     public bool IsPublicPage { get; set; }
+    public bool ShowCoordinatorsOnPublicPage { get; set; } = true;
     public bool CanBePublic { get; set; }
 
     [StringLength(50000)]
@@ -297,7 +306,7 @@ public class TeamRoleDefinitionViewModel
             slots.Add(new TeamRoleSlotViewModel
             {
                 SlotIndex = i,
-                Priority = priority.ToString(),
+                Priority = priority,
                 PriorityBadgeClass = priority switch
                 {
                     SlotPriority.Critical => "bg-danger",
@@ -333,7 +342,7 @@ public class TeamRoleDefinitionViewModel
 public class TeamRoleSlotViewModel
 {
     public int SlotIndex { get; set; }
-    public string Priority { get; set; } = string.Empty;
+    public SlotPriority Priority { get; set; }
     public string PriorityBadgeClass { get; set; } = string.Empty;
     public bool IsFilled { get; set; }
     public Guid? AssignedUserId { get; set; }
@@ -396,9 +405,9 @@ public class RosterSlotViewModel
     public string? RoleDescription { get; set; }
     public Guid RoleDefinitionId { get; set; }
     public int SlotNumber { get; set; }
-    public string Priority { get; set; } = string.Empty;
+    public SlotPriority Priority { get; set; }
     public string PriorityBadgeClass { get; set; } = string.Empty;
-    public string Period { get; set; } = "YearRound";
+    public RolePeriod Period { get; set; }
     public bool IsFilled { get; set; }
     public string? AssignedUserName { get; set; }
 }
@@ -439,7 +448,7 @@ public class AdminTeamViewModel
     public bool IsActive { get; set; }
     public bool RequiresApproval { get; set; }
     public bool IsSystemTeam { get; set; }
-    public string? SystemTeamType { get; set; }
+    public SystemTeamType? SystemTeamType { get; set; }
     public int MemberCount { get; set; }
     public int PendingRequestCount { get; set; }
     public bool HasMailGroup { get; set; }

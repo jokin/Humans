@@ -117,6 +117,7 @@ public class FeedbackService : IFeedbackService
     {
         var query = _dbContext.FeedbackReports
             .Include(f => f.User)
+            .Include(f => f.ResolvedByUser)
             .AsQueryable();
 
         if (status.HasValue)
@@ -196,6 +197,21 @@ public class FeedbackService : IFeedbackService
         await _dbContext.SaveChangesAsync(cancellationToken);
     }
 
+    public async Task<IReadOnlyDictionary<Guid, int>> GetResponseCountsAsync(
+        IEnumerable<Guid> reportIds, CancellationToken cancellationToken = default)
+    {
+        var idList = reportIds.ToList();
+        if (idList.Count == 0)
+            return new Dictionary<Guid, int>();
+
+        return await _dbContext.AuditLogEntries
+            .Where(a => a.Action == AuditAction.FeedbackResponseSent
+                && a.EntityType == nameof(FeedbackReport)
+                && idList.Contains(a.EntityId))
+            .GroupBy(a => a.EntityId)
+            .ToDictionaryAsync(g => g.Key, g => g.Count(), cancellationToken);
+    }
+
     public async Task SendResponseAsync(
         Guid id, string message, Guid? actorUserId,
         CancellationToken cancellationToken = default)
@@ -223,11 +239,37 @@ public class FeedbackService : IFeedbackService
             actorName = actor?.DisplayName ?? actorUserId.Value.ToString();
         }
 
-        await _auditLogService.LogAsync(
-            AuditAction.FeedbackResponseSent, nameof(FeedbackReport), id,
-            $"Response sent to {user.DisplayName} for feedback {id}",
-            actorUserId ?? Guid.Empty, actorName);
+        if (actorUserId.HasValue)
+        {
+            await _auditLogService.LogAsync(
+                AuditAction.FeedbackResponseSent, nameof(FeedbackReport), id,
+                $"Response sent to {user.DisplayName} for feedback {id}",
+                actorUserId.Value, actorName);
+        }
+        else
+        {
+            await _auditLogService.LogAsync(
+                AuditAction.FeedbackResponseSent, nameof(FeedbackReport), id,
+                $"Response sent to {user.DisplayName} for feedback {id}",
+                actorName);
+        }
+        await _dbContext.SaveChangesAsync(cancellationToken);
 
         _logger.LogInformation("Feedback response sent for {ReportId} by {ActorId}", id, actorUserId);
+    }
+
+    public async Task<IReadOnlyList<FeedbackResponseDetail>> GetResponseDetailsAsync(
+        Guid reportId, CancellationToken cancellationToken = default)
+    {
+        return await _dbContext.AuditLogEntries
+            .Where(a => a.Action == AuditAction.FeedbackResponseSent
+                && a.EntityType == nameof(FeedbackReport)
+                && a.EntityId == reportId)
+            .OrderByDescending(a => a.OccurredAt)
+            .Select(a => new FeedbackResponseDetail(
+                a.OccurredAt.ToDateTimeUtc(),
+                a.ActorName))
+            .AsNoTracking()
+            .ToListAsync(cancellationToken);
     }
 }

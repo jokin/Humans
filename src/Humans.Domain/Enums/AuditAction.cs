@@ -60,4 +60,11 @@ public enum AuditAction
     TeamPageContentUpdated,
     FeedbackResponseSent,
     FeedbackStatusChanged,
+    WorkspaceAccountProvisioned,
+    WorkspaceAccountSuspended,
+    WorkspaceAccountReactivated,
+    WorkspaceAccountPasswordReset,
+    AccountMergeRequested,
+    AccountMergeAccepted,
+    AccountMergeRejected,
 }

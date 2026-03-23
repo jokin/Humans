@@ -2,7 +2,10 @@
     ViewData["Title"] = "Admin Tools";
 }
 
-<h1>Admin Tools</h1>
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h1 class="mb-0">Admin Tools</h1>
+    <vc:access-matrix section="Admin" />
+</div>
 
 <vc:temp-data-alerts />
 
@@ -41,6 +44,12 @@
                 <a asp-controller="AdminFeedback" asp-action="Index" class="list-group-item list-group-item-action">
                     <i class="fa-solid fa-comment-dots me-2"></i>Feedback
                 </a>
+                <a asp-controller="AdminEmail" asp-action="Index" class="list-group-item list-group-item-action">
+                    <i class="fa-solid fa-at me-2"></i>@@nobodies.team Accounts
+                </a>
+                <a asp-controller="AdminMerge" asp-action="Index" class="list-group-item list-group-item-action">
+                    <i class="fa-solid fa-code-merge me-2"></i>Account Merge Requests
+                </a>
             </div>
         </div>
 
@@ -54,6 +63,25 @@
                     </button>
                     <small class="text-muted d-block mt-1">Recalculates Volunteers, Leads, and Board team membership.</small>
                 </form>
+                <a asp-action="SyncResults" class="btn btn-outline-secondary btn-sm mt-3">
+                    <i class="fa-solid fa-list-check me-1"></i>View Sync Results
+                </a>
+            </div>
+        </div>
+
+        <div class="card mb-4">
+            <div class="card-header">Google Group Settings</div>
+            <div class="card-body">
+                <form asp-action="CheckGroupSettings" method="post">
+                    @Html.AntiForgeryToken()
+                    <button type="submit" class="btn btn-outline-primary">
+                        <i class="fa-solid fa-magnifying-glass me-1"></i>Check Group Settings
+                    </button>
+                    <small class="text-muted d-block mt-1">Checks all Google Groups for settings drift. Does not modify anything.</small>
+                </form>
+                <a asp-action="GroupSettingsResults" class="btn btn-outline-secondary btn-sm mt-3">
+                    <i class="fa-solid fa-list-check me-1"></i>View Last Group Settings Results
+                </a>
             </div>
         </div>
     </div>

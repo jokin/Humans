@@ -8,12 +8,103 @@ namespace Humans.Application.Interfaces;
 public record CachedTeam(
     Guid Id, string Name, string? Description, string Slug,
     bool IsSystemTeam, SystemTeamType SystemTeamType, bool RequiresApproval,
-    Instant CreatedAt, List<CachedTeamMember> Members,
+    bool IsPublicPage, Instant CreatedAt, List<CachedTeamMember> Members,
     Guid? ParentTeamId = null);
 
 public record CachedTeamMember(
     Guid TeamMemberId, Guid UserId, string DisplayName,
     string? ProfilePictureUrl, TeamMemberRole Role, Instant JoinedAt);
+
+public record TeamDirectorySummary(
+    Guid Id,
+    string Name,
+    string? Description,
+    string Slug,
+    int MemberCount,
+    bool IsSystemTeam,
+    bool RequiresApproval,
+    bool IsPublicPage,
+    bool IsCurrentUserMember,
+    bool IsCurrentUserCoordinator,
+    string? ParentTeamName,
+    string? ParentTeamSlug)
+{
+    public string SortKey => ParentTeamName != null ? $"{ParentTeamName} - {Name}" : Name;
+}
+
+public record TeamDirectoryResult(
+    bool IsAuthenticated,
+    bool CanCreateTeam,
+    IReadOnlyList<TeamDirectorySummary> MyTeams,
+    IReadOnlyList<TeamDirectorySummary> Departments,
+    IReadOnlyList<TeamDirectorySummary> SystemTeams);
+
+public record TeamDetailMemberSummary(
+    Guid UserId,
+    string DisplayName,
+    string? Email,
+    string? ProfilePictureUrl,
+    TeamMemberRole Role,
+    Instant JoinedAt);
+
+public record TeamDetailResult(
+    Team Team,
+    IReadOnlyList<TeamDetailMemberSummary> Members,
+    IReadOnlyList<Team> ChildTeams,
+    IReadOnlyList<TeamRoleDefinition> RoleDefinitions,
+    bool IsAuthenticated,
+    bool IsCurrentUserMember,
+    bool IsCurrentUserCoordinator,
+    bool CanCurrentUserJoin,
+    bool CanCurrentUserLeave,
+    bool CanCurrentUserManage,
+    bool CanCurrentUserEditTeam,
+    Guid? CurrentUserPendingRequestId,
+    int PendingRequestCount);
+
+public record MyTeamMembershipSummary(
+    Guid TeamId,
+    string TeamName,
+    string TeamSlug,
+    bool IsSystemTeam,
+    TeamMemberRole Role,
+    Instant JoinedAt,
+    bool CanLeave,
+    int PendingRequestCount);
+
+public record TeamRosterSlotSummary(
+    string TeamName,
+    string TeamSlug,
+    string RoleName,
+    string? RoleDescription,
+    Guid RoleDefinitionId,
+    int SlotNumber,
+    string Priority,
+    string PriorityBadgeClass,
+    string Period,
+    bool IsFilled,
+    string? AssignedUserName);
+
+public record AdminTeamSummary(
+    Guid Id,
+    string Name,
+    string Slug,
+    bool IsActive,
+    bool RequiresApproval,
+    bool IsSystemTeam,
+    string? SystemTeamType,
+    int MemberCount,
+    int PendingRequestCount,
+    bool HasMailGroup,
+    string? GoogleGroupEmail,
+    int DriveResourceCount,
+    int RoleSlotCount,
+    Instant CreatedAt,
+    bool IsChildTeam);
+
+public record AdminTeamListResult(
+    IReadOnlyList<AdminTeamSummary> Teams,
+    int TotalCount);
 
 /// <summary>
 /// Service for managing teams and team membership.
@@ -52,9 +143,27 @@ public interface ITeamService
     Task<IReadOnlyList<Team>> GetUserCreatedTeamsAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Gets the summarized team directory for anonymous or authenticated viewers.
+    /// </summary>
+    Task<TeamDirectoryResult> GetTeamDirectoryAsync(Guid? userId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Gets the detail-page data for a visible team, including viewer-specific membership and management state.
+    /// Returns null when the team does not exist or is not visible to the viewer.
+    /// </summary>
+    Task<TeamDetailResult?> GetTeamDetailAsync(string slug, Guid? userId, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Gets all teams the user is a member of.
     /// </summary>
     Task<IReadOnlyList<TeamMember>> GetUserTeamsAsync(Guid userId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Gets the current user's team memberships with viewer-specific pending-request counts.
+    /// </summary>
+    Task<IReadOnlyList<MyTeamMembershipSummary>> GetMyTeamMembershipsAsync(
+        Guid userId,
+        CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Updates a team's details.
@@ -67,6 +176,7 @@ public interface ITeamService
         bool isActive,
         Guid? parentTeamId = null,
         string? googleGroupPrefix = null,
+        string? customSlug = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -227,6 +337,23 @@ public interface ITeamService
         int page, int pageSize, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Gets ordered admin-team summaries ready for controller/view projection.
+    /// </summary>
+    Task<AdminTeamListResult> GetAdminTeamListAsync(
+        int page,
+        int pageSize,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Gets the public roster summary with optional filters applied.
+    /// </summary>
+    Task<IReadOnlyList<TeamRosterSlotSummary>> GetRosterAsync(
+        string? priority,
+        string? status,
+        string? period,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Directly adds a user to a team (admin/lead action, bypasses join request workflow).
     /// </summary>
     Task<TeamMember> AddMemberToTeamAsync(
@@ -247,6 +374,7 @@ public interface ITeamService
         string? pageContent,
         List<CallToAction> callsToAction,
         bool isPublicPage,
+        bool showCoordinatorsOnPublicPage,
         Guid updatedByUserId,
         CancellationToken cancellationToken = default);
 

@@ -37,7 +37,7 @@ public class RecentActivityViewModel
 {
     public string Description { get; set; } = string.Empty;
     public DateTime Timestamp { get; set; }
-    public string Type { get; set; } = string.Empty;
+    public AuditAction Type { get; set; }
 }
 
 public class AdminHumanListViewModel : PagedListViewModel
@@ -64,6 +64,17 @@ public class AdminHumanViewModel
     public string MembershipStatus { get; set; } = "None";
     public bool HasProfile { get; set; }
     public bool IsApproved { get; set; }
+
+    /// <summary>
+    /// Whether this human has a verified @nobodies.team email.
+    /// </summary>
+    public bool HasNobodiesTeamEmail { get; set; }
+
+    /// <summary>
+    /// Whether the @nobodies.team email is used as their notification target.
+    /// Only meaningful when HasNobodiesTeamEmail is true.
+    /// </summary>
+    public bool NobodiesTeamEmailIsPrimary { get; set; }
 }
 
 public class AdminHumanDetailViewModel
@@ -89,6 +100,7 @@ public class AdminHumanDetailViewModel
     public string? EmergencyContactName { get; set; }
     public string? EmergencyContactPhone { get; set; }
     public string? EmergencyContactRelationship { get; set; }
+    public string? PreferredLanguage { get; set; }
 
     // Rejection
     public bool IsRejected { get; set; }
@@ -107,7 +119,7 @@ public class AdminHumanDetailViewModel
 public class AdminHumanApplicationViewModel
 {
     public Guid Id { get; set; }
-    public string Status { get; set; } = string.Empty;
+    public ApplicationStatus Status { get; set; }
     public DateTime SubmittedAt { get; set; }
 }
 
@@ -128,11 +140,11 @@ public class AdminApplicationViewModel
     public Guid UserId { get; set; }
     public string UserEmail { get; set; } = string.Empty;
     public string UserDisplayName { get; set; } = string.Empty;
-    public string Status { get; set; } = string.Empty;
+    public ApplicationStatus Status { get; set; }
     public string StatusBadgeClass { get; set; } = "bg-secondary";
     public DateTime SubmittedAt { get; set; }
     public string MotivationPreview { get; set; } = string.Empty;
-    public string MembershipTier { get; set; } = string.Empty;
+    public MembershipTier MembershipTier { get; set; }
 }
 
 public class AdminApplicationDetailViewModel : ApplicationDetailViewModelBase
@@ -197,7 +209,7 @@ public class EndRoleAssignmentViewModel
 
 public class AuditLogEntryViewModel
 {
-    public string Action { get; set; } = string.Empty;
+    public AuditAction Action { get; set; }
     public string Description { get; set; } = string.Empty;
     public DateTime OccurredAt { get; set; }
     public string ActorName { get; set; } = string.Empty;
@@ -217,11 +229,11 @@ public class AuditLogListViewModel : PagedListViewModel
 
 public class GoogleSyncAuditEntryViewModel
 {
-    public string Action { get; set; } = string.Empty;
+    public AuditAction Action { get; set; }
     public string Description { get; set; } = string.Empty;
     public string? UserEmail { get; set; }
     public string? Role { get; set; }
-    public string? SyncSource { get; set; }
+    public GoogleSyncSource? SyncSource { get; set; }
     public DateTime OccurredAt { get; set; }
     public bool? Success { get; set; }
     public string? ErrorMessage { get; set; }
@@ -265,6 +277,54 @@ public class EmailPreviewItem
     public string Recipient { get; set; } = string.Empty;
     public string Subject { get; set; } = string.Empty;
     public string Body { get; set; } = string.Empty;
+}
+
+public class AccountMergeListViewModel
+{
+    public List<AccountMergeRequestViewModel> Requests { get; set; } = [];
+}
+
+public class AccountMergeRequestViewModel
+{
+    public Guid Id { get; set; }
+    public string Email { get; set; } = string.Empty;
+    public string PrimaryUserDisplayName { get; set; } = string.Empty;
+    public string? PrimaryUserEmail { get; set; }
+    public Guid PrimaryUserId { get; set; }
+    public string DuplicateUserDisplayName { get; set; } = string.Empty;
+    public string? DuplicateUserEmail { get; set; }
+    public Guid DuplicateUserId { get; set; }
+    public DateTime CreatedAt { get; set; }
+}
+
+public class AccountMergeDetailViewModel
+{
+    public Guid Id { get; set; }
+    public string Email { get; set; } = string.Empty;
+    public ProfileSummaryViewModel PrimaryUser { get; set; } = new();
+    public ProfileSummaryViewModel DuplicateUser { get; set; } = new();
+    public string Status { get; set; } = string.Empty;
+    public DateTime CreatedAt { get; set; }
+    public DateTime? ResolvedAt { get; set; }
+    public string? ResolvedByName { get; set; }
+    public string? AdminNotes { get; set; }
+}
+
+/// <summary>
+/// Compact profile summary for inline display ("baseball card").
+/// </summary>
+public class ProfileSummaryViewModel
+{
+    public Guid UserId { get; set; }
+    public string DisplayName { get; set; } = string.Empty;
+    public string? Email { get; set; }
+    public string? ProfilePictureUrl { get; set; }
+    public string? PreferredLanguage { get; set; }
+    public string? MembershipTier { get; set; }
+    public string? MembershipStatus { get; set; }
+    public DateTime? MemberSince { get; set; }
+    public DateTime? LastLogin { get; set; }
+    public List<string> Teams { get; set; } = [];
 }
 
 public class EmailOutboxViewModel

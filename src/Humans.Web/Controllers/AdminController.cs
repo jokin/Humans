@@ -276,8 +276,11 @@ public class AdminController : HumansControllerBase
             var c9 = renderer.RenderAccessSuspended(name, "Outstanding consent requirements", culture);
             items.Add(new EmailPreviewItem { Id = "access-suspended", Name = "Access Suspended", Recipient = email, Subject = c9.Subject, Body = c9.HtmlBody });
 
-            var c10 = renderer.RenderEmailVerification(name, "preferred@example.com", $"{settings.BaseUrl}/Profile/VerifyEmail?token=sample-token", culture);
-            items.Add(new EmailPreviewItem { Id = "email-verification", Name = "Email Verification", Recipient = "preferred@example.com", Subject = c10.Subject, Body = c10.HtmlBody });
+            var c10 = renderer.RenderEmailVerification(name, "newemail@example.com", $"{settings.BaseUrl}/Profile/VerifyEmail?token=sample-token", culture: culture);
+            items.Add(new EmailPreviewItem { Id = "email-verification", Name = "Email Verification", Recipient = "newemail@example.com", Subject = c10.Subject, Body = c10.HtmlBody });
+
+            var c10m = renderer.RenderEmailVerification(name, "duplicate@example.com", $"{settings.BaseUrl}/Profile/VerifyEmail?token=sample-token", isConflict: true, culture: culture);
+            items.Add(new EmailPreviewItem { Id = "email-verification-merge", Name = "Email Verification (Merge)", Recipient = "duplicate@example.com", Subject = c10m.Subject, Body = c10m.HtmlBody });
 
             var c11 = renderer.RenderAccountDeletionRequested(name, "March 15, 2026", culture);
             items.Add(new EmailPreviewItem { Id = "deletion-requested", Name = "Account Deletion Requested", Recipient = email, Subject = c11.Subject, Body = c11.HtmlBody });
@@ -495,6 +498,44 @@ public class AdminController : HumansControllerBase
         _logger.LogWarning("Admin cleared {Count} stale Hangfire locks", deleted);
         SetSuccess($"Cleared {deleted} Hangfire lock(s). Restart the app to re-register recurring jobs.");
         return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost("CheckGroupSettings")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> CheckGroupSettings(
+        [FromServices] IGoogleSyncService googleSyncService)
+    {
+        try
+        {
+            var result = await googleSyncService.CheckGroupSettingsAsync();
+            TempData["GroupSettingsResult"] = System.Text.Json.JsonSerializer.Serialize(result);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to check Google Group settings");
+            SetError($"Settings check failed: {ex.Message}");
+            return RedirectToAction(nameof(Index));
+        }
+
+        return RedirectToAction(nameof(GroupSettingsResults));
+    }
+
+    [HttpGet("GroupSettingsResults")]
+    public IActionResult GroupSettingsResults()
+    {
+        Application.DTOs.GroupSettingsDriftResult? result = null;
+        if (TempData["GroupSettingsResult"] is string json)
+        {
+            result = System.Text.Json.JsonSerializer.Deserialize<Application.DTOs.GroupSettingsDriftResult>(json);
+        }
+
+        if (result == null)
+        {
+            SetInfo("No group settings results to display. Run the check first.");
+            return RedirectToAction(nameof(Index));
+        }
+
+        return View(result);
     }
 
 }

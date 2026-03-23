@@ -176,8 +176,19 @@ public class HumanController : HumansControllerBase
             .Include(u => u.UserEmails)
             .FirstAsync(u => u.Id == currentUser.Id);
 
-        var recipientEmail = targetUser.GetEffectiveEmail() ?? targetUser.Email!;
-        var senderEmail = sender.GetEffectiveEmail() ?? sender.Email!;
+        var recipientEmail = targetUser.GetEffectiveEmail() ?? targetUser.Email;
+        if (string.IsNullOrWhiteSpace(recipientEmail))
+        {
+            ModelState.AddModelError(string.Empty, _localizer["Common_Error"].Value);
+            return View(model);
+        }
+
+        var senderEmail = sender.GetEffectiveEmail() ?? sender.Email;
+        if (string.IsNullOrWhiteSpace(senderEmail))
+        {
+            ModelState.AddModelError(string.Empty, _localizer["Common_Error"].Value);
+            return View(model);
+        }
 
         await _emailService.SendFacilitatedMessageAsync(
             recipientEmail,
@@ -209,6 +220,19 @@ public class HumanController : HumansControllerBase
         var allRows = await _profileService.GetFilteredHumansAsync(search, filter);
         var totalCount = allRows.Count;
 
+        // Load @nobodies.team email status for all users (fine at ~500 users)
+        var nobodiesTeamEmails = await _dbContext.UserEmails
+            .AsNoTracking()
+            .Where(ue => ue.IsVerified && EF.Functions.ILike(ue.Email, "%@nobodies.team"))
+            .Select(ue => new { ue.UserId, ue.IsNotificationTarget })
+            .ToListAsync();
+
+        var nobodiesTeamByUser = nobodiesTeamEmails
+            .GroupBy(e => e.UserId)
+            .ToDictionary(
+                g => g.Key,
+                g => g.Any(e => e.IsNotificationTarget));
+
         // Materialize for flexible sorting (fine at ~500 users)
         var allMatching = allRows.Select(r => new AdminHumanViewModel
         {
@@ -220,7 +244,9 @@ public class HumanController : HumansControllerBase
             LastLoginAt = r.LastLoginAt,
             HasProfile = r.HasProfile,
             IsApproved = r.IsApproved,
-            MembershipStatus = r.MembershipStatus
+            MembershipStatus = r.MembershipStatus,
+            HasNobodiesTeamEmail = nobodiesTeamByUser.ContainsKey(r.UserId),
+            NobodiesTeamEmailIsPrimary = nobodiesTeamByUser.TryGetValue(r.UserId, out var isPrimary) && isPrimary
         }).ToList();
 
         var ascending = !string.Equals(dir, "desc", StringComparison.OrdinalIgnoreCase);
@@ -293,6 +319,7 @@ public class HumanController : HumansControllerBase
             IsApproved = data.Profile?.IsApproved ?? false,
             HasProfile = data.Profile != null,
             AdminNotes = data.Profile?.AdminNotes,
+            PreferredLanguage = data.User.PreferredLanguage,
             MembershipTier = data.Profile?.MembershipTier ?? MembershipTier.Volunteer,
             ConsentCheckStatus = data.Profile?.ConsentCheckStatus,
             IsRejected = data.Profile?.RejectedAt != null,
@@ -306,7 +333,7 @@ public class HumanController : HumansControllerBase
                 .Select(a => new AdminHumanApplicationViewModel
                 {
                     Id = a.Id,
-                    Status = a.Status.ToString(),
+                    Status = a.Status,
                     SubmittedAt = a.SubmittedAt.ToDateTimeUtc()
                 }).ToList(),
             RoleAssignments = data.RoleAssignments.Select(ra => new AdminRoleAssignmentViewModel
@@ -323,7 +350,7 @@ public class HumanController : HumansControllerBase
             }).ToList(),
             AuditLog = data.AuditEntries.Select(e => new AuditLogEntryViewModel
             {
-                Action = e.Action,
+                Action = Enum.TryParse<AuditAction>(e.Action, out var parsedAction) ? parsedAction : default,
                 Description = e.Description,
                 OccurredAt = e.OccurredAt,
                 ActorName = e.ActorName ?? string.Empty,

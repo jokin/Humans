@@ -3,6 +3,7 @@ using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using NodaTime;
 using Humans.Application;
+using Humans.Application.Extensions;
 using Humans.Application.Interfaces;
 using Humans.Domain.Constants;
 using Humans.Domain.Entities;
@@ -150,7 +151,7 @@ public class SystemTeamSyncJob : ISystemTeamSync
         if (shouldBeCoordinator.Count > 0 || shouldBeMember.Count > 0)
         {
             await _dbContext.SaveChangesAsync(cancellationToken);
-            _cache.Remove(CacheKeys.ActiveTeams);
+            _cache.InvalidateActiveTeams();
         }
 
         report?.Steps.Add(step);
@@ -596,7 +597,8 @@ public class SystemTeamSyncJob : ISystemTeamSync
             await _dbContext.SaveChangesAsync(cancellationToken);
 
             // Invalidate team cache — sync job runs infrequently, cache rebuilds on next access
-            _cache.Remove(CacheKeys.ActiveTeams);
+            _cache.InvalidateActiveTeams();
+            InvalidateUserCachesForSystemTeamMembershipChanges(team.SystemTeamType, affectedUserIds);
 
             _logger.LogInformation(
                 "Synced {TeamName} team: added {AddCount}, removed {RemoveCount}",
@@ -633,6 +635,21 @@ public class SystemTeamSyncJob : ISystemTeamSync
                         user.Id, team.Id);
                 }
             }
+        }
+    }
+
+    private void InvalidateUserCachesForSystemTeamMembershipChanges(
+        SystemTeamType systemTeamType,
+        IEnumerable<Guid> userIds)
+    {
+        if (systemTeamType != SystemTeamType.Volunteers)
+        {
+            return;
+        }
+
+        foreach (var userId in userIds)
+        {
+            _cache.InvalidateRoleAssignmentClaims(userId);
         }
     }
 }

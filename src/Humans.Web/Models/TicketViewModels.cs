@@ -95,6 +95,7 @@ public class TicketAttendeesViewModel : PagedListViewModel
     public string? FilterTicketType { get; set; }
     public string? FilterStatus { get; set; }
     public bool? FilterMatched { get; set; }
+    public string? FilterOrderId { get; set; }
     public List<string> AvailableTicketTypes { get; set; } = [];
 }
 
@@ -166,5 +167,5 @@ public class WhoHasntBoughtRow
     public string Name { get; set; } = string.Empty;
     public string Email { get; set; } = string.Empty;
     public string Teams { get; set; } = string.Empty;
-    public string Tier { get; set; } = string.Empty;
+    public MembershipTier Tier { get; set; }
 }

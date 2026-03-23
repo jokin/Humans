@@ -4,6 +4,7 @@ using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using NodaTime;
 using Humans.Application;
+using Humans.Application.Extensions;
 using Humans.Application.Interfaces;
 using Humans.Domain.Constants;
 using Humans.Domain.Entities;
@@ -72,10 +73,16 @@ public class TeamService : ITeamService
                 throw new InvalidOperationException("Cannot nest more than one level — the parent team already has a parent");
         }
 
-        // Retry with incrementing suffix on unique constraint violation
+        // Retry with incrementing suffix on unique constraint violation or custom slug collision
         for (var attempt = 0; attempt < 10; attempt++)
         {
             var slug = attempt == 0 ? baseSlug : $"{baseSlug}-{attempt + 1}";
+
+            // Check if slug collides with another team's custom slug
+            var collidesWithCustomSlug = await _dbContext.Teams.AnyAsync(
+                t => t.CustomSlug == slug, cancellationToken);
+            if (collidesWithCustomSlug)
+                continue;
 
             var team = new Team
             {
@@ -97,13 +104,20 @@ public class TeamService : ITeamService
             try
             {
                 await _dbContext.SaveChangesAsync(cancellationToken);
-                // Add to cache
-                if (_cache.TryGetValue(CacheKeys.ActiveTeams, out ConcurrentDictionary<Guid, CachedTeam>? cached) && cached != null)
+
+                if (!requiresApproval)
                 {
-                    cached[team.Id] = new CachedTeam(team.Id, team.Name, team.Description, team.Slug,
-                        team.IsSystemTeam, team.SystemTeamType, team.RequiresApproval, team.CreatedAt, [],
-                        ParentTeamId: parentTeamId);
+                    // RequiresApproval has a store default of true, so persist explicit false
+                    // after insert instead of relying on EF's insert sentinel handling.
+                    var requiresApprovalEntry = _dbContext.Entry(team).Property(t => t.RequiresApproval);
+                    requiresApprovalEntry.CurrentValue = false;
+                    requiresApprovalEntry.IsModified = true;
+                    await _dbContext.SaveChangesAsync(cancellationToken);
                 }
+
+                UpsertCachedTeam(new CachedTeam(team.Id, team.Name, team.Description, team.Slug,
+                    team.IsSystemTeam, team.SystemTeamType, team.RequiresApproval, team.IsPublicPage, team.CreatedAt, [],
+                    ParentTeamId: parentTeamId));
                 _logger.LogInformation("Created team {TeamName} with slug {Slug}", name, slug);
                 return team;
             }
@@ -120,13 +134,15 @@ public class TeamService : ITeamService
 
     public async Task<Team?> GetTeamBySlugAsync(string slug, CancellationToken cancellationToken = default)
     {
+        var normalizedSlug = slug.ToLowerInvariant();
+
         return await _dbContext.Teams
             .AsNoTracking()
             .Include(t => t.Members.Where(m => m.LeftAt == null))
                 .ThenInclude(m => m.User)
             .Include(t => t.ParentTeam)
             .Include(t => t.ChildTeams)
-            .FirstOrDefaultAsync(t => t.Slug == slug, cancellationToken);
+            .FirstOrDefaultAsync(t => t.Slug == normalizedSlug || t.CustomSlug == normalizedSlug, cancellationToken);
     }
 
     public async Task<Team?> GetTeamByIdAsync(Guid teamId, CancellationToken cancellationToken = default)
@@ -161,6 +177,145 @@ public class TeamService : ITeamService
             .ToListAsync(cancellationToken);
     }
 
+    public async Task<TeamDirectoryResult> GetTeamDirectoryAsync(
+        Guid? userId,
+        CancellationToken cancellationToken = default)
+    {
+        var cachedTeams = await GetCachedTeamsAsync(cancellationToken);
+
+        if (!userId.HasValue)
+        {
+            var publicDepartments = cachedTeams.Values
+                .Where(t => t.IsPublicPage && !t.IsSystemTeam && t.ParentTeamId == null)
+                .OrderBy(t => t.Name, StringComparer.OrdinalIgnoreCase)
+                .Select(t => CreateDirectorySummary(t, cachedTeams, userId))
+                .ToList();
+
+            return new TeamDirectoryResult(
+                IsAuthenticated: false,
+                CanCreateTeam: false,
+                MyTeams: [],
+                Departments: publicDepartments,
+                SystemTeams: []);
+        }
+
+        var isBoardMember = await IsUserBoardMemberAsync(userId.Value, cancellationToken);
+        var canCreateTeam = isBoardMember ||
+            await IsUserAdminAsync(userId.Value, cancellationToken) ||
+            await IsUserTeamsAdminAsync(userId.Value, cancellationToken);
+
+        var summaries = cachedTeams.Values
+            .Select(t => CreateDirectorySummary(t, cachedTeams, userId))
+            .ToList();
+
+        var myTeams = summaries
+            .Where(t => t.IsCurrentUserMember)
+            .OrderBy(t => t.SortKey, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        var departments = summaries
+            .Where(t => !t.IsCurrentUserMember && !t.IsSystemTeam)
+            .OrderBy(t => t.SortKey, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        var systemTeams = summaries
+            .Where(t => !t.IsCurrentUserMember && t.IsSystemTeam)
+            .OrderBy(t => t.Name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        return new TeamDirectoryResult(
+            IsAuthenticated: true,
+            CanCreateTeam: canCreateTeam,
+            MyTeams: myTeams,
+            Departments: departments,
+            SystemTeams: systemTeams);
+    }
+
+    public async Task<TeamDetailResult?> GetTeamDetailAsync(
+        string slug,
+        Guid? userId,
+        CancellationToken cancellationToken = default)
+    {
+        var team = await GetTeamBySlugAsync(slug, cancellationToken);
+        if (team is null)
+        {
+            return null;
+        }
+
+        if (!userId.HasValue && !team.IsPublicPage)
+        {
+            return null;
+        }
+
+        var activeMembers = team.Members
+            .Where(m => m.LeftAt is null)
+            .ToList();
+
+        if (!userId.HasValue)
+        {
+            var coordinators = activeMembers
+                .Where(m => m.Role == TeamMemberRole.Coordinator)
+                .OrderBy(m => m.User.DisplayName, StringComparer.OrdinalIgnoreCase)
+                .Select(MapTeamDetailMemberSummary)
+                .ToList();
+
+            return new TeamDetailResult(
+                Team: team,
+                Members: coordinators,
+                ChildTeams: team.ChildTeams
+                    .Where(c => c.IsActive && c.IsPublicPage)
+                    .OrderBy(c => c.Name, StringComparer.Ordinal)
+                    .ToList(),
+                RoleDefinitions: [],
+                IsAuthenticated: false,
+                IsCurrentUserMember: false,
+                IsCurrentUserCoordinator: false,
+                CanCurrentUserJoin: false,
+                CanCurrentUserLeave: false,
+                CanCurrentUserManage: false,
+                CanCurrentUserEditTeam: false,
+                CurrentUserPendingRequestId: null,
+                PendingRequestCount: 0);
+        }
+
+        var currentUserId = userId.Value;
+        var isCurrentUserMember = activeMembers.Any(m => m.UserId == currentUserId);
+        var isCurrentUserCoordinator = activeMembers.Any(m =>
+            m.UserId == currentUserId &&
+            m.Role == TeamMemberRole.Coordinator);
+        var isBoardMember = await IsUserBoardMemberAsync(currentUserId, cancellationToken);
+        var isAdmin = await IsUserAdminAsync(currentUserId, cancellationToken);
+        var isTeamsAdmin = await IsUserTeamsAdminAsync(currentUserId, cancellationToken);
+        var canManage = isCurrentUserCoordinator || isBoardMember || isAdmin || isTeamsAdmin;
+        var pendingRequest = await GetUserPendingRequestAsync(team.Id, currentUserId, cancellationToken);
+        var pendingRequestCount = canManage
+            ? (await GetPendingRequestsForTeamAsync(team.Id, cancellationToken)).Count
+            : 0;
+        var roleDefinitions = await GetRoleDefinitionsAsync(team.Id, cancellationToken);
+
+        return new TeamDetailResult(
+            Team: team,
+            Members: activeMembers
+                .OrderBy(m => m.Role)
+                .ThenBy(m => m.User.DisplayName, StringComparer.OrdinalIgnoreCase)
+                .Select(MapTeamDetailMemberSummary)
+                .ToList(),
+            ChildTeams: team.ChildTeams
+                .Where(c => c.IsActive)
+                .OrderBy(c => c.Name, StringComparer.Ordinal)
+                .ToList(),
+            RoleDefinitions: roleDefinitions,
+            IsAuthenticated: true,
+            IsCurrentUserMember: isCurrentUserMember,
+            IsCurrentUserCoordinator: isCurrentUserCoordinator,
+            CanCurrentUserJoin: !isCurrentUserMember && !team.IsSystemTeam && pendingRequest is null,
+            CanCurrentUserLeave: isCurrentUserMember && !team.IsSystemTeam,
+            CanCurrentUserManage: canManage,
+            CanCurrentUserEditTeam: isBoardMember || isAdmin || isTeamsAdmin,
+            CurrentUserPendingRequestId: pendingRequest?.Id,
+            PendingRequestCount: pendingRequestCount);
+    }
+
     public async Task<IReadOnlyList<TeamMember>> GetUserTeamsAsync(Guid userId, CancellationToken cancellationToken = default)
     {
         // Still returns TeamMember entities for callers that need navigation properties (MyTeams page).
@@ -174,6 +329,35 @@ public class TeamService : ITeamService
             .ToListAsync(cancellationToken);
     }
 
+    public async Task<IReadOnlyList<MyTeamMembershipSummary>> GetMyTeamMembershipsAsync(
+        Guid userId,
+        CancellationToken cancellationToken = default)
+    {
+        var memberships = await GetUserTeamsAsync(userId, cancellationToken);
+        var isBoardMember = await IsUserBoardMemberAsync(userId, cancellationToken);
+
+        var manageableTeamIds = memberships
+            .Where(m => (m.Role == TeamMemberRole.Coordinator || isBoardMember) && !m.Team.IsSystemTeam)
+            .Select(m => m.TeamId)
+            .ToList();
+
+        var pendingCounts = manageableTeamIds.Count > 0
+            ? await GetPendingRequestCountsByTeamIdsAsync(manageableTeamIds, cancellationToken)
+            : new Dictionary<Guid, int>();
+
+        return memberships
+            .Select(m => new MyTeamMembershipSummary(
+                m.TeamId,
+                m.Team.DisplayName,
+                m.Team.Slug,
+                m.Team.IsSystemTeam,
+                m.Role,
+                m.JoinedAt,
+                CanLeave: !m.Team.IsSystemTeam,
+                PendingRequestCount: pendingCounts.GetValueOrDefault(m.TeamId, 0)))
+            .ToList();
+    }
+
     public async Task<Team> UpdateTeamAsync(
         Guid teamId,
         string name,
@@ -182,6 +366,7 @@ public class TeamService : ITeamService
         bool isActive,
         Guid? parentTeamId = null,
         string? googleGroupPrefix = null,
+        string? customSlug = null,
         CancellationToken cancellationToken = default)
     {
         var team = await _dbContext.Teams.FindAsync(new object[] { teamId }, cancellationToken)
@@ -214,16 +399,43 @@ public class TeamService : ITeamService
                 throw new InvalidOperationException("Cannot nest more than one level — the parent team already has a parent");
         }
 
+        // Validate custom slug if provided
+        if (!string.IsNullOrWhiteSpace(customSlug))
+        {
+            var normalized = Helpers.SlugHelper.GenerateSlug(customSlug);
+            if (string.IsNullOrEmpty(normalized))
+                throw new InvalidOperationException("Custom slug is not valid. Use lowercase letters, numbers, and hyphens.");
+
+            // Check custom slug doesn't collide with another team's Slug or CustomSlug
+            var customSlugTaken = await _dbContext.Teams.AnyAsync(
+                t => t.Id != teamId && (t.Slug == normalized || t.CustomSlug == normalized), cancellationToken);
+            if (customSlugTaken)
+                throw new InvalidOperationException($"The slug '{normalized}' is already in use by another team.");
+
+            customSlug = normalized;
+        }
+        else
+        {
+            customSlug = null;
+        }
+
         // If team is becoming a sub-team, clear IsManagement and demote coordinators
         var becomingChild = parentTeamId.HasValue && !team.ParentTeamId.HasValue;
+        var usersNeedingShiftAuthorizationInvalidation = becomingChild
+            ? await _dbContext.Set<TeamRoleAssignment>()
+                .Where(a => a.TeamRoleDefinition.TeamId == teamId && a.TeamRoleDefinition.IsManagement)
+                .Select(a => a.TeamMember.UserId)
+                .Distinct()
+                .ToListAsync(cancellationToken)
+            : [];
 
         // Regenerate slug if name changed
         if (!string.Equals(team.Name, name, StringComparison.Ordinal))
         {
             var newSlug = Helpers.SlugHelper.GenerateSlug(name);
-            // Check slug isn't taken by another team
+            // Check slug isn't taken by another team (also check custom slugs)
             var slugTaken = await _dbContext.Teams.AnyAsync(
-                t => t.Id != teamId && t.Slug == newSlug, cancellationToken);
+                t => t.Id != teamId && (t.Slug == newSlug || t.CustomSlug == newSlug), cancellationToken);
             if (!slugTaken)
             {
                 team.Slug = newSlug;
@@ -236,6 +448,7 @@ public class TeamService : ITeamService
         team.IsActive = isActive;
         team.ParentTeamId = parentTeamId;
         team.GoogleGroupPrefix = googleGroupPrefix;
+        team.CustomSlug = customSlug;
         team.UpdatedAt = _clock.GetCurrentInstant();
 
         if (becomingChild)
@@ -266,23 +479,8 @@ public class TeamService : ITeamService
 
         await _dbContext.SaveChangesAsync(cancellationToken);
 
-        // Update cache
-        if (_cache.TryGetValue(CacheKeys.ActiveTeams, out ConcurrentDictionary<Guid, CachedTeam>? cached) && cached != null)
-        {
-            if (!isActive)
-            {
-                cached.TryRemove(teamId, out _);
-            }
-            else if (cached.TryGetValue(teamId, out var existing))
-            {
-                cached[teamId] = existing with { Name = name, Description = description, RequiresApproval = requiresApproval, ParentTeamId = parentTeamId };
-            }
-            else
-            {
-                // Team reactivated — re-add to cache
-                cached[teamId] = BuildCachedTeam(team);
-            }
-        }
+        _cache.InvalidateActiveTeams();
+        InvalidateShiftAuthorization(usersNeedingShiftAuthorizationInvalidation);
 
         _logger.LogInformation("Updated team {TeamId} ({TeamName})", teamId, name);
 
@@ -294,6 +492,7 @@ public class TeamService : ITeamService
         string? pageContent,
         List<CallToAction> callsToAction,
         bool isPublicPage,
+        bool showCoordinatorsOnPublicPage,
         Guid updatedByUserId,
         CancellationToken cancellationToken = default)
     {
@@ -314,11 +513,13 @@ public class TeamService : ITeamService
         team.PageContent = pageContent;
         team.CallsToAction = callsToAction;
         team.IsPublicPage = isPublicPage;
+        team.ShowCoordinatorsOnPublicPage = showCoordinatorsOnPublicPage;
         team.PageContentUpdatedAt = now;
         team.PageContentUpdatedByUserId = updatedByUserId;
         team.UpdatedAt = now;
 
         await _dbContext.SaveChangesAsync(cancellationToken);
+        TryUpdateCachedTeam(teamId, cachedTeam => cachedTeam with { IsPublicPage = isPublicPage });
 
         var actor = await _dbContext.Users.FindAsync(new object[] { updatedByUserId }, cancellationToken);
         await _auditLogService.LogAsync(
@@ -351,11 +552,7 @@ public class TeamService : ITeamService
 
         await _dbContext.SaveChangesAsync(cancellationToken);
 
-        // Remove from cache
-        if (_cache.TryGetValue(CacheKeys.ActiveTeams, out ConcurrentDictionary<Guid, CachedTeam>? cached) && cached != null)
-        {
-            cached.TryRemove(teamId, out _);
-        }
+        RemoveCachedTeam(teamId);
 
         _logger.LogInformation("Deactivated team {TeamId} ({TeamName})", teamId, team.Name);
     }
@@ -521,6 +718,8 @@ public class TeamService : ITeamService
 
         // Clean up role assignments before departure
         var roleAssignments = await _dbContext.Set<TeamRoleAssignment>()
+            .Include(a => a.TeamRoleDefinition)
+                .ThenInclude(d => d.Team)
             .Where(a => a.TeamMemberId == member.Id)
             .ToListAsync(cancellationToken);
         if (roleAssignments.Count > 0)
@@ -544,6 +743,7 @@ public class TeamService : ITeamService
 
         await _dbContext.SaveChangesAsync(cancellationToken);
         RemoveMemberFromTeamCache(teamId, userId);
+        InvalidateShiftAuthorizationIfNeeded(userId, roleAssignments);
 
         _logger.LogInformation("User {UserId} left team {TeamId}", userId, teamId);
 
@@ -872,6 +1072,8 @@ public class TeamService : ITeamService
 
         // Clean up role assignments before departure
         var roleAssignments = await _dbContext.Set<TeamRoleAssignment>()
+            .Include(a => a.TeamRoleDefinition)
+                .ThenInclude(d => d.Team)
             .Where(a => a.TeamMemberId == member.Id)
             .ToListAsync(cancellationToken);
         if (roleAssignments.Count > 0)
@@ -895,6 +1097,7 @@ public class TeamService : ITeamService
 
         await _dbContext.SaveChangesAsync(cancellationToken);
         RemoveMemberFromTeamCache(teamId, userId);
+        InvalidateShiftAuthorizationIfNeeded(userId, roleAssignments);
 
         _logger.LogInformation("Actor {ActorId} removed user {UserId} from team {TeamId}", actorUserId, userId, teamId);
 
@@ -1137,6 +1340,19 @@ public class TeamService : ITeamService
         definition.SlotCount = slotCount;
         definition.Priorities = priorities;
         definition.SortOrder = sortOrder;
+        var invalidatedActiveTeams = false;
+        var usersNeedingShiftAuthorizationInvalidation =
+            definition.Team.ParentTeamId == null &&
+            definition.Team.SystemTeamType == SystemTeamType.None &&
+            definition.IsManagement != isManagement &&
+            definition.Assignments.Count > 0
+                ? await _dbContext.TeamMembers
+                    .Where(m => definition.Assignments.Select(a => a.TeamMemberId).Contains(m.Id))
+                    .Select(m => m.UserId)
+                    .Distinct()
+                    .ToListAsync(cancellationToken)
+                : [];
+
         // If clearing IsManagement, demote any coordinators who have no other management assignments
         if (definition.IsManagement && !isManagement)
         {
@@ -1157,6 +1373,7 @@ public class TeamService : ITeamService
                     if (!hasOtherManagement)
                     {
                         member.Role = TeamMemberRole.Member;
+                        invalidatedActiveTeams = true;
                     }
                 }
             }
@@ -1174,6 +1391,13 @@ public class TeamService : ITeamService
             relatedEntityId: definition.TeamId, relatedEntityType: nameof(Team));
 
         await _dbContext.SaveChangesAsync(cancellationToken);
+
+        if (invalidatedActiveTeams)
+        {
+            _cache.InvalidateActiveTeams();
+        }
+
+        InvalidateShiftAuthorization(usersNeedingShiftAuthorizationInvalidation);
 
         _logger.LogInformation("Updated role definition {RoleDefinitionId} '{RoleName}'", roleDefinitionId, name);
 
@@ -1292,6 +1516,76 @@ public class TeamService : ITeamService
             .ToListAsync(cancellationToken);
     }
 
+    public async Task<IReadOnlyList<TeamRosterSlotSummary>> GetRosterAsync(
+        string? priority,
+        string? status,
+        string? period,
+        CancellationToken cancellationToken = default)
+    {
+        var definitions = await GetAllRoleDefinitionsAsync(cancellationToken);
+
+        var slots = new List<TeamRosterSlotSummary>();
+        foreach (var definition in definitions)
+        {
+            for (var slotIndex = 0; slotIndex < definition.SlotCount; slotIndex++)
+            {
+                var assignment = definition.Assignments.FirstOrDefault(a => a.SlotIndex == slotIndex);
+                var slotPriority = slotIndex < definition.Priorities.Count
+                    ? definition.Priorities[slotIndex]
+                    : SlotPriority.None;
+
+                slots.Add(new TeamRosterSlotSummary(
+                    definition.Team.Name,
+                    definition.Team.Slug,
+                    definition.Name,
+                    definition.Description,
+                    definition.Id,
+                    slotIndex + 1,
+                    slotPriority.ToString(),
+                    GetPriorityBadgeClass(slotPriority),
+                    definition.Period.ToString(),
+                    assignment != null,
+                    assignment?.TeamMember?.User?.DisplayName));
+            }
+        }
+
+        if (!string.IsNullOrEmpty(priority))
+        {
+            slots = slots
+                .Where(slot => string.Equals(slot.Priority, priority, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+        }
+
+        if (string.Equals(status, "Open", StringComparison.OrdinalIgnoreCase))
+        {
+            slots = slots.Where(slot => !slot.IsFilled).ToList();
+        }
+        else if (string.Equals(status, "Filled", StringComparison.OrdinalIgnoreCase))
+        {
+            slots = slots.Where(slot => slot.IsFilled).ToList();
+        }
+
+        if (!string.IsNullOrEmpty(period))
+        {
+            slots = slots
+                .Where(slot => string.Equals(slot.Period, period, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+        }
+
+        return slots
+            .OrderBy(slot => slot.Priority switch
+            {
+                nameof(SlotPriority.Critical) => 0,
+                nameof(SlotPriority.Important) => 1,
+                nameof(SlotPriority.NiceToHave) => 2,
+                _ => 3
+            })
+            .ThenBy(slot => slot.TeamName, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(slot => slot.RoleName, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(slot => slot.SlotNumber)
+            .ToList();
+    }
+
     // ==========================================================================
     // Team Role Assignments
     // ==========================================================================
@@ -1396,6 +1690,7 @@ public class TeamService : ITeamService
             relatedEntityId: targetUserId, relatedEntityType: nameof(User));
 
         await _dbContext.SaveChangesAsync(cancellationToken);
+        InvalidateShiftAuthorizationIfNeeded(definition, targetUserId);
 
         // Update cache: if auto-added to team, add member; if promoted to Lead, update role
         if (targetUser != null)
@@ -1404,15 +1699,13 @@ public class TeamService : ITeamService
                 teamMember.Id, targetUserId, targetUser.DisplayName, targetUser.ProfilePictureUrl,
                 teamMember.Role, teamMember.JoinedAt);
             // Either add or update depending on whether they were auto-added
-            if (_cache.TryGetValue(CacheKeys.ActiveTeams, out ConcurrentDictionary<Guid, CachedTeam>? cachedTeams) && cachedTeams != null
-                && cachedTeams.TryGetValue(definition.TeamId, out var ct))
+            TryUpdateCachedTeam(definition.TeamId, ct =>
             {
                 var existing = ct.Members.FirstOrDefault(m => m.UserId == targetUserId);
-                if (existing != null)
-                    cachedTeams[definition.TeamId] = ct with { Members = ct.Members.Select(m => m.UserId == targetUserId ? cachedMember : m).ToList() };
-                else
-                    cachedTeams[definition.TeamId] = ct with { Members = [.. ct.Members, cachedMember] };
-            }
+                return existing != null
+                    ? ct with { Members = ct.Members.Select(m => m.UserId == targetUserId ? cachedMember : m).ToList() }
+                    : ct with { Members = [.. ct.Members, cachedMember] };
+            });
         }
 
         _logger.LogInformation("Assigned user {UserId} to role '{RoleName}' (slot {SlotIndex}) in team {TeamId}",
@@ -1468,6 +1761,7 @@ public class TeamService : ITeamService
         }
 
         await _dbContext.SaveChangesAsync(cancellationToken);
+        InvalidateShiftAuthorizationIfNeeded(definition, assignment.TeamMember.UserId);
 
         // Update cache if role changed (Coordinator → Member demotion)
         if (definition.IsManagement)
@@ -1610,6 +1904,16 @@ public class TeamService : ITeamService
         return (items, totalCount);
     }
 
+    public async Task<AdminTeamListResult> GetAdminTeamListAsync(
+        int page,
+        int pageSize,
+        CancellationToken cancellationToken = default)
+    {
+        var (items, totalCount) = await GetAllTeamsForAdminAsync(page, pageSize, cancellationToken);
+
+        return new AdminTeamListResult(BuildAdminTeamSummaries(items), totalCount);
+    }
+
     // ==========================================================================
     // Team Cache
     // ==========================================================================
@@ -1642,6 +1946,7 @@ public class TeamService : ITeamService
         IsSystemTeam: team.IsSystemTeam,
         SystemTeamType: team.SystemTeamType,
         RequiresApproval: team.RequiresApproval,
+        IsPublicPage: team.IsPublicPage,
         CreatedAt: team.CreatedAt,
         Members: team.Members
             .Where(m => m.LeftAt == null)
@@ -1655,41 +1960,188 @@ public class TeamService : ITeamService
             .ToList(),
         ParentTeamId: team.ParentTeamId);
 
+    private static IReadOnlyList<AdminTeamSummary> BuildAdminTeamSummaries(IReadOnlyList<Team> teams)
+    {
+        var ordered = new List<AdminTeamSummary>(teams.Count);
+
+        foreach (var team in teams)
+        {
+            if (team.ParentTeamId.HasValue)
+            {
+                continue;
+            }
+
+            ordered.Add(CreateAdminTeamSummary(team, isChildTeam: false));
+
+            var children = teams
+                .Where(child => child.ParentTeamId == team.Id)
+                .OrderBy(child => child.Name, StringComparer.OrdinalIgnoreCase);
+
+            ordered.AddRange(children.Select(child => CreateAdminTeamSummary(child, isChildTeam: true)));
+        }
+
+        return ordered;
+    }
+
+    private static AdminTeamSummary CreateAdminTeamSummary(Team team, bool isChildTeam)
+    {
+        var systemTeamType = team.SystemTeamType != SystemTeamType.None
+            ? team.SystemTeamType.ToString()
+            : null;
+        var hasMailGroup = team.GoogleResources.Any(resource =>
+            resource.ResourceType == GoogleResourceType.Group &&
+            resource.IsActive);
+        var driveResourceCount = team.GoogleResources.Count(resource =>
+            resource.ResourceType != GoogleResourceType.Group &&
+            resource.IsActive);
+
+        return new AdminTeamSummary(
+            team.Id,
+            team.Name,
+            team.Slug,
+            team.IsActive,
+            team.RequiresApproval,
+            team.IsSystemTeam,
+            systemTeamType,
+            team.Members.Count,
+            team.JoinRequests.Count,
+            hasMailGroup,
+            team.GoogleGroupEmail,
+            driveResourceCount,
+            team.RoleDefinitions.Sum(role => role.SlotCount),
+            team.CreatedAt,
+            isChildTeam);
+    }
+
+    private static TeamDirectorySummary CreateDirectorySummary(
+        CachedTeam team,
+        IReadOnlyDictionary<Guid, CachedTeam> teamById,
+        Guid? userId)
+    {
+        CachedTeam? parent = team.ParentTeamId.HasValue && teamById.TryGetValue(team.ParentTeamId.Value, out var resolvedParent)
+            ? resolvedParent
+            : null;
+        var isCurrentUserMember = userId.HasValue && team.Members.Any(m => m.UserId == userId.Value);
+        var isCurrentUserCoordinator = userId.HasValue && team.Members.Any(m =>
+            m.UserId == userId.Value &&
+            m.Role == TeamMemberRole.Coordinator);
+
+        return new TeamDirectorySummary(
+            team.Id,
+            team.Name,
+            team.Description,
+            team.Slug,
+            team.Members.Count,
+            team.IsSystemTeam,
+            team.RequiresApproval,
+            team.IsPublicPage,
+            isCurrentUserMember,
+            isCurrentUserCoordinator,
+            parent?.Name,
+            parent?.Slug);
+    }
+
+    private static TeamDetailMemberSummary MapTeamDetailMemberSummary(TeamMember member) => new(
+        UserId: member.UserId,
+        DisplayName: member.User.DisplayName,
+        Email: member.User.Email,
+        ProfilePictureUrl: member.User.ProfilePictureUrl,
+        Role: member.Role,
+        JoinedAt: member.JoinedAt);
+
+    private static string GetPriorityBadgeClass(SlotPriority priority) =>
+        priority switch
+        {
+            SlotPriority.Critical => "bg-danger",
+            SlotPriority.Important => "bg-warning text-dark",
+            SlotPriority.NiceToHave => "bg-secondary",
+            _ => "bg-light text-dark"
+        };
+
+    private bool TryMutateActiveTeamsCache(Action<ConcurrentDictionary<Guid, CachedTeam>> mutate) =>
+        _cache.TryUpdateExistingValue<ConcurrentDictionary<Guid, CachedTeam>>(CacheKeys.ActiveTeams, mutate);
+
+    private void UpsertCachedTeam(CachedTeam team) =>
+        TryMutateActiveTeamsCache(cachedTeams => cachedTeams[team.Id] = team);
+
+    private void RemoveCachedTeam(Guid teamId)
+    {
+        TryMutateActiveTeamsCache(cachedTeams => cachedTeams.TryRemove(teamId, out _));
+    }
+
+    private bool TryUpdateCachedTeam(Guid teamId, Func<CachedTeam, CachedTeam> update)
+    {
+        var updated = false;
+
+        TryMutateActiveTeamsCache(cachedTeams =>
+        {
+            if (!cachedTeams.TryGetValue(teamId, out var team))
+            {
+                return;
+            }
+
+            cachedTeams[teamId] = update(team);
+            updated = true;
+        });
+
+        return updated;
+    }
+
     private void AddMemberToTeamCache(Guid teamId, CachedTeamMember member)
     {
-        if (_cache.TryGetValue(CacheKeys.ActiveTeams, out ConcurrentDictionary<Guid, CachedTeam>? cached) && cached != null
-            && cached.TryGetValue(teamId, out var team))
-        {
-            cached[teamId] = team with { Members = [.. team.Members, member] };
-        }
+        TryUpdateCachedTeam(teamId, team => team with { Members = [.. team.Members, member] });
     }
 
     private void RemoveMemberFromTeamCache(Guid teamId, Guid userId)
     {
-        if (_cache.TryGetValue(CacheKeys.ActiveTeams, out ConcurrentDictionary<Guid, CachedTeam>? cached) && cached != null
-            && cached.TryGetValue(teamId, out var team))
-        {
-            cached[teamId] = team with { Members = team.Members.Where(m => m.UserId != userId).ToList() };
-        }
+        TryUpdateCachedTeam(teamId, team => team with { Members = team.Members.Where(m => m.UserId != userId).ToList() });
     }
 
     private void UpdateMemberRoleInTeamCache(Guid teamId, Guid userId, TeamMemberRole role)
     {
-        if (_cache.TryGetValue(CacheKeys.ActiveTeams, out ConcurrentDictionary<Guid, CachedTeam>? cached) && cached != null
-            && cached.TryGetValue(teamId, out var team))
+        TryUpdateCachedTeam(teamId, team => team with
         {
-            cached[teamId] = team with
-            {
-                Members = team.Members
-                    .Select(m => m.UserId == userId ? m with { Role = role } : m)
-                    .ToList()
-            };
+            Members = team.Members
+                .Select(m => m.UserId == userId ? m with { Role = role } : m)
+                .ToList()
+        });
+    }
+
+    private void InvalidateShiftAuthorizationIfNeeded(Guid userId, IEnumerable<TeamRoleAssignment> roleAssignments)
+    {
+        if (roleAssignments.Any(IsShiftAuthorizationAssignment))
+        {
+            _cache.InvalidateShiftAuthorization(userId);
         }
     }
 
+    private void InvalidateShiftAuthorizationIfNeeded(TeamRoleDefinition definition, Guid userId)
+    {
+        if (IsShiftAuthorizationDefinition(definition))
+        {
+            _cache.InvalidateShiftAuthorization(userId);
+        }
+    }
+
+    private void InvalidateShiftAuthorization(IEnumerable<Guid> userIds)
+    {
+        foreach (var userId in userIds.Distinct())
+        {
+            _cache.InvalidateShiftAuthorization(userId);
+        }
+    }
+
+    private static bool IsShiftAuthorizationAssignment(TeamRoleAssignment assignment) =>
+        IsShiftAuthorizationDefinition(assignment.TeamRoleDefinition);
+
+    private static bool IsShiftAuthorizationDefinition(TeamRoleDefinition definition) =>
+        definition.IsManagement &&
+        definition.Team.ParentTeamId == null &&
+        definition.Team.SystemTeamType == SystemTeamType.None;
+
     public void RemoveMemberFromAllTeamsCache(Guid userId)
     {
-        if (_cache.TryGetValue(CacheKeys.ActiveTeams, out ConcurrentDictionary<Guid, CachedTeam>? cached) && cached != null)
+        TryMutateActiveTeamsCache(cached =>
         {
             foreach (var kvp in cached)
             {
@@ -1698,6 +2150,6 @@ public class TeamService : ITeamService
                     cached[kvp.Key] = kvp.Value with { Members = kvp.Value.Members.Where(m => m.UserId != userId).ToList() };
                 }
             }
-        }
+        });
     }
 }

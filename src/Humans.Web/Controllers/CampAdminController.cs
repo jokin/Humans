@@ -6,6 +6,7 @@ using Humans.Web.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 
 namespace Humans.Web.Controllers;
 
@@ -15,11 +16,16 @@ namespace Humans.Web.Controllers;
 public class CampAdminController : HumansControllerBase
 {
     private readonly ICampService _campService;
+    private readonly ILogger<CampAdminController> _logger;
 
-    public CampAdminController(ICampService campService, UserManager<User> userManager)
+    public CampAdminController(
+        ICampService campService,
+        UserManager<User> userManager,
+        ILogger<CampAdminController> logger)
         : base(userManager)
     {
         _campService = campService;
+        _logger = logger;
     }
 
     [HttpGet("")]
@@ -69,6 +75,7 @@ public class CampAdminController : HumansControllerBase
         }
         catch (InvalidOperationException ex)
         {
+            _logger.LogWarning(ex, "Failed to approve camp season {SeasonId} for admin {UserId}", seasonId, user.Id);
             SetError(ex.Message);
         }
 
@@ -95,6 +102,7 @@ public class CampAdminController : HumansControllerBase
         }
         catch (InvalidOperationException ex)
         {
+            _logger.LogWarning(ex, "Failed to reject camp season {SeasonId} for admin {UserId}", seasonId, user.Id);
             SetError(ex.Message);
         }
 
@@ -155,6 +163,7 @@ public class CampAdminController : HumansControllerBase
         }
         catch (InvalidOperationException ex)
         {
+            _logger.LogWarning(ex, "Failed to reactivate camp season {SeasonId}", seasonId);
             SetError(ex.Message);
         }
 
@@ -175,6 +184,7 @@ public class CampAdminController : HumansControllerBase
         }
         catch (InvalidOperationException ex)
         {
+            _logger.LogWarning(ex, "Failed to delete camp {CampId}", campId);
             SetError(ex.Message);
         }
 

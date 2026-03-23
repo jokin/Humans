@@ -29,6 +29,29 @@ public static class CultureCodeExtensions
                CultureCatalog.SupportedCultureCodes.Contains(cultureCode, StringComparer.Ordinal);
     }
 
+    private static readonly IReadOnlyDictionary<string, string> FlagCountryCodes =
+        new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["en"] = "gb",
+            ["es"] = "es",
+            ["de"] = "de",
+            ["fr"] = "fr",
+            ["it"] = "it",
+            ["pt"] = "pt",
+            ["ca"] = "es-ct",
+        };
+
+    /// <summary>
+    /// Returns the flag-icons CSS class for the culture (e.g. "fi fi-gb").
+    /// </summary>
+    public static string? ToFlagClass(this string? cultureCode)
+    {
+        if (string.IsNullOrWhiteSpace(cultureCode))
+            return null;
+
+        return FlagCountryCodes.TryGetValue(cultureCode, out var code) ? $"fi fi-{code}" : null;
+    }
+
     public static string ToDisplayLanguageName(this string? cultureCode)
     {
         if (string.IsNullOrWhiteSpace(cultureCode))

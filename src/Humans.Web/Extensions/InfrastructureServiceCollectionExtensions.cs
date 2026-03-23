@@ -24,6 +24,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddSingleton<IHumansMetrics>(sp => sp.GetRequiredService<HumansMetricsService>());
 
         services.AddScoped<ITeamService, TeamService>();
+        services.AddScoped<ITeamPageService, TeamPageService>();
         services.AddScoped<ICampService, CampService>();
         services.AddScoped<ICampaignService, CampaignService>();
         services.AddScoped<IContactFieldService, ContactFieldService>();
@@ -41,6 +42,8 @@ public static class InfrastructureServiceCollectionExtensions
             services.AddScoped<IGoogleSyncService, GoogleWorkspaceSyncService>();
             services.AddScoped<ITeamResourceService, TeamResourceService>();
             services.AddScoped<IDriveActivityMonitorService, DriveActivityMonitorService>();
+
+            services.AddScoped<IGoogleWorkspaceUserService, GoogleWorkspaceUserService>();
         }
         else if (environment.IsProduction())
         {
@@ -53,6 +56,7 @@ public static class InfrastructureServiceCollectionExtensions
             services.AddScoped<IGoogleSyncService, StubGoogleSyncService>();
             services.AddScoped<ITeamResourceService, StubTeamResourceService>();
             services.AddScoped<IDriveActivityMonitorService, StubDriveActivityMonitorService>();
+            services.AddScoped<IGoogleWorkspaceUserService, StubGoogleWorkspaceUserService>();
         }
 
         var hasSmtpConfig = !string.IsNullOrEmpty(configuration["Email:SmtpHost"]);
@@ -76,6 +80,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddScoped<IMembershipCalculator, MembershipCalculator>();
         services.AddScoped<IRoleAssignmentService, RoleAssignmentService>();
         services.AddScoped<IAuditLogService, AuditLogService>();
+        services.AddScoped<IAccountMergeService, AccountMergeService>();
         services.AddScoped<IFeedbackService, FeedbackService>();
         services.AddScoped<IApplicationDecisionService, ApplicationDecisionService>();
         services.AddScoped<IOnboardingService, OnboardingService>();

@@ -25,6 +25,7 @@ public class FeedbackApiController : ControllerBase
         [FromQuery] int limit = 50)
     {
         var reports = await _feedbackService.GetFeedbackListAsync(status, category, limit);
+        var responseCounts = await _feedbackService.GetResponseCountsAsync(reports.Select(r => r.Id));
 
         var result = reports.Select(r => new
         {
@@ -35,7 +36,9 @@ public class FeedbackApiController : ControllerBase
             r.PageUrl,
             r.UserAgent,
             ReporterName = r.User.DisplayName,
+            ReporterEmail = r.User.Email,
             ReporterUserId = r.UserId,
+            ReporterLanguage = r.User.PreferredLanguage,
             r.AdminNotes,
             r.GitHubIssueNumber,
             ScreenshotUrl = r.ScreenshotStoragePath != null ? $"/{r.ScreenshotStoragePath}" : null,
@@ -43,7 +46,8 @@ public class FeedbackApiController : ControllerBase
             UpdatedAt = r.UpdatedAt.ToDateTimeUtc(),
             AdminResponseSentAt = r.AdminResponseSentAt?.ToDateTimeUtc(),
             ResolvedAt = r.ResolvedAt?.ToDateTimeUtc(),
-            ResolvedByName = r.ResolvedByUser?.DisplayName
+            ResolvedByName = r.ResolvedByUser?.DisplayName,
+            ResponseCount = responseCounts.GetValueOrDefault(r.Id)
         });
 
         return Ok(result);
@@ -55,6 +59,8 @@ public class FeedbackApiController : ControllerBase
         var r = await _feedbackService.GetFeedbackByIdAsync(id);
         if (r == null) return NotFound();
 
+        var responseDetails = await _feedbackService.GetResponseDetailsAsync(id);
+
         return Ok(new
         {
             r.Id,
@@ -64,7 +70,9 @@ public class FeedbackApiController : ControllerBase
             r.PageUrl,
             r.UserAgent,
             ReporterName = r.User.DisplayName,
+            ReporterEmail = r.User.Email,
             ReporterUserId = r.UserId,
+            ReporterLanguage = r.User.PreferredLanguage,
             r.AdminNotes,
             r.GitHubIssueNumber,
             ScreenshotUrl = r.ScreenshotStoragePath != null ? $"/{r.ScreenshotStoragePath}" : null,
@@ -72,7 +80,13 @@ public class FeedbackApiController : ControllerBase
             UpdatedAt = r.UpdatedAt.ToDateTimeUtc(),
             AdminResponseSentAt = r.AdminResponseSentAt?.ToDateTimeUtc(),
             ResolvedAt = r.ResolvedAt?.ToDateTimeUtc(),
-            ResolvedByName = r.ResolvedByUser?.DisplayName
+            ResolvedByName = r.ResolvedByUser?.DisplayName,
+            ResponseCount = responseDetails.Count,
+            Responses = responseDetails.Select(rd => new
+            {
+                rd.SentAt,
+                rd.ActorName
+            })
         });
     }
 

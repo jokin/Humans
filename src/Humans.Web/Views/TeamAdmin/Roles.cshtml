@@ -71,10 +71,10 @@
                         <div class="col-md-2">
                             <label class="form-label">Period</label>
                             <select name="Period" class="form-select">
-                                <option value="YearRound" selected="@(role.Period == RolePeriod.YearRound)">Year-round</option>
-                                <option value="Build" selected="@(role.Period == RolePeriod.Build)">Set-up</option>
-                                <option value="Event" selected="@(role.Period == RolePeriod.Event)">Event</option>
-                                <option value="Strike" selected="@(role.Period == RolePeriod.Strike)">Strike</option>
+                                <option value="YearRound" selected="@(role.Period == RolePeriod.YearRound ? "selected" : null)">Year-round</option>
+                                <option value="Build" selected="@(role.Period == RolePeriod.Build ? "selected" : null)">Set-up</option>
+                                <option value="Event" selected="@(role.Period == RolePeriod.Event ? "selected" : null)">Event</option>
+                                <option value="Strike" selected="@(role.Period == RolePeriod.Strike ? "selected" : null)">Strike</option>
                             </select>
                         </div>
                         <div class="col-md-1 d-flex align-items-end">
@@ -86,13 +86,13 @@
                         <div class="d-flex flex-wrap gap-2 priorities-container" data-role-id="@role.Id">
                             @for (var i = 0; i < role.SlotCount; i++)
                             {
-                                var currentPriority = i < role.Slots.Count ? role.Slots[i].Priority : "None";
+                                var currentPriority = i < role.Slots.Count ? role.Slots[i].Priority.ToString() : "None";
                                 <div class="input-group input-group-sm" style="max-width: 200px;">
                                     <span class="input-group-text">@(i + 1)</span>
                                     <select name="Priorities" class="form-select form-select-sm">
                                         @foreach (var opt in priorityOptions)
                                         {
-                                            <option value="@opt" selected="@(string.Equals(opt, currentPriority, StringComparison.OrdinalIgnoreCase))">
+                                            <option value="@opt" selected="@(string.Equals(opt, currentPriority, StringComparison.OrdinalIgnoreCase) ? "selected" : null)">
                                                 @(opt == "NiceToHave" ? "Nice to Have" : opt)
                                             </option>
                                         }
@@ -147,7 +147,7 @@
                         {
                             <tr>
                                 <td>@(slot.SlotIndex + 1)</td>
-                                <td><span class="badge @slot.PriorityBadgeClass">@(slot.Priority == "NiceToHave" ? "Nice to Have" : slot.Priority)</span></td>
+                                <td><span class="badge @slot.PriorityBadgeClass">@(slot.Priority == SlotPriority.NiceToHave ? "Nice to Have" : slot.Priority.ToString())</span></td>
                                 <td>
                                     @if (slot.IsFilled)
                                     {

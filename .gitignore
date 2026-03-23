@@ -129,5 +129,6 @@ gha-creds-*.json
 service-account-key.json
 .claude/worktrees/
 .worktrees/
+local/
 src/Humans.Web/bin/
 src/**/bin\\Debug/

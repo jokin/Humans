@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using NodaTime;
+using Humans.Application;
 using Humans.Domain.Constants;
 using Humans.Infrastructure.Data;
 
@@ -54,15 +55,14 @@ public class RoleAssignmentClaimsTransformation : IClaimsTransformation
             return principal;
         }
 
-        var cacheKey = $"claims:{userId}";
-        var claims = await _cache.GetOrCreateAsync(cacheKey, async entry =>
+        var claims = await _cache.GetOrCreateAsync(CacheKeys.RoleAssignmentClaims(userId), async entry =>
         {
             entry.AbsoluteExpirationRelativeToNow = CacheDuration;
             return await LoadClaimsFromDbAsync(userId);
-        });
+        }) ?? [];
 
         var identity = new ClaimsIdentity();
-        foreach (var claim in claims!)
+        foreach (var claim in claims)
         {
             identity.AddClaim(claim);
         }

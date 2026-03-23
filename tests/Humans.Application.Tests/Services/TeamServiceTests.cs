@@ -1,9 +1,11 @@
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging.Abstractions;
 using NodaTime;
 using NodaTime.Testing;
 using NSubstitute;
+using Humans.Application;
 using Humans.Application.Interfaces;
 using Humans.Domain.Constants;
 using Humans.Domain.Entities;
@@ -19,6 +21,7 @@ public class TeamServiceTests : IDisposable
     private readonly HumansDbContext _dbContext;
     private readonly FakeClock _clock;
     private readonly TeamService _service;
+    private readonly IMemoryCache _cache = new MemoryCache(new MemoryCacheOptions());
 
     public TeamServiceTests()
     {
@@ -32,12 +35,13 @@ public class TeamServiceTests : IDisposable
             Substitute.For<IAuditLogService>(),
             Substitute.For<IEmailService>(),
             _clock,
-            new Microsoft.Extensions.Caching.Memory.MemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions()),
+            _cache,
             NullLogger<TeamService>.Instance);
     }
 
     public void Dispose()
     {
+        _cache.Dispose();
         _dbContext.Dispose();
         GC.SuppressFinalize(this);
     }
@@ -551,6 +555,122 @@ public class TeamServiceTests : IDisposable
         var result = await _service.GetUserTeamsAsync(user.Id);
 
         result.Should().BeEmpty();
+    }
+
+    // ==========================================================================
+    // GetMyTeamMembershipsAsync
+    // ==========================================================================
+
+    [Fact]
+    public async Task GetMyTeamMembershipsAsync_Coordinator_GetsPendingCountsForManageableNonSystemTeams()
+    {
+        var user = SeedUser(displayName: "Coordinator");
+        var managedTeam = SeedTeam("Alpha", requiresApproval: true);
+        var systemTeam = SeedTeam("Volunteers", type: SystemTeamType.Volunteers, requiresApproval: true);
+        SeedTeamMember(managedTeam.Id, user.Id, TeamMemberRole.Coordinator);
+        SeedTeamMember(systemTeam.Id, user.Id, TeamMemberRole.Coordinator);
+        SeedJoinRequest(managedTeam.Id, SeedUser(displayName: "Requester A").Id);
+        SeedJoinRequest(systemTeam.Id, SeedUser(displayName: "Requester B").Id);
+        await _dbContext.SaveChangesAsync();
+
+        var result = await _service.GetMyTeamMembershipsAsync(user.Id);
+
+        result.Should().HaveCount(2);
+        result.Single(m => m.TeamId == managedTeam.Id).PendingRequestCount.Should().Be(1);
+        result.Single(m => m.TeamId == managedTeam.Id).CanLeave.Should().BeTrue();
+        result.Single(m => m.TeamId == systemTeam.Id).PendingRequestCount.Should().Be(0);
+        result.Single(m => m.TeamId == systemTeam.Id).CanLeave.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task GetMyTeamMembershipsAsync_BoardMember_GetsPendingCountsForRegularMemberships()
+    {
+        var user = SeedUser(displayName: "Board Human");
+        SeedRoleAssignment(
+            user.Id,
+            RoleNames.Board,
+            _clock.GetCurrentInstant() - Duration.FromDays(10));
+        var team = SeedTeam("Alpha", requiresApproval: true);
+        SeedTeamMember(team.Id, user.Id, TeamMemberRole.Member);
+        SeedJoinRequest(team.Id, SeedUser(displayName: "Requester").Id);
+        await _dbContext.SaveChangesAsync();
+
+        var result = await _service.GetMyTeamMembershipsAsync(user.Id);
+
+        result.Should().ContainSingle();
+        result[0].Role.Should().Be(TeamMemberRole.Member);
+        result[0].PendingRequestCount.Should().Be(1);
+    }
+
+    // ==========================================================================
+    // GetTeamDetailAsync
+    // ==========================================================================
+
+    [Fact]
+    public async Task GetTeamDetailAsync_AnonymousViewer_OnlySeesPublicTeamCoordinatorsAndPublicChildren()
+    {
+        var coordinator = SeedUser(displayName: "Coordinator");
+        var member = SeedUser(displayName: "Member");
+        var team = SeedTeam("Alpha");
+        team.IsPublicPage = true;
+        SeedTeamMember(team.Id, coordinator.Id, TeamMemberRole.Coordinator);
+        SeedTeamMember(team.Id, member.Id, TeamMemberRole.Member);
+
+        var publicChild = SeedTeam("Public Child");
+        publicChild.ParentTeamId = team.Id;
+        publicChild.IsPublicPage = true;
+
+        var privateChild = SeedTeam("Private Child");
+        privateChild.ParentTeamId = team.Id;
+        privateChild.IsPublicPage = false;
+
+        await _dbContext.SaveChangesAsync();
+
+        var result = await _service.GetTeamDetailAsync(team.Slug, userId: null);
+
+        result.Should().NotBeNull();
+        result!.IsAuthenticated.Should().BeFalse();
+        result.Members.Select(m => m.DisplayName).Should().BeEquivalentTo(
+            ["Coordinator"],
+            cfg => cfg.WithStrictOrdering());
+        result.ChildTeams.Select(t => t.Name).Should().BeEquivalentTo(
+            ["Public Child"],
+            cfg => cfg.WithStrictOrdering());
+        result.CanCurrentUserManage.Should().BeFalse();
+        result.RoleDefinitions.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task GetTeamDetailAsync_AuthenticatedCoordinator_ReturnsViewerStateMembersAndPendingCount()
+    {
+        var coordinator = SeedUser(displayName: "Coordinator");
+        var member = SeedUser(displayName: "Member");
+        var requester = SeedUser(displayName: "Requester");
+        var team = SeedTeam("Alpha", requiresApproval: true);
+        SeedTeamMember(team.Id, coordinator.Id, TeamMemberRole.Coordinator);
+        SeedTeamMember(team.Id, member.Id, TeamMemberRole.Member);
+        var pendingRequest = SeedJoinRequest(team.Id, requester.Id);
+        var roleDefinition = SeedTeamRoleDefinition(team.Id, isManagement: true);
+
+        await _dbContext.SaveChangesAsync();
+
+        var result = await _service.GetTeamDetailAsync(team.Slug, coordinator.Id);
+
+        result.Should().NotBeNull();
+        result!.IsAuthenticated.Should().BeTrue();
+        result.IsCurrentUserMember.Should().BeTrue();
+        result.IsCurrentUserCoordinator.Should().BeTrue();
+        result.CanCurrentUserManage.Should().BeTrue();
+        result.CanCurrentUserEditTeam.Should().BeFalse();
+        result.CanCurrentUserJoin.Should().BeFalse();
+        result.CanCurrentUserLeave.Should().BeTrue();
+        result.PendingRequestCount.Should().Be(1);
+        result.CurrentUserPendingRequestId.Should().BeNull();
+        result.Members.Select(m => (m.DisplayName, m.Role)).Should().BeEquivalentTo(
+            [("Member", TeamMemberRole.Member), ("Coordinator", TeamMemberRole.Coordinator)],
+            cfg => cfg.WithStrictOrdering());
+        result.RoleDefinitions.Select(d => d.Id).Should().ContainSingle().Which.Should().Be(roleDefinition.Id);
+        pendingRequest.Status.Should().Be(TeamJoinRequestStatus.Pending);
     }
 
     // ==========================================================================
@@ -1084,6 +1204,134 @@ public class TeamServiceTests : IDisposable
             .WithMessage("*system team*");
     }
 
+    [Fact]
+    public async Task LeaveTeamAsync_RemovesManagementAssignments_InvalidatesShiftAuthorizationCache()
+    {
+        var user = SeedUser();
+        var team = SeedTeam("Operations");
+        var roleDefinition = SeedTeamRoleDefinition(team.Id, isManagement: true);
+        var member = SeedTeamMember(team.Id, user.Id, TeamMemberRole.Coordinator);
+        SeedTeamRoleAssignment(roleDefinition.Id, member.Id);
+        await _dbContext.SaveChangesAsync();
+        _cache.Set(CacheKeys.ShiftAuthorization(user.Id), new[] { team.Id });
+
+        var result = await _service.LeaveTeamAsync(team.Id, user.Id);
+
+        result.Should().BeTrue();
+        _cache.TryGetValue(CacheKeys.ShiftAuthorization(user.Id), out _).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task GetRosterAsync_ExpandsSlotsAndSortsByPriorityThenName()
+    {
+        var alphaTeam = SeedTeam("Alpha");
+        var betaTeam = SeedTeam("Beta");
+        var alphaMember = SeedUser(displayName: "Assigned Human");
+        var alphaTeamMember = SeedTeamMember(alphaTeam.Id, alphaMember.Id);
+
+        var alphaDefinition = new TeamRoleDefinition
+        {
+            Id = Guid.NewGuid(),
+            TeamId = alphaTeam.Id,
+            Team = alphaTeam,
+            Name = "Lead",
+            SlotCount = 2,
+            Priorities = [SlotPriority.Important, SlotPriority.None],
+            SortOrder = 0,
+            Period = RolePeriod.YearRound,
+            CreatedAt = _clock.GetCurrentInstant(),
+            UpdatedAt = _clock.GetCurrentInstant()
+        };
+        alphaDefinition.Assignments.Add(new TeamRoleAssignment
+        {
+            Id = Guid.NewGuid(),
+            TeamRoleDefinitionId = alphaDefinition.Id,
+            TeamMemberId = alphaTeamMember.Id,
+            TeamMember = alphaTeamMember,
+            SlotIndex = 0,
+            AssignedAt = _clock.GetCurrentInstant(),
+            AssignedByUserId = Guid.NewGuid()
+        });
+
+        var betaDefinition = new TeamRoleDefinition
+        {
+            Id = Guid.NewGuid(),
+            TeamId = betaTeam.Id,
+            Team = betaTeam,
+            Name = "Greeter",
+            SlotCount = 1,
+            Priorities = [SlotPriority.Critical],
+            SortOrder = 0,
+            Period = RolePeriod.Event,
+            CreatedAt = _clock.GetCurrentInstant(),
+            UpdatedAt = _clock.GetCurrentInstant()
+        };
+
+        await _dbContext.TeamRoleDefinitions.AddRangeAsync(alphaDefinition, betaDefinition);
+        await _dbContext.SaveChangesAsync();
+
+        var result = await _service.GetRosterAsync(priority: null, status: null, period: null);
+
+        result.Select(slot => (slot.TeamName, slot.RoleName, slot.SlotNumber))
+            .Should()
+            .ContainInOrder(
+                ("Beta", "Greeter", 1),
+                ("Alpha", "Lead", 1),
+                ("Alpha", "Lead", 2));
+
+        result[0].Priority.Should().Be(nameof(SlotPriority.Critical));
+        result[0].PriorityBadgeClass.Should().Be("bg-danger");
+        result[1].AssignedUserName.Should().Be("Assigned Human");
+        result[2].Priority.Should().Be(nameof(SlotPriority.None));
+        result[2].PriorityBadgeClass.Should().Be("bg-light text-dark");
+    }
+
+    [Fact]
+    public async Task GetRosterAsync_AppliesPriorityStatusAndPeriodFilters()
+    {
+        var team = SeedTeam("Alpha");
+        var assignedUser = SeedUser(displayName: "Assigned Human");
+        var assignedTeamMember = SeedTeamMember(team.Id, assignedUser.Id);
+
+        var definition = new TeamRoleDefinition
+        {
+            Id = Guid.NewGuid(),
+            TeamId = team.Id,
+            Team = team,
+            Name = "Lead",
+            SlotCount = 3,
+            Priorities = [SlotPriority.Critical, SlotPriority.Important, SlotPriority.Important],
+            SortOrder = 0,
+            Period = RolePeriod.Event,
+            CreatedAt = _clock.GetCurrentInstant(),
+            UpdatedAt = _clock.GetCurrentInstant()
+        };
+        definition.Assignments.Add(new TeamRoleAssignment
+        {
+            Id = Guid.NewGuid(),
+            TeamRoleDefinitionId = definition.Id,
+            TeamMemberId = assignedTeamMember.Id,
+            TeamMember = assignedTeamMember,
+            SlotIndex = 1,
+            AssignedAt = _clock.GetCurrentInstant(),
+            AssignedByUserId = Guid.NewGuid()
+        });
+
+        _dbContext.TeamRoleDefinitions.Add(definition);
+        await _dbContext.SaveChangesAsync();
+
+        var result = await _service.GetRosterAsync(
+            priority: nameof(SlotPriority.Important),
+            status: "open",
+            period: nameof(RolePeriod.Event));
+
+        result.Should().ContainSingle();
+        result[0].SlotNumber.Should().Be(3);
+        result[0].Priority.Should().Be(nameof(SlotPriority.Important));
+        result[0].Period.Should().Be(nameof(RolePeriod.Event));
+        result[0].IsFilled.Should().BeFalse();
+    }
+
     // --- Helpers ---
 
     private User SeedUser(Guid? id = null, string displayName = "Test User")
@@ -1124,7 +1372,9 @@ public class TeamServiceTests : IDisposable
         {
             Id = Guid.NewGuid(),
             TeamId = teamId,
+            Team = _dbContext.Teams.Local.Single(t => t.Id == teamId),
             UserId = userId,
+            User = _dbContext.Users.Local.Single(u => u.Id == userId),
             Role = role,
             JoinedAt = _clock.GetCurrentInstant(),
             LeftAt = leftAt
@@ -1161,5 +1411,37 @@ public class TeamServiceTests : IDisposable
         };
         _dbContext.TeamJoinRequests.Add(request);
         return request;
+    }
+
+    private TeamRoleDefinition SeedTeamRoleDefinition(Guid teamId, bool isManagement)
+    {
+        var definition = new TeamRoleDefinition
+        {
+            Id = Guid.NewGuid(),
+            TeamId = teamId,
+            Name = isManagement ? "Coordinator" : "Member Role",
+            IsManagement = isManagement,
+            SlotCount = 1,
+            SortOrder = 0,
+            CreatedAt = _clock.GetCurrentInstant(),
+            UpdatedAt = _clock.GetCurrentInstant()
+        };
+        _dbContext.TeamRoleDefinitions.Add(definition);
+        return definition;
+    }
+
+    private TeamRoleAssignment SeedTeamRoleAssignment(Guid roleDefinitionId, Guid teamMemberId)
+    {
+        var assignment = new TeamRoleAssignment
+        {
+            Id = Guid.NewGuid(),
+            TeamRoleDefinitionId = roleDefinitionId,
+            TeamMemberId = teamMemberId,
+            SlotIndex = 0,
+            AssignedAt = _clock.GetCurrentInstant(),
+            AssignedByUserId = Guid.NewGuid()
+        };
+        _dbContext.TeamRoleAssignments.Add(assignment);
+        return assignment;
     }
 }

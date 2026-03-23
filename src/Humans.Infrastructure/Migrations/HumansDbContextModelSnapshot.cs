@@ -23,6 +23,57 @@ namespace Humans.Infrastructure.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("Humans.Domain.Entities.AccountMergeRequest", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AdminNotes")
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)");
+
+                    b.Property<Instant>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Email")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<Guid>("PendingEmailId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Instant?>("ResolvedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ResolvedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("SourceUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<Guid>("TargetUserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ResolvedByUserId");
+
+                    b.HasIndex("SourceUserId");
+
+                    b.HasIndex("Status");
+
+                    b.HasIndex("TargetUserId");
+
+                    b.ToTable("account_merge_requests", (string)null);
+                });
+
             modelBuilder.Entity("Humans.Domain.Entities.Application", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1101,6 +1152,11 @@ namespace Humans.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<string>("DrivePermissionLevel")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
                     b.Property<string>("ErrorMessage")
                         .HasMaxLength(2000)
                         .HasColumnType("character varying(2000)");
@@ -1692,6 +1748,10 @@ namespace Humans.Infrastructure.Migrations
                     b.Property<Instant>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("CustomSlug")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
                     b.Property<string>("Description")
                         .HasMaxLength(2000)
                         .HasColumnType("character varying(2000)");
@@ -1731,6 +1791,11 @@ namespace Humans.Infrastructure.Migrations
                         .HasColumnType("boolean")
                         .HasDefaultValue(true);
 
+                    b.Property<bool>("ShowCoordinatorsOnPublicPage")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
+
                     b.Property<string>("Slug")
                         .IsRequired()
                         .HasMaxLength(256)
@@ -1745,6 +1810,10 @@ namespace Humans.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("CustomSlug")
+                        .IsUnique()
+                        .HasFilter("\"CustomSlug\" IS NOT NULL");
 
                     b.HasIndex("GoogleGroupPrefix")
                         .IsUnique()
@@ -1771,6 +1840,7 @@ namespace Humans.Infrastructure.Migrations
                             IsPublicPage = false,
                             Name = "Volunteers",
                             RequiresApproval = false,
+                            ShowCoordinatorsOnPublicPage = true,
                             Slug = "volunteers",
                             SystemTeamType = "Volunteers",
                             UpdatedAt = NodaTime.Instant.FromUnixTimeTicks(17702491570000000L)
@@ -1784,6 +1854,7 @@ namespace Humans.Infrastructure.Migrations
                             IsPublicPage = false,
                             Name = "Coordinators",
                             RequiresApproval = false,
+                            ShowCoordinatorsOnPublicPage = true,
                             Slug = "coordinators",
                             SystemTeamType = "Coordinators",
                             UpdatedAt = NodaTime.Instant.FromUnixTimeTicks(17702491570000000L)
@@ -1797,6 +1868,7 @@ namespace Humans.Infrastructure.Migrations
                             IsPublicPage = false,
                             Name = "Board",
                             RequiresApproval = false,
+                            ShowCoordinatorsOnPublicPage = true,
                             Slug = "board",
                             SystemTeamType = "Board",
                             UpdatedAt = NodaTime.Instant.FromUnixTimeTicks(17702491570000000L)
@@ -1810,6 +1882,7 @@ namespace Humans.Infrastructure.Migrations
                             IsPublicPage = false,
                             Name = "Asociados",
                             RequiresApproval = false,
+                            ShowCoordinatorsOnPublicPage = true,
                             Slug = "asociados",
                             SystemTeamType = "Asociados",
                             UpdatedAt = NodaTime.Instant.FromUnixTimeTicks(17702491570000000L)
@@ -1823,6 +1896,7 @@ namespace Humans.Infrastructure.Migrations
                             IsPublicPage = false,
                             Name = "Colaboradors",
                             RequiresApproval = false,
+                            ShowCoordinatorsOnPublicPage = true,
                             Slug = "colaboradors",
                             SystemTeamType = "Colaboradors",
                             UpdatedAt = NodaTime.Instant.FromUnixTimeTicks(17702491570000000L)
@@ -1836,6 +1910,7 @@ namespace Humans.Infrastructure.Migrations
                             IsPublicPage = false,
                             Name = "Barrio Leads",
                             RequiresApproval = false,
+                            ShowCoordinatorsOnPublicPage = true,
                             Slug = "barrio-leads",
                             SystemTeamType = "BarrioLeads",
                             UpdatedAt = NodaTime.Instant.FromUnixTimeTicks(17702491570000000L)
@@ -2620,6 +2695,32 @@ namespace Humans.Infrastructure.Migrations
                     b.HasKey("UserId", "LoginProvider", "Name");
 
                     b.ToTable("user_tokens", (string)null);
+                });
+
+            modelBuilder.Entity("Humans.Domain.Entities.AccountMergeRequest", b =>
+                {
+                    b.HasOne("Humans.Domain.Entities.User", "ResolvedByUser")
+                        .WithMany()
+                        .HasForeignKey("ResolvedByUserId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Humans.Domain.Entities.User", "SourceUser")
+                        .WithMany()
+                        .HasForeignKey("SourceUserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Humans.Domain.Entities.User", "TargetUser")
+                        .WithMany()
+                        .HasForeignKey("TargetUserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ResolvedByUser");
+
+                    b.Navigation("SourceUser");
+
+                    b.Navigation("TargetUser");
                 });
 
             modelBuilder.Entity("Humans.Domain.Entities.Application", b =>

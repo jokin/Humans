@@ -90,9 +90,13 @@
                     <span class="badge bg-secondary ms-2">@rota.Priority</span>
                     <span class="badge bg-info ms-1">@rota.Policy</span>
                     <span class="badge bg-secondary ms-1">@(rota.Period == RotaPeriod.Build ? "Set-up" : rota.Period.ToString())</span>
+                    @if (!string.IsNullOrEmpty(rota.Description))
+                    {
+                        <div class="text-muted small mt-1">@Html.SanitizedMarkdown(rota.Description)</div>
+                    }
                     @if (!string.IsNullOrEmpty(rota.PracticalInfo))
                     {
-                        <div class="text-muted small mt-1">@rota.PracticalInfo</div>
+                        <div class="text-muted small mt-1"><i class="fa-solid fa-circle-info me-1"></i>@Html.SanitizedMarkdown(rota.PracticalInfo)</div>
                     }
                 </div>
                 @if (Model.CanManageShifts)
@@ -123,30 +127,30 @@
                                 <div class="col-md-2">
                                     <label class="form-label">Priority</label>
                                     <select name="Priority" class="form-select">
-                                        <option value="Normal" selected="@(rota.Priority == ShiftPriority.Normal)">Normal</option>
-                                        <option value="Important" selected="@(rota.Priority == ShiftPriority.Important)">Important</option>
-                                        <option value="Essential" selected="@(rota.Priority == ShiftPriority.Essential)">Essential</option>
+                                        <option value="Normal" selected="@(rota.Priority == ShiftPriority.Normal ? "selected" : null)">Normal</option>
+                                        <option value="Important" selected="@(rota.Priority == ShiftPriority.Important ? "selected" : null)">Important</option>
+                                        <option value="Essential" selected="@(rota.Priority == ShiftPriority.Essential ? "selected" : null)">Essential</option>
                                     </select>
                                 </div>
                                 <div class="col-md-2">
                                     <label class="form-label">Policy</label>
                                     <select name="Policy" class="form-select">
-                                        <option value="Public" selected="@(rota.Policy == SignupPolicy.Public)">Public</option>
-                                        <option value="RequireApproval" selected="@(rota.Policy == SignupPolicy.RequireApproval)">Require Approval</option>
+                                        <option value="Public" selected="@(rota.Policy == SignupPolicy.Public ? "selected" : null)">Public</option>
+                                        <option value="RequireApproval" selected="@(rota.Policy == SignupPolicy.RequireApproval ? "selected" : null)">Require Approval</option>
                                     </select>
                                 </div>
                                 <div class="col-md-3">
                                     <label class="form-label">Description</label>
-                                    <input type="text" name="Description" value="@rota.Description" class="form-control" />
+                                    <textarea name="Description" class="form-control" rows="2">@rota.Description</textarea>
                                 </div>
                             </div>
                             <div class="row g-2 mt-2 align-items-end">
                                 <div class="col-md-2">
                                     <label class="form-label">Period</label>
                                     <select name="Period" class="form-select">
-                                        <option value="Build" selected="@(rota.Period == RotaPeriod.Build)">Set-up</option>
-                                        <option value="Event" selected="@(rota.Period == RotaPeriod.Event)">Event</option>
-                                        <option value="Strike" selected="@(rota.Period == RotaPeriod.Strike)">Strike</option>
+                                        <option value="Build" selected="@(rota.Period == RotaPeriod.Build ? "selected" : null)">Set-up</option>
+                                        <option value="Event" selected="@(rota.Period == RotaPeriod.Event ? "selected" : null)">Event</option>
+                                        <option value="Strike" selected="@(rota.Period == RotaPeriod.Strike ? "selected" : null)">Strike</option>
                                     </select>
                                 </div>
                                 <div class="col-md-6">
@@ -196,7 +200,7 @@
                                             @{
                                                 var shiftLabel = shift.IsAllDay
                                                     ? "All day"
-                                                    : $"{shift.StartTime.ToString("HH:mm", null)}–{shift.StartTime.PlusMinutes((int)shift.Duration.TotalMinutes).ToString("HH:mm", null)}";
+                                                    : $"{shift.StartTime.ToDisplayTime()}–{shift.StartTime.PlusMinutes((int)shift.Duration.TotalMinutes).ToDisplayTime()}";
                                             }
                                             @shiftLabel
                                             @if (shift.AdminOnly) { <span class="badge bg-dark">Admin Only</span> }
@@ -221,7 +225,7 @@
                                             };
                                         }
                                         <td><span class="badge @phaseBadge me-1">@phaseLabel</span>@shiftDateLabel</td>
-                                        <td>@shift.StartTime.ToString("HH:mm", null)</td>
+                                        <td>@shift.StartTime.ToDisplayTime()</td>
                                         <td>@(shift.IsAllDay ? "Full day" : $"{shift.Duration.TotalHours}h")</td>
                                         @{
                                             var confirmed = shift.ShiftSignups.Count(d => d.Status == SignupStatus.Confirmed);
@@ -295,6 +299,9 @@
                                             <td colspan="@(Model.CanApproveSignups ? 7 : 6)">
                                                 <form asp-action="EditShift" asp-route-slug="@Model.Department.Slug" asp-route-shiftId="@shift.Id" method="post">
                                                     @Html.AntiForgeryToken()
+                                                    <div class="mb-2">
+                                                        <textarea name="Description" class="form-control form-control-sm" rows="2" placeholder="Shift duties, notes...">@shift.Description</textarea>
+                                                    </div>
                                                     <div class="row g-2 align-items-end">
                                                         <div class="col-md-2">
                                                             <label class="form-label form-label-sm">Date</label>
@@ -303,13 +310,13 @@
                                                                 {
                                                                     var editDate = Model.EventSettings.GateOpeningDate.PlusDays(d);
                                                                     var editLabel = editDate.ToDisplayShiftDate();
-                                                                    <option value="@d" selected="@(d == shift.DayOffset)">@editLabel</option>
+                                                                    <option value="@d" selected="@(d == shift.DayOffset ? "selected" : null)">@editLabel</option>
                                                                 }
                                                             </select>
                                                         </div>
                                                         <div class="col-md-1">
                                                             <label class="form-label form-label-sm">Start</label>
-                                                            <input type="time" name="StartTime" value="@shift.StartTime" class="form-control form-control-sm" />
+                                                            <input type="time" name="StartTime" value="@shift.StartTime.ToString("HH:mm", null)" class="form-control form-control-sm" />
                                                         </div>
                                                         <div class="col-md-1">
                                                             <label class="form-label form-label-sm">Hours</label>
@@ -325,7 +332,7 @@
                                                         </div>
                                                         <div class="col-md-1">
                                                             <div class="form-check">
-                                                                <input type="checkbox" name="AdminOnly" value="true" class="form-check-input" checked="@shift.AdminOnly" />
+                                                                <input type="checkbox" name="AdminOnly" value="true" class="form-check-input" checked="@(shift.AdminOnly ? "checked" : null)" />
                                                                 <label class="form-check-label form-label-sm">Admin</label>
                                                             </div>
                                                         </div>
@@ -452,7 +459,7 @@
                                     {
                                         var date = Model.EventSettings.GateOpeningDate.PlusDays(d);
                                         var dateLabel = date.ToDisplayShiftDate();
-                                        <option value="@d" selected="@(d == periodRange.End)">@dateLabel</option>
+                                        <option value="@d" selected="@(d == periodRange.End ? "selected" : null)">@dateLabel</option>
                                     }
                                 </select>
                             </div>
@@ -509,7 +516,7 @@
                                             {
                                                 var date = Model.EventSettings.GateOpeningDate.PlusDays(d);
                                                 var label = date.ToDisplayShiftDate();
-                                                <option value="@d" selected="@(d == 0)">@label</option>
+                                                <option value="@d" selected="@(d == 0 ? "selected" : null)">@label</option>
                                             }
                                         </select>
                                     </div>
@@ -520,7 +527,7 @@
                                             {
                                                 var date = Model.EventSettings.GateOpeningDate.PlusDays(d);
                                                 var label = date.ToDisplayShiftDate();
-                                                <option value="@d" selected="@(d == Model.EventSettings.EventEndOffset)">@label</option>
+                                                <option value="@d" selected="@(d == Model.EventSettings.EventEndOffset ? "selected" : null)">@label</option>
                                             }
                                         </select>
                                     </div>
@@ -568,7 +575,7 @@
                                         {
                                             var date = Model.EventSettings.GateOpeningDate.PlusDays(d);
                                             var label = date.ToDisplayShiftDate();
-                                            <option value="@d" selected="@(d == 0)">@label</option>
+                                            <option value="@d" selected="@(d == 0 ? "selected" : null)">@label</option>
                                         }
                                     </select>
                                 </div>
@@ -635,12 +642,12 @@
                                 <option value="Strike">Strike</option>
                             </select>
                         </div>
-                        <div class="col-md-3">
-                            <label class="form-label">Description</label>
-                            <input type="text" name="Description" class="form-control" />
-                        </div>
                     </div>
-                    <div class="row g-2 mt-2 align-items-end">
+                    <div class="row g-2 mt-2">
+                        <div class="col-md-6">
+                            <label class="form-label">Description</label>
+                            <textarea name="Description" class="form-control" rows="2"></textarea>
+                        </div>
                         <div class="col-md-6">
                             <label class="form-label">Practical Info</label>
                             <textarea name="PracticalInfo" class="form-control" rows="2" placeholder="Meeting point, instructions..."></textarea>

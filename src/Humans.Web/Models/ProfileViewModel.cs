@@ -127,7 +127,8 @@ public class ProfileViewModel
             }
             catch (ArgumentOutOfRangeException)
             {
-                return null; // e.g. Feb 30
+                // Invalid month/day combinations from posted form values are treated as no birthday.
+                return null;
             }
         }
     }
@@ -155,7 +156,7 @@ public class ProfileViewModel
     /// </summary>
     public bool RemoveProfilePicture { get; set; }
 
-    public string MembershipStatus { get; set; } = "None";
+    public MembershipStatus MembershipStatus { get; set; }
     public bool IsApproved { get; set; }
     public bool HasPendingConsents { get; set; }
     public int PendingConsentCount { get; set; }
@@ -163,7 +164,7 @@ public class ProfileViewModel
     /// <summary>
     /// Status of the user's latest tier application (Submitted, Approved, Rejected), or null if none.
     /// </summary>
-    public string? TierApplicationStatus { get; set; }
+    public ApplicationStatus? TierApplicationStatus { get; set; }
 
     /// <summary>
     /// The tier the user applied for (Colaborador or Asociado), or null if no application.

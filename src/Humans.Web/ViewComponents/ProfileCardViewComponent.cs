@@ -93,6 +93,13 @@ public class ProfileCardViewComponent : ViewComponent
         }
         var visibleEmails = await _userEmailService.GetVisibleEmailsAsync(userId, accessLevel);
 
+        // Check if user has a @nobodies.team email (from all emails, not just visible)
+        var hasNobodiesTeamEmail = await _dbContext.UserEmails
+            .AsNoTracking()
+            .AnyAsync(ue => ue.UserId == userId
+                && ue.IsVerified
+                && EF.Functions.ILike(ue.Email, "%@nobodies.team"));
+
         // Get volunteer history entries
         var volunteerHistory = profile != null
             ? await _volunteerHistoryService.GetAllAsync(profile.Id)
@@ -130,7 +137,7 @@ public class ProfileCardViewComponent : ViewComponent
             CustomProfilePictureUrl = pictureUrl,
             BurnerName = profile?.BurnerName ?? string.Empty,
             Pronouns = profile?.Pronouns,
-            MembershipStatus = membershipSnapshot.Status.ToString(),
+            MembershipStatus = membershipSnapshot.Status,
             IsApproved = profile?.IsApproved ?? false,
             City = profile?.City,
             CountryCode = profile?.CountryCode,
@@ -146,6 +153,7 @@ public class ProfileCardViewComponent : ViewComponent
             EmergencyContactRelationship = canViewLegalName ? profile?.EmergencyContactRelationship : null,
             HasPendingConsents = membershipSnapshot.PendingConsentCount > 0,
             PendingConsentCount = membershipSnapshot.PendingConsentCount,
+            HasNobodiesTeamEmail = hasNobodiesTeamEmail,
             ViewMode = viewMode,
             CanViewLegalName = canViewLegalName,
             UserEmails = visibleEmails.Select(e => new UserEmailDisplayViewModel
@@ -170,6 +178,7 @@ public class ProfileCardViewComponent : ViewComponent
                 Description = vh.Description
             }).ToList(),
             Teams = displayableTeams,
+            PreferredLanguage = user.PreferredLanguage,
             CanSendMessage = !isOwnProfile
                 && !visibleEmails.Any(e => e.Visibility >= ContactFieldVisibility.AllActiveProfiles)
         };

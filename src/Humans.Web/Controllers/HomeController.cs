@@ -95,7 +95,7 @@ public class HomeController : HumansControllerBase
         {
             DisplayName = user.DisplayName,
             ProfilePictureUrl = user.ProfilePictureUrl,
-            MembershipStatus = membershipSnapshot.Status.ToString(),
+            MembershipStatus = membershipSnapshot.Status,
             HasProfile = profile != null,
             ProfileComplete = profile != null && !string.IsNullOrEmpty(profile.FirstName),
             PendingConsents = membershipSnapshot.PendingConsentCount,
@@ -106,7 +106,7 @@ public class HomeController : HumansControllerBase
             IsRejected = profile?.RejectedAt != null,
             RejectionReason = profile?.RejectionReason,
             HasPendingApplication = hasPendingApp,
-            LatestApplicationStatus = latestApplication?.Status.ToString(),
+            LatestApplicationStatus = latestApplication?.Status,
             LatestApplicationDate = latestApplication?.SubmittedAt.ToDateTimeUtc(),
             LatestApplicationTier = latestApplication?.MembershipTier,
             TermExpiresAt = termExpiresAt,
@@ -127,20 +127,26 @@ public class HomeController : HumansControllerBase
                 var urgentItems = new List<UrgentShiftItem>();
                 foreach (var u in urgentShifts)
                 {
+                    if (u.Shift == null)
+                    {
+                        _logger.LogWarning("Skipping urgent shift item because shift data was missing");
+                        continue;
+                    }
+
                     try
                     {
                         urgentItems.Add(new UrgentShiftItem
                         {
-                            Shift = u.Shift!,
+                            Shift = u.Shift,
                             DepartmentName = u.DepartmentName ?? "Unknown",
-                            AbsoluteStart = u.Shift!.GetAbsoluteStart(activeEvent),
+                            AbsoluteStart = u.Shift.GetAbsoluteStart(activeEvent),
                             RemainingSlots = u.RemainingSlots,
                             UrgencyScore = u.UrgencyScore
                         });
                     }
                     catch (Exception ex)
                     {
-                        _logger.LogError(ex, "Failed to build urgent shift item for shift {ShiftId}", u.Shift!.Id);
+                        _logger.LogError(ex, "Failed to build urgent shift item for shift {ShiftId}", u.Shift.Id);
                     }
                 }
 
@@ -156,12 +162,18 @@ public class HomeController : HumansControllerBase
                     {
                         try
                         {
+                            if (s.Shift == null)
+                            {
+                                _logger.LogWarning("Skipping signup {SignupId} on dashboard because shift data was missing", s.Id);
+                                continue;
+                            }
+
                             var item = new MySignupItem
                             {
                                 Signup = s,
-                                DepartmentName = s.Shift?.Rota?.Team?.Name ?? "Unknown",
-                                AbsoluteStart = s.Shift!.GetAbsoluteStart(activeEvent),
-                                AbsoluteEnd = s.Shift!.GetAbsoluteEnd(activeEvent)
+                                DepartmentName = s.Shift.Rota?.Team?.Name ?? "Unknown",
+                                AbsoluteStart = s.Shift.GetAbsoluteStart(activeEvent),
+                                AbsoluteEnd = s.Shift.GetAbsoluteEnd(activeEvent)
                             };
                             if (item.AbsoluteEnd > now)
                                 nextShifts.Add(item);

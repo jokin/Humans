@@ -62,6 +62,7 @@ public class TeamAdminController : HumansTeamControllerBase
         }
         catch (Exception ex) when (ex is InvalidOperationException or DbUpdateException or ArgumentException)
         {
+            _logger.LogWarning(ex, "Failed to approve join request {RequestId} for team {TeamId} by user {UserId}", requestId, team.Id, user.Id);
             SetError(ex.Message);
         }
 
@@ -91,6 +92,7 @@ public class TeamAdminController : HumansTeamControllerBase
         }
         catch (InvalidOperationException ex)
         {
+            _logger.LogWarning(ex, "Failed to reject join request {RequestId} for team {TeamId} by user {UserId}", requestId, team.Id, user.Id);
             SetError(ex.Message);
         }
 
@@ -130,7 +132,7 @@ public class TeamAdminController : HumansTeamControllerBase
                 ProfilePictureUrl = m.User.ProfilePictureUrl,
                 HasCustomProfilePicture = customPictureByUserId.ContainsKey(m.UserId),
                 CustomProfilePictureUrl = customPictureByUserId.GetValueOrDefault(m.UserId),
-                Role = m.Role.ToString(),
+                Role = m.Role,
                 JoinedAt = m.JoinedAt.ToDateTimeUtc(),
                 IsCoordinator = m.Role == TeamMemberRole.Coordinator
             }).ToList();
@@ -146,7 +148,7 @@ public class TeamAdminController : HumansTeamControllerBase
                 UserDisplayName = r.User.DisplayName,
                 UserEmail = r.User.Email ?? "",
                 UserProfilePictureUrl = r.User.ProfilePictureUrl,
-                Status = r.Status.ToString(),
+                Status = r.Status,
                 Message = r.Message,
                 RequestedAt = r.RequestedAt.ToDateTimeUtc()
             }).ToList();
@@ -189,6 +191,7 @@ public class TeamAdminController : HumansTeamControllerBase
         }
         catch (InvalidOperationException ex)
         {
+            _logger.LogWarning(ex, "Failed to remove member {MemberUserId} from team {TeamId} by user {UserId}", userId, team.Id, user.Id);
             SetError(ex.Message);
         }
 
@@ -212,6 +215,7 @@ public class TeamAdminController : HumansTeamControllerBase
         }
         catch (InvalidOperationException ex)
         {
+            _logger.LogWarning(ex, "Failed to add member {MemberUserId} to team {TeamId} by user {UserId}", model.UserId, team.Id, user.Id);
             SetError(ex.Message);
         }
 
@@ -295,7 +299,9 @@ public class TeamAdminController : HumansTeamControllerBase
                 ProvisionedAt = r.ProvisionedAt.ToDateTimeUtc(),
                 LastSyncedAt = r.LastSyncedAt?.ToDateTimeUtc(),
                 IsActive = r.IsActive,
-                ErrorMessage = r.ErrorMessage
+                ErrorMessage = r.ErrorMessage,
+                DrivePermissionLevel = r.DrivePermissionLevel,
+                IsDriveResource = r.ResourceType is GoogleResourceType.DriveFolder or GoogleResourceType.DriveFile or GoogleResourceType.SharedDrive
             }).ToList()
         };
 
@@ -329,7 +335,7 @@ public class TeamAdminController : HumansTeamControllerBase
             return RedirectToAction(nameof(Resources), new { slug });
         }
 
-        var result = await _teamResourceService.LinkDriveResourceAsync(team.Id, model.ResourceUrl);
+        var result = await _teamResourceService.LinkDriveResourceAsync(team.Id, model.ResourceUrl, model.PermissionLevel);
 
         if (result.Success)
         {
@@ -491,7 +497,7 @@ public class TeamAdminController : HumansTeamControllerBase
                 ProfilePictureUrl = m.User.ProfilePictureUrl,
                 HasCustomProfilePicture = customPictureByUserId.ContainsKey(m.UserId),
                 CustomProfilePictureUrl = customPictureByUserId.GetValueOrDefault(m.UserId),
-                Role = m.Role.ToString(),
+                Role = m.Role,
                 JoinedAt = m.JoinedAt.ToDateTimeUtc(),
                 IsCoordinator = m.Role == TeamMemberRole.Coordinator
             }).ToList()
@@ -524,6 +530,7 @@ public class TeamAdminController : HumansTeamControllerBase
         }
         catch (Exception ex) when (ex is InvalidOperationException or DbUpdateException or ArgumentException)
         {
+            _logger.LogWarning(ex, "Failed to create role '{RoleName}' for team {TeamId} by user {UserId}", model.Name, team.Id, user.Id);
             SetError(ex.Message);
         }
 
@@ -554,6 +561,7 @@ public class TeamAdminController : HumansTeamControllerBase
         }
         catch (Exception ex) when (ex is InvalidOperationException or DbUpdateException or ArgumentException)
         {
+            _logger.LogWarning(ex, "Failed to update role {RoleId} for team {TeamId} by user {UserId}", roleId, team.Id, user.Id);
             SetError(ex.Message);
         }
 
@@ -577,6 +585,7 @@ public class TeamAdminController : HumansTeamControllerBase
         }
         catch (Exception ex) when (ex is InvalidOperationException or DbUpdateException or ArgumentException)
         {
+            _logger.LogWarning(ex, "Failed to delete role {RoleId} for team {TeamId} by user {UserId}", roleId, team.Id, user.Id);
             SetError(ex.Message);
         }
 
@@ -609,6 +618,7 @@ public class TeamAdminController : HumansTeamControllerBase
         }
         catch (Exception ex) when (ex is InvalidOperationException or DbUpdateException or ArgumentException)
         {
+            _logger.LogWarning(ex, "Failed to toggle management flag for role {RoleId} in team {TeamId} by user {UserId}", roleId, team.Id, user.Id);
             SetError(ex.Message);
         }
 
@@ -633,6 +643,7 @@ public class TeamAdminController : HumansTeamControllerBase
         }
         catch (Exception ex) when (ex is InvalidOperationException or DbUpdateException or ArgumentException)
         {
+            _logger.LogWarning(ex, "Failed to assign member {MemberUserId} to role {RoleId} in team {TeamId} by user {UserId}", model.UserId, roleId, team.Id, user.Id);
             SetError(ex.Message);
         }
 
@@ -667,6 +678,7 @@ public class TeamAdminController : HumansTeamControllerBase
         }
         catch (Exception ex) when (ex is InvalidOperationException or DbUpdateException or ArgumentException)
         {
+            _logger.LogWarning(ex, "Failed to unassign member {MemberId} from role {RoleId} in team {TeamId} by user {UserId}", memberId, roleId, team.Id, user.Id);
             SetError(ex.Message);
         }
 
@@ -704,6 +716,7 @@ public class TeamAdminController : HumansTeamControllerBase
             Slug = team.Slug,
             TeamName = team.DisplayName,
             IsPublicPage = team.IsPublicPage,
+            ShowCoordinatorsOnPublicPage = team.ShowCoordinatorsOnPublicPage,
             CanBePublic = canBePublic,
             PageContent = team.PageContent,
             CallsToAction = ctas
@@ -750,13 +763,15 @@ public class TeamAdminController : HumansTeamControllerBase
                 model.PageContent,
                 callsToAction,
                 model.IsPublicPage,
+                model.ShowCoordinatorsOnPublicPage,
                 user.Id);
 
-            TempData["SuccessMessage"] = _localizer["EditTeamPage_Saved"].Value;
+            SetSuccess(_localizer["EditTeamPage_Saved"].Value);
             return RedirectToAction("Details", "Team", new { slug });
         }
         catch (InvalidOperationException ex)
         {
+            _logger.LogWarning(ex, "Failed to update team page for team {TeamId} by user {UserId}", team.Id, user.Id);
             ModelState.AddModelError("", ex.Message);
             model.Slug = team.Slug;
             model.TeamName = team.DisplayName;

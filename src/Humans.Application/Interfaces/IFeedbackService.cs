@@ -31,4 +31,15 @@ public interface IFeedbackService
     Task SendResponseAsync(
         Guid id, string message, Guid? actorUserId,
         CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyDictionary<Guid, int>> GetResponseCountsAsync(
+        IEnumerable<Guid> reportIds, CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<FeedbackResponseDetail>> GetResponseDetailsAsync(
+        Guid reportId, CancellationToken cancellationToken = default);
 }
+
+/// <summary>
+/// Details of a single admin response to a feedback report, derived from audit log.
+/// </summary>
+public record FeedbackResponseDetail(DateTime SentAt, string ActorName);

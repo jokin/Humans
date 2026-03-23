@@ -71,6 +71,19 @@ public class ProfileService : IProfileService
         return (profile, latestApplication, snapshot.PendingConsentCount);
     }
 
+    public async Task<IReadOnlyList<CampaignGrant>> GetActiveOrCompletedCampaignGrantsAsync(
+        Guid userId, CancellationToken ct = default)
+    {
+        return await _dbContext.CampaignGrants
+            .AsNoTracking()
+            .Include(g => g.Campaign)
+            .Include(g => g.Code)
+            .Where(g => g.UserId == userId
+                && (g.Campaign.Status == CampaignStatus.Active || g.Campaign.Status == CampaignStatus.Completed))
+            .OrderByDescending(g => g.AssignedAt)
+            .ToListAsync(ct);
+    }
+
     public async Task<(Profile? Profile, bool IsTierLocked, MemberApplication? PendingApplication)>
         GetProfileEditDataAsync(Guid userId, CancellationToken ct = default)
     {
@@ -156,6 +169,7 @@ public class ProfileService : IProfileService
             }
             catch (ArgumentOutOfRangeException)
             {
+                // Invalid month/day combinations from form input are treated as "no birthday provided".
                 profile.DateOfBirth = null;
             }
         }
@@ -239,7 +253,8 @@ public class ProfileService : IProfileService
         }
 
         await _dbContext.SaveChangesAsync(ct);
-        _cache.Remove(CacheKeys.NavBadgeCounts);
+        _cache.InvalidateNavBadgeCounts();
+        _cache.InvalidateActiveTeams();
 
         // Update profile cache if profile is approved
         if (profile.IsApproved && !profile.IsSuspended && user != null)
@@ -307,7 +322,7 @@ public class ProfileService : IProfileService
 
         await _dbContext.SaveChangesAsync(ct);
         UpdateProfileCache(userId, null);
-        _cache.Remove(CacheKeys.ActiveTeams);
+        _cache.InvalidateUserAccess(userId);
 
         _logger.LogWarning(
             "User {UserId} requested account deletion. Scheduled for {DeletionDate}. " +
@@ -541,17 +556,31 @@ public class ProfileService : IProfileService
     public async Task<IReadOnlyList<Application.DTOs.AdminHumanRow>> GetFilteredHumansAsync(
         string? search, string? statusFilter, CancellationToken ct = default)
     {
-        var query = _dbContext.Users.AsQueryable();
+        var users = await _dbContext.Users
+            .Select(u => new
+            {
+                u.Id,
+                Email = u.Email ?? string.Empty,
+                u.DisplayName,
+                u.ProfilePictureUrl,
+                CreatedAt = u.CreatedAt.ToDateTimeUtc(),
+                LastLoginAt = u.LastLoginAt != null ? u.LastLoginAt.Value.ToDateTimeUtc() : (DateTime?)null,
+                HasProfile = u.Profile != null,
+                IsApproved = u.Profile != null && u.Profile.IsApproved,
+            })
+            .ToListAsync(ct);
 
         if (!string.IsNullOrWhiteSpace(search))
         {
-            query = query.Where(u =>
-                u.Email!.Contains(search) ||
-                u.DisplayName.Contains(search));
+            users = users
+                .Where(u =>
+                    u.Email.Contains(search, StringComparison.OrdinalIgnoreCase) ||
+                    u.DisplayName.Contains(search, StringComparison.OrdinalIgnoreCase))
+                .ToList();
         }
 
         // Partition once upfront — used for both filtering and status label assignment
-        var allIds = await query.Select(u => u.Id).ToListAsync(ct);
+        var allIds = users.Select(u => u.Id).ToList();
         var partition = await _membershipCalculator.PartitionUsersAsync(allIds, ct);
 
         // Apply filter using partition buckets
@@ -566,24 +595,9 @@ public class ProfileService : IProfileService
             _ => null
         };
 
-        if (filteredIds != null)
-        {
-            query = query.Where(u => filteredIds.Contains(u.Id));
-        }
-
-        var rows = await query
-            .Select(u => new
-            {
-                u.Id,
-                Email = u.Email ?? string.Empty,
-                u.DisplayName,
-                u.ProfilePictureUrl,
-                CreatedAt = u.CreatedAt.ToDateTimeUtc(),
-                LastLoginAt = u.LastLoginAt != null ? u.LastLoginAt.Value.ToDateTimeUtc() : (DateTime?)null,
-                HasProfile = u.Profile != null,
-                IsApproved = u.Profile != null && u.Profile.IsApproved,
-            })
-            .ToListAsync(ct);
+        var rows = filteredIds != null
+            ? users.Where(u => filteredIds.Contains(u.Id)).ToList()
+            : users;
 
         return rows.Select(r => new Application.DTOs.AdminHumanRow(
             r.Id,
@@ -738,15 +752,7 @@ public class ProfileService : IProfileService
     }
 
     public void UpdateProfileCache(Guid userId, CachedProfile? newValue)
-    {
-        if (_cache.TryGetValue(CacheKeys.ApprovedProfiles, out ConcurrentDictionary<Guid, CachedProfile>? cached) && cached != null)
-        {
-            if (newValue != null)
-                cached[userId] = newValue;
-            else
-                cached.TryRemove(userId, out _);
-        }
-    }
+        => _cache.UpdateApprovedProfile(userId, newValue);
 
     private static (string? Field, string? Snippet) DetermineMatchFromCache(CachedProfile p, string query)
     {
