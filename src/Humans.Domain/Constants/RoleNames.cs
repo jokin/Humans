@@ -55,4 +55,10 @@ public static class RoleNames
     /// Guide Moderator — can approve, reject, and request edits on event guide submissions.
     /// </summary>
     public const string GuideModerator = "GuideModerator";
+
+    /// <summary>
+    /// Feedback Administrator — can view all feedback reports, respond to reporters,
+    /// manage feedback status, and link GitHub issues.
+    /// </summary>
+    public const string FeedbackAdmin = "FeedbackAdmin";
 }

@@ -68,6 +68,7 @@ public class HumansDbContext : IdentityDbContext<User, IdentityRole<Guid>, Guid>
     public DbSet<UserGuidePreference> UserGuidePreferences => Set<UserGuidePreference>();
     public DbSet<UserEventFavourite> UserEventFavourites => Set<UserEventFavourite>();
     public DbSet<FeedbackReport> FeedbackReports => Set<FeedbackReport>();
+    public DbSet<FeedbackMessage> FeedbackMessages => Set<FeedbackMessage>();
     public DbSet<AccountMergeRequest> AccountMergeRequests => Set<AccountMergeRequest>();
 
     protected override void OnModelCreating(ModelBuilder builder)
