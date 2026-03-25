@@ -366,7 +366,8 @@ public class CampController : HumansCampControllerBase
                 null, // WebOrSocialUrl legacy — new registrations/edits use Links
                 updateLinks.Count > 0 ? updateLinks : null,
                 model.IsSwissCamp,
-                model.TimesAtNowhere);
+                model.TimesAtNowhere,
+                model.HideHistoricalNames);
 
             await _campService.UpdateSeasonAsync(model.SeasonId, MapToSeasonData(model));
 
@@ -535,6 +536,62 @@ public class CampController : HumansCampControllerBase
 
 
     // ======================================================================
+    // Historical name management
+    // ======================================================================
+
+    [Authorize]
+    [HttpPost("{slug}/HistoricalNames/Add")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> AddHistoricalName(string slug, string name)
+    {
+        var (errorResult, _, camp) = await ResolveCampManagementAsync(slug);
+        if (errorResult is not null)
+            return errorResult;
+
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            SetError("Name cannot be empty.");
+            return RedirectToAction(nameof(Edit), new { slug });
+        }
+
+        try
+        {
+            await _campService.AddHistoricalNameAsync(camp.Id, name);
+            SetSuccess("Historical name added.");
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogWarning(ex, "Adding historical name failed for camp {CampId}", camp.Id);
+            SetError(ex.Message);
+        }
+
+        return RedirectToAction(nameof(Edit), new { slug });
+    }
+
+    [Authorize]
+    [HttpPost("{slug}/HistoricalNames/Remove/{nameId:guid}")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> RemoveHistoricalName(string slug, Guid nameId)
+    {
+        var (errorResult, _, camp) = await ResolveCampManagementAsync(slug);
+        if (errorResult is not null)
+            return errorResult;
+
+        try
+        {
+            await _campService.RemoveHistoricalNameAsync(nameId);
+            SetSuccess("Historical name removed.");
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogWarning(ex, "Removing historical name {NameId} failed for camp {CampId}", nameId, camp.Id);
+            SetError(ex.Message);
+        }
+
+        return RedirectToAction(nameof(Edit), new { slug });
+    }
+
+    // ======================================================================
     // Image management
     // ======================================================================
 
@@ -691,6 +748,7 @@ public class CampController : HumansCampControllerBase
             ContactPhone = editData.ContactPhone,
             Links = [.. editData.Links],
             IsSwissCamp = editData.IsSwissCamp,
+            HideHistoricalNames = editData.HideHistoricalNames,
             TimesAtNowhere = editData.TimesAtNowhere,
             BlurbLong = editData.BlurbLong,
             BlurbShort = editData.BlurbShort,
@@ -722,6 +780,14 @@ public class CampController : HumansCampControllerBase
                     Id = image.Id,
                     Url = image.Url,
                     SortOrder = image.SortOrder
+                }).ToList(),
+            ExistingHistoricalNames = editData.HistoricalNames
+                .Select(h => new CampHistoricalNameViewModel
+                {
+                    Id = h.Id,
+                    Name = h.Name,
+                    Year = h.Year,
+                    Source = h.Source
                 }).ToList()
         };
 
@@ -735,6 +801,7 @@ public class CampController : HumansCampControllerBase
             Name = campDetail.Name,
             Links = [.. campDetail.Links],
             IsSwissCamp = campDetail.IsSwissCamp,
+            HideHistoricalNames = campDetail.HideHistoricalNames,
             TimesAtNowhere = campDetail.TimesAtNowhere,
             HistoricalNames = [.. campDetail.HistoricalNames],
             ImageUrls = [.. campDetail.ImageUrls],
