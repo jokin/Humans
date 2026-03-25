@@ -56,12 +56,17 @@ public interface ICampService
     // Camp updates
     Task UpdateCampAsync(Guid campId, string contactEmail, string contactPhone,
         string? webOrSocialUrl, List<CampLink>? links, bool isSwissCamp, int timesAtNowhere,
+        bool hideHistoricalNames,
         CancellationToken cancellationToken = default);
     Task DeleteCampAsync(Guid campId, CancellationToken cancellationToken = default);
 
     // Lead management
     Task<CampLead> AddLeadAsync(Guid campId, Guid userId, CancellationToken cancellationToken = default);
     Task RemoveLeadAsync(Guid leadId, CancellationToken cancellationToken = default);
+
+    // Historical names
+    Task AddHistoricalNameAsync(Guid campId, string name, CancellationToken cancellationToken = default);
+    Task RemoveHistoricalNameAsync(Guid historicalNameId, CancellationToken cancellationToken = default);
 
     // Authorization checks
     Task<bool> IsUserCampLeadAsync(Guid userId, Guid campId, CancellationToken cancellationToken = default);
@@ -133,6 +138,7 @@ public record CampDetailData(
     IReadOnlyList<CampLink> Links,
     bool IsSwissCamp,
     int TimesAtNowhere,
+    bool HideHistoricalNames,
     IReadOnlyList<string> HistoricalNames,
     IReadOnlyList<string> ImageUrls,
     IReadOnlyList<CampLeadSummary> Leads,
@@ -154,6 +160,7 @@ public record CampEditData(
     string ContactPhone,
     IReadOnlyList<string> Links,
     bool IsSwissCamp,
+    bool HideHistoricalNames,
     int TimesAtNowhere,
     string BlurbLong,
     string BlurbShort,
@@ -173,12 +180,19 @@ public record CampEditData(
     string? ContainerNotes,
     ElectricalGrid? ElectricalGrid,
     IReadOnlyList<CampLeadSummary> Leads,
-    IReadOnlyList<CampImageSummary> Images);
+    IReadOnlyList<CampImageSummary> Images,
+    IReadOnlyList<CampHistoricalNameSummary> HistoricalNames);
 
 public record CampImageSummary(
     Guid Id,
     string Url,
     int SortOrder);
+
+public record CampHistoricalNameSummary(
+    Guid Id,
+    string Name,
+    int? Year,
+    string Source);
 
 public record CampSeasonDetailData(
     Guid Id,
