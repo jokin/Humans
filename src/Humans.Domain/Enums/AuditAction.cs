@@ -64,9 +64,11 @@ public enum AuditAction
     WorkspaceAccountSuspended,
     WorkspaceAccountReactivated,
     WorkspaceAccountPasswordReset,
+    WorkspaceAccountLinked,
     AccountMergeRequested,
     AccountMergeAccepted,
     AccountMergeRejected,
     GoogleResourceSettingsRemediated,
     CommunicationPreferenceChanged,
+    ContactCreated,
 }

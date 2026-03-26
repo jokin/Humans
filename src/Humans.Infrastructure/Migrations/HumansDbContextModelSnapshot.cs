@@ -334,6 +334,9 @@ namespace Humans.Infrastructure.Migrations
                     b.Property<Guid>("CreatedByUserId")
                         .HasColumnType("uuid");
 
+                    b.Property<bool>("HideHistoricalNames")
+                        .HasColumnType("boolean");
+
                     b.Property<bool>("IsSwissCamp")
                         .HasColumnType("boolean");
 
@@ -1580,6 +1583,11 @@ namespace Humans.Infrastructure.Migrations
                     b.Property<Guid>("EventSettingsId")
                         .HasColumnType("uuid");
 
+                    b.Property<bool>("IsVisibleToVolunteers")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(256)
@@ -2388,6 +2396,10 @@ namespace Humans.Infrastructure.Migrations
                         .IsConcurrencyToken()
                         .HasColumnType("text");
 
+                    b.Property<string>("ContactSource")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
                     b.Property<Instant>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -2409,6 +2421,14 @@ namespace Humans.Infrastructure.Migrations
                     b.Property<bool>("EmailConfirmed")
                         .HasColumnType("boolean");
 
+                    b.Property<string>("ExternalSourceId")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("GoogleEmail")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
                     b.Property<Guid?>("ICalToken")
                         .HasColumnType("uuid");
 
@@ -2422,6 +2442,9 @@ namespace Humans.Infrastructure.Migrations
                         .HasColumnType("boolean");
 
                     b.Property<DateTimeOffset?>("LockoutEnd")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Instant?>("MagicLinkSentAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("NormalizedEmail")
@@ -2478,6 +2501,9 @@ namespace Humans.Infrastructure.Migrations
                     b.HasIndex("NormalizedUserName")
                         .IsUnique()
                         .HasDatabaseName("UserNameIndex");
+
+                    b.HasIndex("ContactSource", "ExternalSourceId")
+                        .HasFilter("\"ExternalSourceId\" IS NOT NULL");
 
                     b.ToTable("users", (string)null);
                 });

@@ -46,10 +46,25 @@ public interface IShiftSignupService
     Task<SignupResult> MarkNoShowAsync(Guid signupId, Guid reviewerUserId);
 
     /// <summary>
+    /// Removes a confirmed signup (coordinator/admin unassignment).
+    /// </summary>
+    Task<SignupResult> RemoveSignupAsync(Guid signupId, Guid removedByUserId, string? reason);
+
+    /// <summary>
     /// Creates signups for a date range of all-day shifts (build/strike).
     /// All signups share a SignupBlockId for grouped bail.
     /// </summary>
     Task<SignupResult> SignUpRangeAsync(Guid userId, Guid rotaId, int startDayOffset, int endDayOffset, Guid? actorUserId = null, bool isPrivileged = false);
+
+    /// <summary>
+    /// Approves all pending signups sharing a SignupBlockId.
+    /// </summary>
+    Task<SignupResult> ApproveRangeAsync(Guid signupBlockId, Guid reviewerUserId);
+
+    /// <summary>
+    /// Refuses all pending signups sharing a SignupBlockId.
+    /// </summary>
+    Task<SignupResult> RefuseRangeAsync(Guid signupBlockId, Guid reviewerUserId, string? reason);
 
     /// <summary>
     /// Bails all signups sharing a SignupBlockId.
@@ -65,6 +80,11 @@ public interface IShiftSignupService
     /// Gets a signup by primary key with Shift.Rota.Team included.
     /// </summary>
     Task<ShiftSignup?> GetByIdAsync(Guid signupId);
+
+    /// <summary>
+    /// Gets the first signup in a block with Shift.Rota included (for team ownership checks).
+    /// </summary>
+    Task<ShiftSignup?> GetByBlockIdFirstAsync(Guid signupBlockId);
 
     /// <summary>
     /// Gets all signups for a shift.

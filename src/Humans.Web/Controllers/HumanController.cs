@@ -11,6 +11,7 @@ using Humans.Domain.Enums;
 using Humans.Infrastructure.Data;
 using Humans.Web.Authorization;
 using Humans.Web.Extensions;
+using Humans.Web.Helpers;
 using Humans.Web.Models;
 
 namespace Humans.Web.Controllers;
@@ -27,9 +28,13 @@ public class HumanController : HumansControllerBase
     private readonly IRoleAssignmentService _roleAssignmentService;
     private readonly IShiftSignupService _shiftSignupService;
     private readonly IShiftManagementService _shiftMgmt;
+    private readonly IGoogleWorkspaceUserService _workspaceUserService;
+    private readonly IUserEmailService _userEmailService;
+    private readonly IContactService _contactService;
     private readonly IClock _clock;
     private readonly IStringLocalizer<SharedResource> _localizer;
     private readonly HumansDbContext _dbContext;
+    private readonly ILogger<HumanController> _logger;
 
     public HumanController(
         IProfileService profileService,
@@ -40,9 +45,13 @@ public class HumanController : HumansControllerBase
         IRoleAssignmentService roleAssignmentService,
         IShiftSignupService shiftSignupService,
         IShiftManagementService shiftMgmt,
+        IGoogleWorkspaceUserService workspaceUserService,
+        IUserEmailService userEmailService,
+        IContactService contactService,
         IClock clock,
         IStringLocalizer<SharedResource> localizer,
-        HumansDbContext dbContext)
+        HumansDbContext dbContext,
+        ILogger<HumanController> logger)
         : base(userManager)
     {
         _profileService = profileService;
@@ -53,9 +62,13 @@ public class HumanController : HumansControllerBase
         _roleAssignmentService = roleAssignmentService;
         _shiftSignupService = shiftSignupService;
         _shiftMgmt = shiftMgmt;
+        _workspaceUserService = workspaceUserService;
+        _userEmailService = userEmailService;
+        _contactService = contactService;
         _clock = clock;
         _localizer = localizer;
         _dbContext = dbContext;
+        _logger = logger;
     }
 
     [HttpGet("{id:guid}")]
@@ -119,6 +132,33 @@ public class HumanController : HumansControllerBase
         };
 
         return View("~/Views/Profile/Index.cshtml", viewModel);
+    }
+
+    [HttpGet("{id:guid}/Popover")]
+    public async Task<IActionResult> Popover(Guid id)
+    {
+        var profile = await _profileService.GetProfileAsync(id);
+        if (profile is null) return NotFound();
+
+        var teams = await _dbContext.TeamMembers
+            .Where(tm => tm.UserId == id && tm.LeftAt == null)
+            .Select(tm => tm.Team!.Name)
+            .OrderBy(n => n)
+            .ToListAsync();
+
+        var vm = new ProfileSummaryViewModel
+        {
+            UserId = id,
+            DisplayName = profile.User.DisplayName,
+            Email = profile.User.Email,
+            ProfilePictureUrl = profile.User.ProfilePictureUrl,
+            MembershipTier = profile.MembershipTier.ToString(),
+            MembershipStatus = profile.IsSuspended ? "Suspended"
+                : profile.IsApproved ? "Active" : "Pending",
+            Teams = teams
+        };
+
+        return PartialView("_HumanPopover", vm);
     }
 
     [HttpGet("{id:guid}/SendMessage")]
@@ -212,7 +252,7 @@ public class HumanController : HumansControllerBase
         return RedirectToAction(nameof(View), new { id });
     }
 
-    [Authorize(Roles = RoleGroups.BoardOrAdmin)]
+    [Authorize(Roles = RoleGroups.HumanAdminBoardOrAdmin)]
     [HttpGet("Admin")]
     public async Task<IActionResult> Humans(string? search, string? filter, string sort = "name", string dir = "asc", int page = 1)
     {
@@ -283,7 +323,7 @@ public class HumanController : HumansControllerBase
         return View(viewModel);
     }
 
-    [Authorize(Roles = RoleGroups.BoardOrAdmin)]
+    [Authorize(Roles = RoleGroups.HumanAdminBoardOrAdmin)]
     [HttpGet("{id:guid}/Admin")]
     public async Task<IActionResult> HumanDetail(Guid id)
     {
@@ -358,10 +398,87 @@ public class HumanController : HumansControllerBase
             }).ToList()
         };
 
+        // Check for @nobodies.team email
+        viewModel.NobodiesTeamEmail = await _dbContext.UserEmails
+            .Where(ue => ue.UserId == id && ue.IsVerified && EF.Functions.ILike(ue.Email, "%@nobodies.team"))
+            .Select(ue => ue.Email)
+            .FirstOrDefaultAsync();
+
         return View(viewModel);
     }
 
-    [Authorize(Roles = RoleGroups.BoardOrAdmin)]
+    [Authorize(Roles = RoleGroups.HumanAdminOrAdmin)]
+    [HttpPost("{id:guid}/ProvisionEmail")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> ProvisionEmail(Guid id, string emailPrefix)
+    {
+        if (string.IsNullOrWhiteSpace(emailPrefix))
+        {
+            SetError("Email prefix is required.");
+            return RedirectToAction(nameof(HumanDetail), new { id });
+        }
+
+        var user = await _dbContext.Users
+            .Include(u => u.UserEmails)
+            .FirstOrDefaultAsync(u => u.Id == id);
+        if (user is null)
+            return NotFound();
+
+        var fullEmail = $"{emailPrefix.Trim().ToLowerInvariant()}@nobodies.team";
+
+        try
+        {
+            // Check if account already exists in Google Workspace
+            var existing = await _workspaceUserService.GetAccountAsync(fullEmail);
+            if (existing is not null)
+            {
+                SetError($"Account {fullEmail} already exists in Google Workspace.");
+                return RedirectToAction(nameof(HumanDetail), new { id });
+            }
+
+            // Use their current notification target as recovery email (if not @nobodies.team)
+            var recoveryEmail = user.GetEffectiveEmail();
+            if (recoveryEmail?.EndsWith("@nobodies.team", StringComparison.OrdinalIgnoreCase) == true)
+                recoveryEmail = user.Email; // fall back to OAuth email
+
+            // Generate temp password and provision in Google Workspace
+            var tempPassword = PasswordGenerator.GenerateTemporary();
+            var nameParts = user.DisplayName.Split(' ', 2);
+            await _workspaceUserService.ProvisionAccountAsync(
+                fullEmail, nameParts[0], nameParts.Length > 1 ? nameParts[1] : "", tempPassword,
+                recoveryEmail);
+
+            // Auto-link: add as verified UserEmail (also sets notification target for @nobodies.team)
+            await _userEmailService.AddVerifiedEmailAsync(id, fullEmail);
+
+            // Auto-set as Google service email
+            user.GoogleEmail = fullEmail;
+            await _userManager.UpdateAsync(user);
+
+            // Audit
+            var currentUser = await GetCurrentUserAsync();
+            if (currentUser is not null)
+            {
+                await _auditLogService.LogAsync(
+                    AuditAction.WorkspaceAccountProvisioned,
+                    "WorkspaceAccount", id,
+                    $"Provisioned and linked @nobodies.team account: {fullEmail}",
+                    currentUser.Id, currentUser.DisplayName);
+                await _dbContext.SaveChangesAsync();
+            }
+
+            SetSuccess($"Account {fullEmail} provisioned and linked. Temporary password: {tempPassword}");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to provision @nobodies.team account {Email} for user {UserId}", fullEmail, id);
+            SetError($"Failed to provision {fullEmail}. Check logs for details.");
+        }
+
+        return RedirectToAction(nameof(HumanDetail), new { id });
+    }
+
+    [Authorize(Roles = RoleGroups.HumanAdminBoardOrAdmin)]
     [HttpGet("{id:guid}/Outbox")]
     public async Task<IActionResult> Outbox(Guid id)
     {
@@ -374,7 +491,7 @@ public class HumanController : HumansControllerBase
         return View("~/Views/Profile/Outbox.cshtml", messages);
     }
 
-    [Authorize(Roles = RoleGroups.BoardOrAdmin)]
+    [Authorize(Roles = RoleGroups.HumanAdminBoardOrAdmin)]
     [HttpPost("{id:guid}/Admin/Suspend")]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> SuspendHuman(Guid id, string? notes)
@@ -391,7 +508,7 @@ public class HumanController : HumansControllerBase
         return RedirectToAction(nameof(HumanDetail), new { id });
     }
 
-    [Authorize(Roles = RoleGroups.BoardOrAdmin)]
+    [Authorize(Roles = RoleGroups.HumanAdminBoardOrAdmin)]
     [HttpPost("{id:guid}/Admin/Unsuspend")]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> UnsuspendHuman(Guid id)
@@ -408,7 +525,7 @@ public class HumanController : HumansControllerBase
         return RedirectToAction(nameof(HumanDetail), new { id });
     }
 
-    [Authorize(Roles = RoleGroups.BoardOrAdmin)]
+    [Authorize(Roles = RoleGroups.HumanAdminBoardOrAdmin)]
     [HttpPost("{id:guid}/Admin/Approve")]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> ApproveVolunteer(Guid id)
@@ -425,7 +542,7 @@ public class HumanController : HumansControllerBase
         return RedirectToAction(nameof(HumanDetail), new { id });
     }
 
-    [Authorize(Roles = RoleGroups.BoardOrAdmin)]
+    [Authorize(Roles = RoleGroups.HumanAdminBoardOrAdmin)]
     [HttpPost("{id:guid}/Admin/Reject")]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> RejectSignup(Guid id, string? reason)
@@ -448,7 +565,7 @@ public class HumanController : HumansControllerBase
         return RedirectToAction(nameof(HumanDetail), new { id });
     }
 
-    [Authorize(Roles = RoleGroups.BoardOrAdmin)]
+    [Authorize(Roles = RoleGroups.HumanAdminBoardOrAdmin)]
     [HttpGet("{id:guid}/Admin/GoogleSyncAudit")]
     public async Task<IActionResult> HumanGoogleSyncAudit(Guid id)
     {
@@ -467,7 +584,7 @@ public class HumanController : HumansControllerBase
             entries);
     }
 
-    [Authorize(Roles = RoleGroups.BoardOrAdmin)]
+    [Authorize(Roles = RoleGroups.HumanAdminBoardOrAdmin)]
     [HttpGet("{id:guid}/Admin/Roles/Add")]
     public async Task<IActionResult> AddRole(Guid id)
     {
@@ -487,7 +604,7 @@ public class HumanController : HumansControllerBase
         return View(viewModel);
     }
 
-    [Authorize(Roles = RoleGroups.BoardOrAdmin)]
+    [Authorize(Roles = RoleGroups.HumanAdminBoardOrAdmin)]
     [HttpPost("{id:guid}/Admin/Roles/Add")]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> AddRole(Guid id, CreateRoleAssignmentViewModel model)
@@ -532,7 +649,7 @@ public class HumanController : HumansControllerBase
         return RedirectToAction(nameof(HumanDetail), new { id });
     }
 
-    [Authorize(Roles = RoleGroups.BoardOrAdmin)]
+    [Authorize(Roles = RoleGroups.HumanAdminBoardOrAdmin)]
     [HttpPost("{id:guid}/Admin/Roles/{roleId:guid}/End")]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> EndRole(Guid id, Guid roleId, string? notes)
@@ -567,6 +684,118 @@ public class HumanController : HumansControllerBase
 
         SetSuccess(string.Format(_localizer["Admin_RoleEnded"].Value, roleAssignment.RoleName, roleAssignment.User.DisplayName));
         return RedirectToAction(nameof(HumanDetail), new { id = roleAssignment.UserId });
+    }
+
+    [Authorize(Roles = RoleGroups.HumanAdminBoardOrAdmin)]
+    [HttpGet("Admin/Contacts")]
+    public async Task<IActionResult> Contacts(string? search)
+    {
+        try
+        {
+            var allRows = await _contactService.GetFilteredContactsAsync(search);
+
+            var viewModel = new AdminContactListViewModel
+            {
+                TotalCount = allRows.Count,
+                SearchTerm = search,
+                Contacts = allRows.Select(r => new AdminContactViewModel
+                {
+                    Id = r.UserId,
+                    Email = r.Email,
+                    DisplayName = r.DisplayName,
+                    ContactSource = r.ContactSource,
+                    ExternalSourceId = r.ExternalSourceId,
+                    CreatedAt = r.CreatedAt,
+                    HasCommunicationPreferences = r.HasCommunicationPreferences
+                }).ToList()
+            };
+
+            return View(viewModel);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error loading contacts list");
+            SetError(_localizer["Common_Error"].Value);
+            return RedirectToAction(nameof(Humans));
+        }
+    }
+
+    [Authorize(Roles = RoleGroups.HumanAdminBoardOrAdmin)]
+    [HttpGet("Admin/Contacts/{id:guid}")]
+    public async Task<IActionResult> ContactDetail(Guid id)
+    {
+        try
+        {
+            var contact = await _contactService.GetContactDetailAsync(id);
+            if (contact is null)
+                return NotFound();
+
+            var auditLog = await _dbContext.AuditLogEntries
+                .AsNoTracking()
+                .Where(a => a.EntityId == id)
+                .OrderByDescending(a => a.OccurredAt)
+                .ToListAsync();
+
+            var viewModel = new AdminContactDetailViewModel
+            {
+                UserId = contact.Id,
+                Email = contact.Email ?? string.Empty,
+                DisplayName = contact.DisplayName,
+                ContactSource = contact.ContactSource,
+                ExternalSourceId = contact.ExternalSourceId,
+                CreatedAt = contact.CreatedAt,
+                CommunicationPreferences = contact.CommunicationPreferences.ToList(),
+                AuditLog = auditLog
+            };
+
+            return View(viewModel);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error loading contact detail for {ContactId}", id);
+            SetError(_localizer["Common_Error"].Value);
+            return RedirectToAction(nameof(Contacts));
+        }
+    }
+
+    [Authorize(Roles = RoleGroups.HumanAdminBoardOrAdmin)]
+    [HttpGet("Admin/Contacts/Create")]
+    public IActionResult CreateContact()
+    {
+        return View(new CreateContactViewModel());
+    }
+
+    [Authorize(Roles = RoleGroups.HumanAdminBoardOrAdmin)]
+    [HttpPost("Admin/Contacts/Create")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> CreateContact(CreateContactViewModel model)
+    {
+        if (!ModelState.IsValid)
+            return View(model);
+
+        try
+        {
+            var currentUser = await GetCurrentUserAsync();
+            if (currentUser is null)
+                return Unauthorized();
+
+            var contact = await _contactService.CreateContactAsync(
+                model.Email, model.DisplayName, model.Source);
+
+            SetSuccess($"Contact created for {model.Email}.");
+            return RedirectToAction(nameof(ContactDetail), new { id = contact.Id });
+        }
+        catch (InvalidOperationException ex)
+        {
+            ModelState.AddModelError(string.Empty, ex.Message);
+            return View(model);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error creating contact for {Email}", model.Email);
+            ModelState.AddModelError(string.Empty, _localizer["Common_Error"].Value);
+            return View(model);
+        }
     }
 
 }

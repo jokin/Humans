@@ -195,6 +195,7 @@ public class CampService : ICampService
             CreateCampLinks(camp),
             camp.IsSwissCamp,
             camp.TimesAtNowhere,
+            camp.HideHistoricalNames,
             camp.HistoricalNames.Select(h => h.Name).ToList(),
             camp.Images.OrderBy(i => i.SortOrder).Select(i => $"/{i.StoragePath}").ToList(),
             camp.Leads
@@ -450,6 +451,7 @@ public class CampService : ICampService
                     ? [camp.WebOrSocialUrl]
                     : [],
             camp.IsSwissCamp,
+            camp.HideHistoricalNames,
             camp.TimesAtNowhere,
             season.BlurbLong,
             season.BlurbShort,
@@ -475,6 +477,9 @@ public class CampService : ICampService
             camp.Images
                 .OrderBy(i => i.SortOrder)
                 .Select(i => new CampImageSummary(i.Id, $"/{i.StoragePath}", i.SortOrder))
+                .ToList(),
+            camp.HistoricalNames
+                .Select(h => new CampHistoricalNameSummary(h.Id, h.Name, h.Year, h.Source.ToString()))
                 .ToList());
     }
 
@@ -755,6 +760,7 @@ public class CampService : ICampService
 
     public async Task UpdateCampAsync(Guid campId, string contactEmail, string contactPhone,
         string? webOrSocialUrl, List<CampLink>? links, bool isSwissCamp, int timesAtNowhere,
+        bool hideHistoricalNames,
         CancellationToken cancellationToken = default)
     {
         var camp = await _dbContext.Camps.FindAsync([campId], cancellationToken)
@@ -767,6 +773,7 @@ public class CampService : ICampService
         if (links is { Count: > 0 })
             camp.WebOrSocialUrl = null;
         camp.IsSwissCamp = isSwissCamp;
+        camp.HideHistoricalNames = hideHistoricalNames;
         camp.TimesAtNowhere = timesAtNowhere;
         camp.UpdatedAt = _clock.GetCurrentInstant();
 
@@ -868,6 +875,36 @@ public class CampService : ICampService
         await _systemTeamSync.SyncBarrioLeadsMembershipForUserAsync(lead.UserId, cancellationToken);
     }
 
+
+    // ==========================================================================
+    // Historical names
+    // ==========================================================================
+
+    public async Task AddHistoricalNameAsync(Guid campId, string name,
+        CancellationToken cancellationToken = default)
+    {
+        var entry = new CampHistoricalName
+        {
+            Id = Guid.NewGuid(),
+            CampId = campId,
+            Name = name.Trim(),
+            Source = CampNameSource.Manual,
+            CreatedAt = _clock.GetCurrentInstant()
+        };
+
+        _dbContext.CampHistoricalNames.Add(entry);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task RemoveHistoricalNameAsync(Guid historicalNameId,
+        CancellationToken cancellationToken = default)
+    {
+        var entry = await _dbContext.CampHistoricalNames.FindAsync([historicalNameId], cancellationToken)
+            ?? throw new InvalidOperationException("Historical name not found.");
+
+        _dbContext.CampHistoricalNames.Remove(entry);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+    }
 
     // ==========================================================================
     // Authorization checks

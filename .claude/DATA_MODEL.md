@@ -46,7 +46,7 @@
 | TicketAttendee | Individual ticket holder (issued ticket, multiple per order) |
 | TicketSyncState | Singleton tracking ticket sync operational state |
 | EventSettings | Singleton event config — dates, timezone, EE capacity, caps |
-| Rota | Shift container — belongs to department + event, with Period (Build/Event/Strike) and optional PracticalInfo |
+| Rota | Shift container — belongs to department + event, with Period (Build/Event/Strike), optional PracticalInfo, and IsVisibleToVolunteers visibility toggle (default true) |
 | Shift | Single work slot — DayOffset + StartTime + Duration + IsAllDay flag |
 | ShiftSignup | Links User to Shift with state machine (Pending/Confirmed/Refused/Bailed/Cancelled/NoShow), optional SignupBlockId for range signups |
 | GeneralAvailability | Per-user per-event day availability (AvailableDayOffsets stored as jsonb) |
@@ -124,6 +124,25 @@ VolunteerEventProfile n──1 EventSettings
 ```
 
 ## User Entity
+
+### Google Email Preference
+
+| Property | Type | Default | Purpose |
+|----------|------|---------|---------|
+| GoogleEmail | string? (256) | null | Preferred email for Google services (Groups, Drive). Auto-set to @nobodies.team when provisioned/linked. Falls back to OAuth email when null. |
+
+Methods:
+- `GetGoogleServiceEmail()` → `GoogleEmail ?? Email` (for Google resource sync)
+- `GetEffectiveEmail()` → notification target email or OAuth email (for system notifications)
+
+### Contact Import Properties
+
+| Property | Type | Default | Purpose |
+|----------|------|---------|---------|
+| ContactSource | ContactSource? | null | Where imported from (Manual, MailerLite, TicketTailor); null for self-registered users |
+| ExternalSourceId | string?(256) | null | ID in the external source system |
+
+A contact is identified by `ContactSource != null && LastLoginAt == null`. When a contact authenticates, `LastLoginAt` is set and they become a regular user.
 
 ### Campaign-Related Properties
 

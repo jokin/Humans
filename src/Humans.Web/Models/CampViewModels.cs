@@ -45,6 +45,7 @@ public class CampDetailViewModel
     public string Name { get; set; } = string.Empty;
     public List<CampLink> Links { get; set; } = new();
     public bool IsSwissCamp { get; set; }
+    public bool HideHistoricalNames { get; set; }
     public int TimesAtNowhere { get; set; }
     public List<string> HistoricalNames { get; set; } = new();
     public List<string> ImageUrls { get; set; } = new();
@@ -95,6 +96,7 @@ public class CampRegisterViewModel
     public string ContactPhone { get; set; } = string.Empty;
     public List<string> Links { get; set; } = new();
     public bool IsSwissCamp { get; set; }
+    public bool HideHistoricalNames { get; set; }
     public int TimesAtNowhere { get; set; }
     public string? HistoricalNames { get; set; }
     public string BlurbLong { get; set; } = string.Empty;
@@ -126,6 +128,7 @@ public class CampEditViewModel : CampRegisterViewModel
     public bool IsNameLocked { get; set; }
     public List<CampLeadViewModel> Leads { get; set; } = new();
     public List<CampImageViewModel> Images { get; set; } = new();
+    public List<CampHistoricalNameViewModel> ExistingHistoricalNames { get; set; } = new();
 }
 
 public class CampImageViewModel
@@ -133,6 +136,14 @@ public class CampImageViewModel
     public Guid Id { get; set; }
     public string Url { get; set; } = string.Empty;
     public int SortOrder { get; set; }
+}
+
+public class CampHistoricalNameViewModel
+{
+    public Guid Id { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public int? Year { get; set; }
+    public string Source { get; set; } = string.Empty;
 }
 
 // Contact form

@@ -67,7 +67,7 @@ public class GoogleWorkspaceUserService : IGoogleWorkspaceUserService
                 "Google Workspace credentials not configured. Set ServiceAccountKeyPath or ServiceAccountKeyJson.");
         }
 
-        return credential.CreateScoped(DirectoryService.Scope.AdminDirectoryUserReadonly);
+        return credential.CreateScoped(DirectoryService.Scope.AdminDirectoryUser);
     }
 
     public async Task<IReadOnlyList<WorkspaceUserAccount>> ListAccountsAsync(
@@ -108,6 +108,7 @@ public class GoogleWorkspaceUserService : IGoogleWorkspaceUserService
         string firstName,
         string lastName,
         string temporaryPassword,
+        string? recoveryEmail = null,
         CancellationToken ct = default)
     {
         var service = await GetDirectoryServiceAsync();
@@ -125,8 +126,16 @@ public class GoogleWorkspaceUserService : IGoogleWorkspaceUserService
             OrgUnitPath = "/"
         };
 
+        // Set recovery email if provided (for password resets and initial notification)
+        if (!string.IsNullOrEmpty(recoveryEmail) &&
+            !recoveryEmail.EndsWith("@nobodies.team", StringComparison.OrdinalIgnoreCase))
+        {
+            newUser.RecoveryEmail = recoveryEmail;
+        }
+
         var created = await service.Users.Insert(newUser).ExecuteAsync(ct);
-        _logger.LogInformation("Provisioned @{Domain} account: {Email}", _settings.Domain, primaryEmail);
+        _logger.LogInformation("Provisioned @{Domain} account: {Email} (recovery: {Recovery})",
+            _settings.Domain, primaryEmail, recoveryEmail ?? "none");
 
         return MapToAccount(created);
     }
@@ -170,18 +179,25 @@ public class GoogleWorkspaceUserService : IGoogleWorkspaceUserService
     public async Task<WorkspaceUserAccount?> GetAccountAsync(
         string primaryEmail, CancellationToken ct = default)
     {
+        // Users.Get() returns 403 for our service account, but Users.List() with
+        // a query filter works. Use that to check if an account exists.
         var service = await GetDirectoryServiceAsync();
 
-        try
-        {
-            var user = await service.Users.Get(primaryEmail).ExecuteAsync(ct);
-            return MapToAccount(user);
-        }
-        catch (Google.GoogleApiException ex) when (ex.HttpStatusCode == System.Net.HttpStatusCode.NotFound)
+        var request = service.Users.List();
+        request.Domain = _settings.Domain;
+        request.Query = $"email={primaryEmail}";
+        request.MaxResults = 1;
+
+        var response = await request.ExecuteAsync(ct);
+        var user = response.UsersValue?.FirstOrDefault();
+
+        if (user is null)
         {
             _logger.LogDebug("Workspace account not found for email {Email}", primaryEmail);
             return null;
         }
+
+        return MapToAccount(user);
     }
 
     private static WorkspaceUserAccount MapToAccount(User user)
