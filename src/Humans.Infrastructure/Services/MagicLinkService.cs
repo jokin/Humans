@@ -58,10 +58,12 @@ public class MagicLinkService : IMagicLinkService
     public async Task SendMagicLinkAsync(string email, string? returnUrl, CancellationToken ct = default)
     {
         // 1. Look up by verified UserEmail first (supports all verified addresses)
+#pragma warning disable MA0011, RCS1155 // EF Core can only translate parameterless ToUpper()
         var userEmail = await _dbContext.UserEmails
             .Include(ue => ue.User)
             .FirstOrDefaultAsync(ue => ue.IsVerified &&
-                EF.Functions.ILike(ue.Email, email), ct);
+                ue.Email.ToUpper() == email.ToUpper(), ct);
+#pragma warning restore MA0011, RCS1155
 
         if (userEmail is not null)
         {
@@ -137,10 +139,12 @@ public class MagicLinkService : IMagicLinkService
 
     public async Task<User?> FindUserByVerifiedEmailAsync(string email, CancellationToken ct = default)
     {
+#pragma warning disable MA0011, RCS1155 // EF Core can only translate parameterless ToUpper()
         var userEmail = await _dbContext.UserEmails
             .Include(ue => ue.User)
             .FirstOrDefaultAsync(ue => ue.IsVerified &&
-                EF.Functions.ILike(ue.Email, email), ct);
+                ue.Email.ToUpper() == email.ToUpper(), ct);
+#pragma warning restore MA0011, RCS1155
 
         if (userEmail is not null)
         {
