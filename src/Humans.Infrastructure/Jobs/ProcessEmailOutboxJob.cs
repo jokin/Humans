@@ -83,6 +83,18 @@ public class ProcessEmailOutboxJob
         {
             try
             {
+                // Skip invalid test addresses — sending to these bounces and damages sender reputation
+                if (message.RecipientEmail.EndsWith("@localhost", StringComparison.OrdinalIgnoreCase))
+                {
+                    message.Status = EmailOutboxStatus.Sent;
+                    message.SentAt = now;
+                    message.PickedUpAt = null;
+                    _logger.LogInformation(
+                        "Skipped email {MessageId} to test address {Email}",
+                        message.Id, message.RecipientEmail);
+                    continue;
+                }
+
                 Dictionary<string, string>? extraHeaders = null;
                 if (!string.IsNullOrEmpty(message.ExtraHeaders))
                 {
