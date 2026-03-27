@@ -4,7 +4,9 @@
 
 You are working on a ~50k-line ASP.NET Core 10 Clean Architecture codebase (membership management for a Spanish nonprofit). It grew from 10k to 70k lines rapidly, and patterns have diverged — multiple ways of doing the same thing, duplicated logic, inconsistent conventions. Your job is to **consolidate, deduplicate, and standardize** so the codebase becomes more predictable and maintainable.
 
-**Work autonomously.** Do not stop for milestone reports. Find the next opportunity, fix it, verify the build passes, and move to the next one. Keep going until you run out of clear improvements or hit the session limit.
+**Work autonomously.** Do not stop for milestone reports. Find the next opportunity, fix it, verify the build passes, commit, push the branch to `origin`, and move to the next one. Keep going until you run out of clear improvements or hit the session limit.
+
+If this session is resumed later, continue from the existing branch and prior progress instead of restarting completed investigation.
 
 ---
 
