@@ -393,7 +393,7 @@ public class TicketController : HumansControllerBase
 
         var activeHumans = users
             .Where(u => u.Profile is not null &&
-                u.TeamMemberships.Any(tm => tm.TeamId == volunteersTeamId))
+                u.TeamMemberships.Any(tm => tm.TeamId == volunteersTeamId && tm.LeftAt == null))
             .ToList();
 
         var filteredHumans = FilterWhoHasntBoughtHumans(
