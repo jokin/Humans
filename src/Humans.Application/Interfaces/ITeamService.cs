@@ -101,7 +101,8 @@ public record AdminTeamSummary(
     int DriveResourceCount,
     int RoleSlotCount,
     Instant CreatedAt,
-    bool IsChildTeam);
+    bool IsChildTeam,
+    int PendingShiftSignupCount);
 
 public record AdminTeamListResult(
     IReadOnlyList<AdminTeamSummary> Teams,
@@ -178,6 +179,7 @@ public interface ITeamService
         Guid? parentTeamId = null,
         string? googleGroupPrefix = null,
         string? customSlug = null,
+        bool? hasBudget = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>

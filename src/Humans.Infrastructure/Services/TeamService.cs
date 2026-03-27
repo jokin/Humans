@@ -367,6 +367,7 @@ public class TeamService : ITeamService
         Guid? parentTeamId = null,
         string? googleGroupPrefix = null,
         string? customSlug = null,
+        bool? hasBudget = null,
         CancellationToken cancellationToken = default)
     {
         var team = await _dbContext.Teams.FindAsync(new object[] { teamId }, cancellationToken)
@@ -455,6 +456,8 @@ public class TeamService : ITeamService
         team.ParentTeamId = parentTeamId;
         team.GoogleGroupPrefix = googleGroupPrefix;
         team.CustomSlug = customSlug;
+        if (hasBudget.HasValue)
+            team.HasBudget = hasBudget.Value;
         team.UpdatedAt = _clock.GetCurrentInstant();
 
         if (becomingChild)
@@ -524,14 +527,14 @@ public class TeamService : ITeamService
         team.PageContentUpdatedByUserId = updatedByUserId;
         team.UpdatedAt = now;
 
-        await _dbContext.SaveChangesAsync(cancellationToken);
-        TryUpdateCachedTeam(teamId, cachedTeam => cachedTeam with { IsPublicPage = isPublicPage });
-
         var actor = await _dbContext.Users.FindAsync(new object[] { updatedByUserId }, cancellationToken);
         await _auditLogService.LogAsync(
             AuditAction.TeamPageContentUpdated, nameof(Team), teamId,
             $"Team page content updated. Public: {isPublicPage}",
             updatedByUserId, actor?.DisplayName ?? updatedByUserId.ToString());
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        TryUpdateCachedTeam(teamId, cachedTeam => cachedTeam with { IsPublicPage = isPublicPage });
 
         _logger.LogInformation("Team {TeamId} page content updated by {UserId}. Public: {IsPublic}",
             teamId, updatedByUserId, isPublicPage);
@@ -1918,7 +1921,28 @@ public class TeamService : ITeamService
     {
         var (items, totalCount) = await GetAllTeamsForAdminAsync(page, pageSize, cancellationToken);
 
-        return new AdminTeamListResult(BuildAdminTeamSummaries(items), totalCount);
+        var activeEventId = await _dbContext.EventSettings
+            .Where(e => e.IsActive)
+            .Select(e => e.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        // Count distinct signup applications (not individual days).
+        // Multi-day signups share a SignupBlockId; fall back to signup Id for singles.
+        var pendingShiftCounts = activeEventId == Guid.Empty
+            ? new Dictionary<Guid, int>()
+            : await (
+                from rota in _dbContext.Rotas
+                where rota.EventSettingsId == activeEventId
+                join shift in _dbContext.Shifts on rota.Id equals shift.RotaId
+                join signup in _dbContext.ShiftSignups on shift.Id equals signup.ShiftId
+                where signup.Status == SignupStatus.Pending
+                select new { rota.TeamId, BlockKey = signup.SignupBlockId ?? signup.Id }
+            ).Distinct()
+             .GroupBy(x => x.TeamId)
+             .Select(g => new { TeamId = g.Key, Count = g.Count() })
+             .ToDictionaryAsync(x => x.TeamId, x => x.Count, cancellationToken);
+
+        return new AdminTeamListResult(BuildAdminTeamSummaries(items, pendingShiftCounts), totalCount);
     }
 
     // ==========================================================================
@@ -1967,7 +1991,9 @@ public class TeamService : ITeamService
             .ToList(),
         ParentTeamId: team.ParentTeamId);
 
-    private static IReadOnlyList<AdminTeamSummary> BuildAdminTeamSummaries(IReadOnlyList<Team> teams)
+    private static IReadOnlyList<AdminTeamSummary> BuildAdminTeamSummaries(
+        IReadOnlyList<Team> teams,
+        IReadOnlyDictionary<Guid, int> pendingShiftCounts)
     {
         var ordered = new List<AdminTeamSummary>(teams.Count);
 
@@ -1978,19 +2004,20 @@ public class TeamService : ITeamService
                 continue;
             }
 
-            ordered.Add(CreateAdminTeamSummary(team, isChildTeam: false));
+            ordered.Add(CreateAdminTeamSummary(team, isChildTeam: false, pendingShiftCounts));
 
             var children = teams
                 .Where(child => child.ParentTeamId == team.Id)
                 .OrderBy(child => child.Name, StringComparer.OrdinalIgnoreCase);
 
-            ordered.AddRange(children.Select(child => CreateAdminTeamSummary(child, isChildTeam: true)));
+            ordered.AddRange(children.Select(child => CreateAdminTeamSummary(child, isChildTeam: true, pendingShiftCounts)));
         }
 
         return ordered;
     }
 
-    private static AdminTeamSummary CreateAdminTeamSummary(Team team, bool isChildTeam)
+    private static AdminTeamSummary CreateAdminTeamSummary(
+        Team team, bool isChildTeam, IReadOnlyDictionary<Guid, int> pendingShiftCounts)
     {
         var systemTeamType = team.SystemTeamType != SystemTeamType.None
             ? team.SystemTeamType.ToString()
@@ -2017,7 +2044,8 @@ public class TeamService : ITeamService
             driveResourceCount,
             team.RoleDefinitions.Sum(role => role.SlotCount),
             team.CreatedAt,
-            isChildTeam);
+            isChildTeam,
+            pendingShiftCounts.GetValueOrDefault(team.Id));
     }
 
     private static TeamDirectorySummary CreateDirectorySummary(

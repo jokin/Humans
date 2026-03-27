@@ -86,6 +86,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddScoped<IContactService, ContactService>();
         services.AddScoped<IMagicLinkService, MagicLinkService>();
         services.AddScoped<IFeedbackService, FeedbackService>();
+        services.AddScoped<IBudgetService, BudgetService>();
         services.AddScoped<IApplicationDecisionService, ApplicationDecisionService>();
         services.AddScoped<IOnboardingService, OnboardingService>();
         services.AddScoped<IConsentService, ConsentService>();
@@ -102,6 +103,9 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddScoped<ProcessEmailOutboxJob>();
         services.AddScoped<CleanupEmailOutboxJob>();
         services.AddScoped<TicketSyncJob>();
+        services.AddScoped<SendAdminDailyDigestJob>();
+        services.AddScoped<SendBoardDailyDigestJob>();
+        services.AddScoped<TermRenewalReminderJob>();
 
         // Shift management services
         services.AddScoped<IShiftManagementService, ShiftManagementService>();
@@ -115,6 +119,13 @@ public static class InfrastructureServiceCollectionExtensions
         });
         services.AddScoped<ApiKeyAuthFilter>();
 
+        // Log API key (separate credential from feedback)
+        services.Configure<LogApiSettings>(opts =>
+        {
+            opts.ApiKey = Environment.GetEnvironmentVariable("LOG_API_KEY") ?? string.Empty;
+        });
+        services.AddScoped<LogApiKeyAuthFilter>();
+
         // Ticket vendor integration
         services.Configure<TicketVendorSettings>(opts =>
         {
@@ -124,6 +135,13 @@ public static class InfrastructureServiceCollectionExtensions
         });
         services.AddHttpClient<ITicketVendorService, TicketTailorService>();
         services.AddScoped<ITicketSyncService, TicketSyncService>();
+
+        // Stripe integration (read-only — fee tracking and payment method attribution)
+        services.Configure<StripeSettings>(opts =>
+        {
+            opts.ApiKey = Environment.GetEnvironmentVariable("STRIPE_API_KEY") ?? string.Empty;
+        });
+        services.AddScoped<IStripeService, StripeService>();
 
         return services;
     }

@@ -751,7 +751,8 @@
   <data name="AdminTeams_Name" xml:space="preserve"><value>Nombre</value></data>
   <data name="AdminTeams_Type" xml:space="preserve"><value>Tipo</value></data>
   <data name="AdminTeams_Members" xml:space="preserve"><value>Miembros</value></data>
-  <data name="AdminTeams_Pending" xml:space="preserve"><value>Pendientes</value></data>
+  <data name="AdminTeams_PendingJoins" xml:space="preserve"><value>Solicitudes pendientes</value></data>
+  <data name="AdminTeams_PendingShifts" xml:space="preserve"><value>Turnos pendientes</value></data>
   <data name="AdminTeams_MailGroup" xml:space="preserve"><value>Grupo de correo</value></data>
   <data name="AdminTeams_DriveResources" xml:space="preserve"><value>Drive</value></data>
   <data name="AdminTeams_Created" xml:space="preserve"><value>Creado</value></data>
@@ -1221,5 +1222,8 @@
   <data name="Feedback_Error" xml:space="preserve"><value>Algo salió mal al enviar tu feedback. Por favor, inténtalo de nuevo.</value></data>
 
   <data name="MagicLinkSent_Message" xml:space="preserve"><value>Hemos enviado un enlace a esa dirección de correo desde humans@nobodies.team. Revisa tu bandeja de entrada (y la carpeta de spam).</value></data>
+
+  <!-- Camp Cards -->
+  <data name="CampCard_NeedsPhoto" xml:space="preserve"><value>¡Este barrio necesita una foto!</value></data>
 
 </root>

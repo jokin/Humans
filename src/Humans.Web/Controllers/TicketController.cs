@@ -79,11 +79,38 @@ public class TicketController : HumansControllerBase
         // Count both Valid and CheckedIn — both are sold tickets
         var ticketsSold = await attendees.CountAsync(a =>
             a.Status == TicketAttendeeStatus.Valid || a.Status == TicketAttendeeStatus.CheckedIn);
-        var revenue = await orders
-            .Where(o => o.PaymentStatus == TicketPaymentStatus.Paid)
-            .SumAsync(o => o.TotalAmount);
+        var paidOrders = orders.Where(o => o.PaymentStatus == TicketPaymentStatus.Paid);
+        var revenue = await paidOrders.SumAsync(o => o.TotalAmount);
+        var totalStripeFees = await paidOrders.SumAsync(o => (decimal?)o.StripeFee ?? 0m);
+        var totalAppFees = await paidOrders.SumAsync(o => (decimal?)o.ApplicationFee ?? 0m);
+        var netRevenue = revenue - totalStripeFees - totalAppFees;
         var avgPrice = ticketsSold > 0 ? revenue / ticketsSold : 0;
         var unmatchedCount = await orders.CountAsync(o => o.MatchedUserId == null);
+
+        // Fee breakdown by payment method (load in memory — small dataset)
+        var feeData = await paidOrders
+            .Where(o => o.PaymentMethod != null)
+            .Select(o => new { o.PaymentMethod, o.PaymentMethodDetail, o.TotalAmount, o.StripeFee, o.ApplicationFee })
+            .ToListAsync();
+
+        var feesByMethod = feeData
+            .GroupBy(o => o.PaymentMethodDetail != null ? $"{o.PaymentMethod}/{o.PaymentMethodDetail}" : o.PaymentMethod!, StringComparer.Ordinal)
+            .Select(g =>
+            {
+                var totalAmt = g.Sum(o => o.TotalAmount);
+                var totalStripe = g.Sum(o => o.StripeFee ?? 0);
+                return new PaymentMethodFeeBreakdown
+                {
+                    PaymentMethod = g.Key,
+                    OrderCount = g.Count(),
+                    TotalAmount = totalAmt,
+                    TotalStripeFees = totalStripe,
+                    TotalApplicationFees = g.Sum(o => o.ApplicationFee ?? 0),
+                    EffectiveRate = totalAmt > 0 ? Math.Round(totalStripe / totalAmt * 100, 2) : 0
+                };
+            })
+            .OrderByDescending(f => f.TotalStripeFees)
+            .ToList();
 
         // Cache vendor event summary (15-min TTL) to avoid API call on every page load
         int totalCapacity = 0;
@@ -165,6 +192,10 @@ public class TicketController : HumansControllerBase
             Revenue = revenue,
             AveragePrice = avgPrice,
             TicketsRemaining = totalCapacity - ticketsSold,
+            TotalStripeFees = totalStripeFees,
+            TotalApplicationFees = totalAppFees,
+            NetRevenue = netRevenue,
+            FeesByPaymentMethod = feesByMethod,
             DailySales = dailySalesPoints,
             UnmatchedOrderCount = unmatchedCount,
             SyncStatus = syncState?.SyncStatus ?? TicketSyncStatus.Idle,
@@ -206,6 +237,11 @@ public class TicketController : HumansControllerBase
                 TotalAmount = o.TotalAmount,
                 Currency = o.Currency,
                 DiscountCode = o.DiscountCode,
+                DiscountAmount = o.DiscountAmount,
+                PaymentMethod = o.PaymentMethod,
+                PaymentMethodDetail = o.PaymentMethodDetail,
+                StripeFee = o.StripeFee,
+                ApplicationFee = o.ApplicationFee,
                 PaymentStatus = o.PaymentStatus,
                 VendorDashboardUrl = o.VendorDashboardUrl,
                 MatchedUserId = o.MatchedUserId,
@@ -393,7 +429,7 @@ public class TicketController : HumansControllerBase
 
         var activeHumans = users
             .Where(u => u.Profile is not null &&
-                u.TeamMemberships.Any(tm => tm.TeamId == volunteersTeamId))
+                u.TeamMemberships.Any(tm => tm.TeamId == volunteersTeamId && tm.LeftAt == null))
             .ToList();
 
         var filteredHumans = FilterWhoHasntBoughtHumans(
@@ -414,15 +450,21 @@ public class TicketController : HumansControllerBase
                 HasTicket = matchedUserIds.Contains(u.Id),
                 Name = u.DisplayName,
                 Email = u.UserEmails.FirstOrDefault(e => e.IsNotificationTarget)?.Email ?? string.Empty,
-                Teams = string.Join(", ", u.TeamMemberships.Select(tm => tm.Team.Name)),
+                Teams = string.Join(", ", u.TeamMemberships
+                    .Where(tm => tm.LeftAt == null)
+                    .Select(tm => tm.Team.Name)
+                    .Order(StringComparer.OrdinalIgnoreCase)),
                 Tier = u.Profile?.MembershipTier ?? MembershipTier.Volunteer,
             })
             .ToList();
 
-        var teams = await _dbContext.Set<Domain.Entities.Team>()
-            .Select(t => t.Name)
-            .OrderBy(n => n)
-            .ToListAsync();
+        var teams = activeHumans
+            .SelectMany(u => u.TeamMemberships)
+            .Where(tm => tm.LeftAt == null)
+            .Select(tm => tm.Team.Name)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Order(StringComparer.OrdinalIgnoreCase)
+            .ToList();
 
         var model = new WhoHasntBoughtViewModel
         {
@@ -435,6 +477,68 @@ public class TicketController : HumansControllerBase
             FilterTier = filterTier,
             FilterTicketStatus = filterTicketStatus,
             AvailableTeams = teams,
+        };
+
+        return View(model);
+    }
+
+    [HttpGet("SalesAggregates")]
+    public async Task<IActionResult> SalesAggregates()
+    {
+        // Load all paid orders with attendee counts in memory (small dataset at ~1,500 orders)
+        var orders = await _dbContext.TicketOrders
+            .Where(o => o.PaymentStatus == TicketPaymentStatus.Paid)
+            .Select(o => new { o.PurchasedAt, o.TotalAmount, AttendeeCount = o.Attendees.Count })
+            .ToListAsync();
+
+        // Weekly aggregates (ISO weeks, Mon–Sun)
+        var weeklySales = orders
+            .GroupBy(o =>
+            {
+                var date = o.PurchasedAt.InUtc().Date;
+                // NodaTime ISO day of week: Monday=1, Sunday=7
+                var monday = date.PlusDays(-(int)date.DayOfWeek + 1);
+                return monday;
+            })
+            .OrderBy(g => g.Key)
+            .Select(g =>
+            {
+                var monday = g.Key;
+                var sunday = monday.PlusDays(6);
+                return new WeeklySalesRow
+                {
+                    WeekLabel = $"{monday.ToString("MMM d", null)} – {sunday.ToString("MMM d", null)}",
+                    TicketsSold = g.Sum(o => o.AttendeeCount),
+                    GrossRevenue = g.Sum(o => o.TotalAmount),
+                    OrderCount = g.Count()
+                };
+            })
+            .ToList();
+
+        // Quarterly aggregates (Spanish tax quarters: Q1=Jan-Mar, Q2=Apr-Jun, Q3=Jul-Sep, Q4=Oct-Dec)
+        var quarterlySales = orders
+            .GroupBy(o =>
+            {
+                var date = o.PurchasedAt.InUtc().Date;
+                var quarter = (date.Month - 1) / 3 + 1;
+                return (date.Year, quarter);
+            })
+            .OrderBy(g => g.Key.Year).ThenBy(g => g.Key.quarter)
+            .Select(g => new QuarterlySalesRow
+            {
+                QuarterLabel = $"Q{g.Key.quarter} {g.Key.Year}",
+                Year = g.Key.Year,
+                Quarter = g.Key.quarter,
+                TicketsSold = g.Sum(o => o.AttendeeCount),
+                GrossRevenue = g.Sum(o => o.TotalAmount),
+                OrderCount = g.Count()
+            })
+            .ToList();
+
+        var model = new TicketSalesAggregatesViewModel
+        {
+            WeeklySales = weeklySales,
+            QuarterlySales = quarterlySales,
         };
 
         return View(model);
@@ -497,9 +601,11 @@ public class TicketController : HumansControllerBase
             .ToListAsync();
 
         var csv = new System.Text.StringBuilder();
-        csv.AppendCsvRow("Date", "Purchaser", "Email", "Tickets", "Amount", "Currency", "Code", "Status");
+        csv.AppendCsvRow("Date", "Purchaser", "Email", "Tickets", "Amount", "Currency",
+            "Code", "Discount", "Payment Method", "Stripe Fee", "TT Fee", "Status");
         foreach (var o in orderList)
         {
+            var method = o.PaymentMethodDetail != null ? $"{o.PaymentMethod}/{o.PaymentMethodDetail}" : o.PaymentMethod;
             csv.AppendCsvRow(
                 o.PurchasedAt.InUtc().Date.ToIsoDateString(),
                 o.BuyerName,
@@ -508,6 +614,10 @@ public class TicketController : HumansControllerBase
                 o.TotalAmount,
                 o.Currency,
                 o.DiscountCode,
+                o.DiscountAmount,
+                method,
+                o.StripeFee,
+                o.ApplicationFee,
                 o.PaymentStatus);
         }
 
@@ -701,7 +811,9 @@ public class TicketController : HumansControllerBase
         if (!string.IsNullOrEmpty(filterTeam))
         {
             filteredHumans = filteredHumans.Where(u =>
-                u.TeamMemberships.Any(tm => string.Equals(tm.Team.Name, filterTeam, StringComparison.OrdinalIgnoreCase)));
+                u.TeamMemberships.Any(tm =>
+                    tm.LeftAt == null &&
+                    string.Equals(tm.Team.Name, filterTeam, StringComparison.OrdinalIgnoreCase)));
         }
 
         if (!string.IsNullOrEmpty(filterTier) && Enum.TryParse<MembershipTier>(filterTier, ignoreCase: true, out var parsedTier))

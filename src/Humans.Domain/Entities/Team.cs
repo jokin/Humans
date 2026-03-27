@@ -1,4 +1,5 @@
 using NodaTime;
+using Humans.Domain.Attributes;
 using Humans.Domain.Enums;
 using Humans.Domain.ValueObjects;
 
@@ -86,6 +87,7 @@ public class Team
     /// <summary>
     /// Free-form markdown content for the public team page.
     /// </summary>
+    [MarkdownContent]
     public string? PageContent { get; set; }
 
     /// <summary>
@@ -103,6 +105,12 @@ public class Team
     /// Stored as JSONB.
     /// </summary>
     public List<CallToAction>? CallsToAction { get; set; }
+
+    /// <summary>
+    /// Whether this team participates in budget planning.
+    /// When true, a BudgetCategory is auto-created under the Departments group on budget year creation.
+    /// </summary>
+    public bool HasBudget { get; set; }
 
     /// <summary>
     /// Optional parent team ID for one-level hierarchy (departments).

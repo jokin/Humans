@@ -1,3 +1,5 @@
+// @e2e: board.spec.ts
+// @e2e: profile.spec.ts
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
@@ -138,23 +140,31 @@ public class HumanController : HumansControllerBase
     public async Task<IActionResult> Popover(Guid id)
     {
         var profile = await _profileService.GetProfileAsync(id);
-        if (profile is null) return NotFound();
+        if (profile is null || profile.IsSuspended) return NotFound();
 
         var teams = await _dbContext.TeamMembers
-            .Where(tm => tm.UserId == id && tm.LeftAt == null)
+            .Where(tm => tm.UserId == id && tm.LeftAt == null
+                && tm.Team!.SystemTeamType != SystemTeamType.Volunteers)
             .Select(tm => tm.Team!.Name)
             .OrderBy(n => n)
             .ToListAsync();
+
+        var effectivePictureUrl = profile.HasCustomProfilePicture
+            ? Url.Action(nameof(ProfileController.Picture), "Profile",
+                new { id = profile.Id, v = profile.UpdatedAt.ToUnixTimeTicks() })
+            : profile.User.ProfilePictureUrl;
 
         var vm = new ProfileSummaryViewModel
         {
             UserId = id,
             DisplayName = profile.User.DisplayName,
             Email = profile.User.Email,
-            ProfilePictureUrl = profile.User.ProfilePictureUrl,
+            ProfilePictureUrl = effectivePictureUrl,
             MembershipTier = profile.MembershipTier.ToString(),
             MembershipStatus = profile.IsSuspended ? "Suspended"
                 : profile.IsApproved ? "Active" : "Pending",
+            City = profile.City,
+            CountryCode = profile.CountryCode,
             Teams = teams
         };
 
@@ -420,6 +430,7 @@ public class HumanController : HumansControllerBase
 
         var user = await _dbContext.Users
             .Include(u => u.UserEmails)
+            .Include(u => u.Profile)
             .FirstOrDefaultAsync(u => u.Id == id);
         if (user is null)
             return NotFound();
@@ -436,6 +447,15 @@ public class HumanController : HumansControllerBase
                 return RedirectToAction(nameof(HumanDetail), new { id });
             }
 
+            // Use real name from profile, not display/burner name
+            var firstName = user.Profile?.FirstName;
+            var lastName = user.Profile?.LastName;
+            if (string.IsNullOrWhiteSpace(firstName) || string.IsNullOrWhiteSpace(lastName))
+            {
+                SetError("Cannot provision account: the human must have a first and last name in their profile.");
+                return RedirectToAction(nameof(HumanDetail), new { id });
+            }
+
             // Use their current notification target as recovery email (if not @nobodies.team)
             var recoveryEmail = user.GetEffectiveEmail();
             if (recoveryEmail?.EndsWith("@nobodies.team", StringComparison.OrdinalIgnoreCase) == true)
@@ -443,9 +463,8 @@ public class HumanController : HumansControllerBase
 
             // Generate temp password and provision in Google Workspace
             var tempPassword = PasswordGenerator.GenerateTemporary();
-            var nameParts = user.DisplayName.Split(' ', 2);
             await _workspaceUserService.ProvisionAccountAsync(
-                fullEmail, nameParts[0], nameParts.Length > 1 ? nameParts[1] : "", tempPassword,
+                fullEmail, firstName, lastName, tempPassword,
                 recoveryEmail);
 
             // Auto-link: add as verified UserEmail (also sets notification target for @nobodies.team)

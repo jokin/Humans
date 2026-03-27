@@ -189,6 +189,7 @@ public class EditTeamViewModel : TeamFormViewModelBase
 
     public bool IsActive { get; set; }
     public bool IsSystemTeam { get; set; }
+    public bool HasBudget { get; set; }
 }
 
 public class EditTeamPageViewModel
@@ -462,6 +463,7 @@ public class AdminTeamViewModel
     public int RoleSlotCount { get; set; }
     public DateTime CreatedAt { get; set; }
     public bool IsChildTeam { get; set; }
+    public int PendingShiftSignupCount { get; set; }
 }
 
 /// <summary>

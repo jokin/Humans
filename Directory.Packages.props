@@ -52,7 +52,7 @@
     <PackageVersion Include="Serilog.Sinks.Debug" Version="3.0.0" />
     <PackageVersion Include="Serilog.Sinks.OpenTelemetry" Version="4.2.0" />
     <!-- Image Processing -->
-    <PackageVersion Include="Magick.NET-Q8-AnyCPU" Version="14.11.0" />
+    <PackageVersion Include="Magick.NET-Q8-AnyCPU" Version="14.11.1" />
     <!-- Localization -->
     <PackageVersion Include="Microsoft.Extensions.Localization" Version="10.0.3" />
     <!-- Data Protection -->
@@ -74,6 +74,7 @@
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.0.1" />
     <PackageVersion Include="NodaTime.Testing" Version="3.3.1" />
     <PackageVersion Include="NSubstitute" Version="5.3.0" />
+    <PackageVersion Include="Stripe.net" Version="51.0.0" />
     <PackageVersion Include="Testcontainers.PostgreSql" Version="4.10.0" />
     <PackageVersion Include="xunit" Version="2.9.3" />
     <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.5" />

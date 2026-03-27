@@ -1,3 +1,4 @@
+// @e2e: shifts.spec.ts
 using Humans.Application.Interfaces;
 using Humans.Domain.Constants;
 using Humans.Domain.Entities;
@@ -491,7 +492,7 @@ public class VolController : HumansControllerBase
             if (signup is null)
             {
                 SetError("Signup not found.");
-                return returnUrl is not null ? LocalRedirect(returnUrl) : RedirectToAction(nameof(MyShifts));
+                return RedirectToLocalOrAction(returnUrl, nameof(MyShifts));
             }
 
             var canApprove = ShiftRoleChecks.IsPrivilegedSignupApprover(User) ||
@@ -509,7 +510,7 @@ public class VolController : HumansControllerBase
             _logger.LogError(ex, "Error approving signup {SignupId}", signupId);
             SetError("Approval failed.");
         }
-        return returnUrl is not null ? LocalRedirect(returnUrl) : RedirectToAction(nameof(MyShifts));
+        return RedirectToLocalOrAction(returnUrl, nameof(MyShifts));
     }
 
     [HttpPost("Refuse")]
@@ -525,7 +526,7 @@ public class VolController : HumansControllerBase
             if (signup is null)
             {
                 SetError("Signup not found.");
-                return returnUrl is not null ? LocalRedirect(returnUrl) : RedirectToAction(nameof(MyShifts));
+                return RedirectToLocalOrAction(returnUrl, nameof(MyShifts));
             }
 
             var canApprove = ShiftRoleChecks.IsPrivilegedSignupApprover(User) ||
@@ -543,7 +544,7 @@ public class VolController : HumansControllerBase
             _logger.LogError(ex, "Error refusing signup {SignupId}", signupId);
             SetError("Refusal failed.");
         }
-        return returnUrl is not null ? LocalRedirect(returnUrl) : RedirectToAction(nameof(MyShifts));
+        return RedirectToLocalOrAction(returnUrl, nameof(MyShifts));
     }
 
     [HttpPost("NoShow")]
@@ -559,7 +560,7 @@ public class VolController : HumansControllerBase
             if (signup is null)
             {
                 SetError("Signup not found.");
-                return returnUrl is not null ? LocalRedirect(returnUrl) : RedirectToAction(nameof(MyShifts));
+                return RedirectToLocalOrAction(returnUrl, nameof(MyShifts));
             }
 
             var canApprove = ShiftRoleChecks.IsPrivilegedSignupApprover(User) ||
@@ -577,7 +578,7 @@ public class VolController : HumansControllerBase
             _logger.LogError(ex, "Error marking no-show for signup {SignupId}", signupId);
             SetError("No-show marking failed.");
         }
-        return returnUrl is not null ? LocalRedirect(returnUrl) : RedirectToAction(nameof(MyShifts));
+        return RedirectToLocalOrAction(returnUrl, nameof(MyShifts));
     }
 
     [HttpPost("ApproveJoinRequest")]
@@ -602,7 +603,7 @@ public class VolController : HumansControllerBase
             _logger.LogError(ex, "Error approving join request {RequestId}", requestId);
             SetError("Failed to approve join request.");
         }
-        return returnUrl is not null ? LocalRedirect(returnUrl) : RedirectToAction(nameof(Teams));
+        return RedirectToLocalOrAction(returnUrl, nameof(Teams));
     }
 
     [HttpPost("RejectJoinRequest")]
@@ -627,7 +628,7 @@ public class VolController : HumansControllerBase
             _logger.LogError(ex, "Error rejecting join request {RequestId}", requestId);
             SetError("Failed to reject join request.");
         }
-        return returnUrl is not null ? LocalRedirect(returnUrl) : RedirectToAction(nameof(Teams));
+        return RedirectToLocalOrAction(returnUrl, nameof(Teams));
     }
 
     [HttpGet("Urgent")]
@@ -791,10 +792,6 @@ public class VolController : HumansControllerBase
         }
     }
 
-    [HttpGet("Register")]
-    [AllowAnonymous]
-    public IActionResult Register() => View();
-
     [HttpGet("SearchVolunteers")]
     public async Task<IActionResult> SearchVolunteers(Guid shiftId, string? query)
     {
@@ -824,4 +821,9 @@ public class VolController : HumansControllerBase
             return StatusCode(500, new { error = "Search failed." });
         }
     }
+
+    private IActionResult RedirectToLocalOrAction(string? returnUrl, string actionName) =>
+        Url.IsLocalUrl(returnUrl)
+            ? LocalRedirect(returnUrl!)
+            : RedirectToAction(actionName);
 }

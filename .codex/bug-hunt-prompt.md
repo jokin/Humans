@@ -4,7 +4,9 @@
 
 You are scanning a ~70k-line ASP.NET Core 10 Clean Architecture codebase (membership management for a Spanish nonprofit) for bugs. Your job is to **find and fix real bugs** — not refactor, not improve style, not add features.
 
-**Work autonomously.** Find a bug, fix it, verify the build passes, commit, move on. Keep going until you run out of bugs or hit the session limit.
+**Work autonomously.** Find a bug, fix it, verify the build passes, commit, push the branch to `origin`, move on. Keep going until you run out of bugs or hit the session limit.
+
+If this session is resumed later, continue from the existing branch and prior progress instead of restarting completed investigation.
 
 **What counts as a bug:**
 - Code that will crash or behave incorrectly at runtime
