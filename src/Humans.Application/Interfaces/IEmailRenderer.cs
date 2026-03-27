@@ -86,6 +86,11 @@ public interface IEmailRenderer
     EmailContent RenderBoardDailyDigest(string boardMemberName, string date, IReadOnlyList<BoardDigestTierGroup> tierGroups, BoardDigestOutstandingCounts? outstandingCounts = null, string? culture = null);
 
     /// <summary>
+    /// Admin daily digest of system health and pending actions.
+    /// </summary>
+    EmailContent RenderAdminDailyDigest(string adminName, string date, AdminDigestCounts counts, string? culture = null);
+
+    /// <summary>
     /// Event submission received notification.
     /// </summary>
     EmailContent RenderEventSubmitted(string userName, string eventTitle, string viewUrl, string? culture = null);
