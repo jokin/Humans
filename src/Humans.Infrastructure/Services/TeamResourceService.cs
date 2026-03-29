@@ -532,7 +532,7 @@ public partial class TeamResourceService : ITeamResourceService
             return _driveService;
         }
 
-        var credential = await LoadServiceAccountCredentialAsync(ct, DriveService.Scope.DriveReadonly);
+        var credential = await GetServiceAccountCredentialAsync(ct, DriveService.Scope.DriveReadonly);
 
         _driveService = new DriveService(new BaseClientService.Initializer
         {
@@ -550,7 +550,7 @@ public partial class TeamResourceService : ITeamResourceService
             return _cloudIdentityService;
         }
 
-        var credential = await LoadServiceAccountCredentialAsync(ct,
+        var credential = await GetServiceAccountCredentialAsync(ct,
             CloudIdentityService.Scope.CloudIdentityGroupsReadonly);
 
         _cloudIdentityService = new CloudIdentityService(new BaseClientService.Initializer
@@ -566,7 +566,7 @@ public partial class TeamResourceService : ITeamResourceService
     /// Loads the service account credential WITHOUT impersonation.
     /// This authenticates as the service account itself to access pre-shared resources.
     /// </summary>
-    private async Task<GoogleCredential> LoadServiceAccountCredentialAsync(CancellationToken ct, params string[] scopes)
+    private async Task<GoogleCredential> GetServiceAccountCredentialAsync(CancellationToken ct, params string[] scopes)
     {
         GoogleCredential credential;
 
