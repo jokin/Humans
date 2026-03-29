@@ -1921,6 +1921,7 @@ public class TeamService : ITeamService
 
         var activeEventId = await _dbContext.EventSettings
             .Where(e => e.IsActive)
+            .OrderBy(e => e.Id)
             .Select(e => e.Id)
             .FirstOrDefaultAsync(cancellationToken);
 
