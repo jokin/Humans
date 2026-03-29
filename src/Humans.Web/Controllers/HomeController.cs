@@ -93,6 +93,7 @@ public class HomeController : HumansControllerBase
 
         var viewModel = new DashboardViewModel
         {
+            UserId = user.Id,
             DisplayName = user.DisplayName,
             ProfilePictureUrl = user.ProfilePictureUrl,
             MembershipStatus = membershipSnapshot.Status,
@@ -120,6 +121,11 @@ public class HomeController : HumansControllerBase
         try
         {
             var activeEvent = await _shiftMgmt.GetActiveAsync();
+            if (activeEvent is not null)
+            {
+                viewModel.EventName = activeEvent.EventName;
+                viewModel.IsShiftBrowsingOpen = activeEvent.IsShiftBrowsingOpen;
+            }
             if (activeEvent is not null && activeEvent.IsShiftBrowsingOpen)
             {
                 var urgentShifts = await _shiftMgmt.GetUrgentShiftsAsync(activeEvent.Id, limit: 3);
