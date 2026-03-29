@@ -407,12 +407,9 @@ if (app.Environment.IsDevelopment())
 else
 {
     app.UseExceptionHandler("/Home/Error");
-    app.UseHsts();
 }
 
 app.UseStatusCodePagesWithReExecute("/Home/Error/{0}");
-
-app.UseHttpsRedirection();
 
 if (!app.Environment.IsDevelopment())
 {
