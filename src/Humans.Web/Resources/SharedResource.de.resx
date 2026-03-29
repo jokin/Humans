@@ -237,7 +237,7 @@
   <data name="ProfileEdit_BioHelp" xml:space="preserve"><value>Erzählen Sie uns ein wenig über sich.</value></data>
   <data name="Profile_Pronouns" xml:space="preserve"><value>Pronomen</value></data>
   <data name="ProfileEdit_PronounsPlaceholder" xml:space="preserve"><value>z. B., they/them, sie/ihr, er/ihm</value></data>
-  <data name="ProfileEdit_ContactInfoHelp" xml:space="preserve"><value>Fügen Sie Kontaktmöglichkeiten für andere Mitglieder hinzu. Kontrollieren Sie, wer welche Information sehen kann.</value></data>
+  <data name="ProfileEdit_ContactInfoHelp" xml:space="preserve"><value>Fügen Sie Kontaktmöglichkeiten für andere humans hinzu. Kontrollieren Sie, wer welche Information sehen kann.</value></data>
   <data name="ProfileEdit_AddContactField" xml:space="preserve"><value>Kontaktfeld hinzufügen</value></data>
   <data name="ProfileEdit_BurnerCVHelp" xml:space="preserve"><value>Dokumentieren Sie Ihre Beteiligung an Veranstaltungen, Rollen und Camps. Einträge werden nach Datum sortiert (neueste zuerst).</value></data>
   <data name="ProfileEdit_AddEntry" xml:space="preserve"><value>Eintrag hinzufügen</value></data>
@@ -444,7 +444,7 @@
 
   <!-- Team Index View -->
   <data name="Teams_CreateTeam" xml:space="preserve"><value>Team erstellen</value></data>
-  <data name="Teams_MemberCount" xml:space="preserve"><value>{0} Mitglied(er)</value><comment>{0} = member count</comment></data>
+  <data name="Teams_MemberCount" xml:space="preserve"><value>{0} human(s)</value><comment>{0} = member count</comment></data>
   <data name="Teams_Member" xml:space="preserve"><value>Mitglied</value></data>
   <data name="Teams_RequiresApproval" xml:space="preserve"><value>Genehmigung erforderlich</value></data>
   <data name="Teams_ViewDetails" xml:space="preserve"><value>Details anzeigen</value></data>
@@ -462,8 +462,8 @@
   <data name="TeamDetail_Members" xml:space="preserve"><value>Mitglieder ({0})</value><comment>{0} = count</comment></data>
   <data name="TeamDetail_ManageMembers" xml:space="preserve"><value>Mitglieder verwalten</value></data>
   <data name="TeamDetail_Joined" xml:space="preserve"><value>Beigetreten</value></data>
-  <data name="TeamDetail_AndMoreMembers" xml:space="preserve"><value>Und {0} weitere Mitglieder...</value><comment>{0} = remaining count</comment></data>
-  <data name="TeamDetail_NoMembers" xml:space="preserve"><value>Noch keine Mitglieder.</value></data>
+  <data name="TeamDetail_AndMoreMembers" xml:space="preserve"><value>Und {0} weitere humans...</value><comment>{0} = remaining count</comment></data>
+  <data name="TeamDetail_NoMembers" xml:space="preserve"><value>Noch keine humans.</value></data>
   <data name="TeamDetail_Actions" xml:space="preserve"><value>Aktionen</value></data>
   <data name="TeamDetail_RequestToJoin" xml:space="preserve"><value>Beitritt beantragen</value></data>
   <data name="TeamDetail_JoinTeam" xml:space="preserve"><value>Team beitreten</value></data>
@@ -485,7 +485,7 @@
   <data name="MyTeams_Actions" xml:space="preserve"><value>Aktionen</value></data>
   <data name="MyTeams_View" xml:space="preserve"><value>Anzeigen</value></data>
   <data name="MyTeams_Leave" xml:space="preserve"><value>Verlassen</value></data>
-  <data name="MyTeams_NoTeams" xml:space="preserve"><value>Sie sind noch keinem Team beigetreten.</value></data>
+  <data name="MyTeams_NoTeams" xml:space="preserve"><value>Du bist noch in keinem Team.</value></data>
   <data name="MyTeams_BrowseTeams" xml:space="preserve"><value>Teams durchsuchen</value></data>
   <data name="MyTeams_PendingRequests" xml:space="preserve"><value>Ausstehende Anfragen</value></data>
   <data name="MyTeams_Status" xml:space="preserve"><value>Status</value></data>
@@ -502,7 +502,7 @@
 
   <!-- Team Controller TempData -->
   <data name="Team_CannotJoinSystem" xml:space="preserve"><value>System-Teams kann nicht direkt beigetreten werden.</value></data>
-  <data name="Team_AlreadyMember" xml:space="preserve"><value>Sie sind bereits Mitglied dieses Teams.</value></data>
+  <data name="Team_AlreadyMember" xml:space="preserve"><value>Du bist bereits Teil dieses Teams.</value></data>
   <data name="Team_AlreadyPendingRequest" xml:space="preserve"><value>Sie haben bereits eine ausstehende Anfrage für dieses Team.</value></data>
   <data name="Team_JoinRequestSubmitted" xml:space="preserve"><value>Ihre Beitrittsanfrage wurde eingereicht und wartet auf Genehmigung.</value></data>
   <data name="Team_Joined" xml:space="preserve"><value>Sie sind dem Team erfolgreich beigetreten!</value></data>
@@ -517,7 +517,7 @@
   <data name="TeamAdminRequests_Title" xml:space="preserve"><value>Ausstehende Anfragen - {0}</value><comment>{0} = team name</comment></data>
 
   <!-- TeamAdmin Controller TempData -->
-  <data name="TeamAdmin_RequestApproved" xml:space="preserve"><value>Anfrage genehmigt. Der Benutzer ist jetzt Teammitglied.</value></data>
+  <data name="TeamAdmin_RequestApproved" xml:space="preserve"><value>Anfrage genehmigt. Der Benutzer ist jetzt Teil des Teams.</value></data>
   <data name="TeamAdmin_ProvideRejectionReason" xml:space="preserve"><value>Bitte geben Sie einen Ablehnungsgrund an.</value></data>
   <data name="TeamAdmin_RequestRejected" xml:space="preserve"><value>Anfrage abgelehnt.</value></data>
   <data name="TeamAdmin_RoleUpdated" xml:space="preserve"><value>Mitgliedsrolle auf {0} aktualisiert.</value><comment>{0} = role name</comment></data>
@@ -787,9 +787,9 @@
   <data name="TeamAdmin_ManageResources" xml:space="preserve"><value>Ressourcen verwalten</value></data>
   <data name="TeamAdmin_SystemTeam" xml:space="preserve"><value>System-Team</value></data>
   <data name="TeamAdmin_SystemTeamRolesInfo" xml:space="preserve"><value>Dies ist ein systemverwaltetes Team. Mitgliedsrollen können nicht manuell geändert werden.</value></data>
-  <data name="TeamAdmin_RemoveConfirm" xml:space="preserve"><value>Dieses Mitglied aus dem Team entfernen?</value></data>
+  <data name="TeamAdmin_RemoveConfirm" xml:space="preserve"><value>Diesen human aus dem Team entfernen?</value></data>
   <data name="TeamAdmin_Remove" xml:space="preserve"><value>Entfernen</value></data>
-  <data name="TeamAdmin_NoMembers" xml:space="preserve"><value>Noch keine Mitglieder in diesem Team.</value></data>
+  <data name="TeamAdmin_NoMembers" xml:space="preserve"><value>Noch keine humans in diesem Team.</value></data>
   <data name="TeamAdmin_BackToTeam" xml:space="preserve"><value>Zurück zum Team</value></data>
   <data name="TeamAdmin_ViewPendingRequests" xml:space="preserve"><value>Ausstehende Anfragen anzeigen</value></data>
   <data name="TeamAdmin_Message" xml:space="preserve"><value>Nachricht</value></data>
@@ -886,7 +886,7 @@
   <!-- Contribution & Board     -->
   <!-- ======================== -->
   <data name="Profile_ContributionInterests" xml:space="preserve"><value>Wie ich beitragen möchte</value></data>
-  <data name="ProfileEdit_ContributionInterestsHelp" xml:space="preserve"><value>Teile deine Fähigkeiten, Interessen und wie du dich einbringen möchtest. Für alle Mitglieder sichtbar.</value></data>
+  <data name="ProfileEdit_ContributionInterestsHelp" xml:space="preserve"><value>Teile deine Fähigkeiten, Interessen und wie du dich einbringen möchtest. Für alle humans sichtbar.</value></data>
   <data name="Profile_BoardNotes" xml:space="preserve"><value>Notizen für den Vorstand</value></data>
   <data name="ProfileEdit_BoardNotesHelp" xml:space="preserve"><value>Private Notizen für den Vorstand.</value></data>
   <data name="Validation_PhoneE164" xml:space="preserve"><value>{0} muss mit + und L&#xE4;ndervorwahl beginnen (z.B. +34 612 345 678)</value></data>
