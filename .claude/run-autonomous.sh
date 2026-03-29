@@ -225,6 +225,7 @@ console_log="$run_dir/claude.log"
 final_message_file="$run_dir/final-message.md"
 session_id_file="$run_dir/session-id.txt"
 pass_history_file="$run_dir/pass-history.txt"
+handoff_file="$run_dir/tier-handoff.md"
 
 current_branch="$(git branch --show-current || true)"
 if [[ -z "$current_branch" ]]; then
@@ -355,6 +356,7 @@ Operating instructions for this automated run:
 - Use the current git branch. Do not switch branches.
 $push_instruction
 - End with a concise run report that lists bugs fixed or refactors completed, commands run, and any unfinished leads.
+- If the file ${handoff_file} exists, read it at the start for notes from previous passes.
 - Read and follow CLAUDE.md plus relevant files under .claude/ when they help you interpret local project conventions.
 
 EOF
@@ -381,8 +383,21 @@ build_tier_prompt() {
 
     cat <<EOF
 IMPORTANT: This is a FRESH context pass. Previous tiers have already made fixes.
-Before starting, run: git log --oneline -20
-Review what has already been committed and DO NOT repeat that work.
+
+Before starting:
+1. Check if ${handoff_file} exists — if so, read it first. It contains notes from
+   the previous tier: what was investigated and found clean, promising leads not yet
+   fixed, partially analyzed files, and patterns worth knowing about.
+2. Run: git log --oneline -20
+   Review what has already been committed and DO NOT repeat that work.
+
+Before you finish, write your handoff notes to ${handoff_file} (append, don't overwrite):
+- Section header: "## Tier: ${tier_name} (${tier_label})"
+- What you investigated and found clean (no bug/no debt) — so the next tier skips it
+- Leads you found but didn't fix (with file paths and line numbers)
+- Files you partially analyzed (how far you got)
+- Patterns worth noting for the next tier
+- Any issues you hit (build failures, test failures, ambiguous code)
 
 --- TIER FOCUS: ${tier_label} ---
 
