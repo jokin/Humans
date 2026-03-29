@@ -36,10 +36,12 @@ For each acceptance criterion:
 4. Pay special attention to: **who sees it** (per-user vs aggregate), **what data** (which entity/table), **what conditions** (if/else branches the spec describes).
 
 **If any criterion FAILs:**
-- Fix the implementation to match the spec.
+- Fix ALL failing criteria, not just some. Do not cherry-pick easy ones and defer the rest.
 - Rebuild and re-commit.
-- Re-run the spec review.
+- Re-run the spec review FROM SCRATCH — re-check EVERY criterion, not just the ones you think you fixed. The re-review must be a full pass that independently rediscovers any remaining gaps. This catches scope-reduction: if iteration 1 fixed 3 of 5 failures, iteration 2's full re-scan will find the remaining 2.
 - Max 3 fix iterations per issue. If still failing after 3, STOP and record the failure in the batch report. Do NOT move to the next issue — the batch is blocked.
+
+**Critical: no scope reduction.** When the review finds N failures, fix N failures. Do not fix some and report others as "too big" or "needs human review." The authorization to fix was given when the batch was launched. If a fix is genuinely blocked (missing data, needs a DB migration you can't create, external dependency), explain the specific blocker — "this is hard" is not a blocker.
 
 **If all criteria PASS:** Move to the next issue.
 
@@ -65,8 +67,8 @@ After all issues are implemented and spec-reviewed:
    - Dead code
 
 **If any CRITICAL issues found:**
-- Fix them.
-- Rebuild and re-check.
+- Fix ALL of them, not just the easy ones.
+- Rebuild and re-run the FULL code review checklist from scratch — every rule, not just the ones you fixed. The re-review must independently rediscover any remaining issues.
 - Max 3 fix iterations for code review. If still failing after 3, STOP and record.
 
 ### Phase 4: Create PR
