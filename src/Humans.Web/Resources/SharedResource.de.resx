@@ -142,7 +142,7 @@
   <data name="Dashboard_NoConsentsRequired" xml:space="preserve"><value>Derzeit sind keine Einwilligungen erforderlich.</value></data>
   <data name="Dashboard_LatestApplication" xml:space="preserve"><value>Letzter Antrag:</value></data>
   <data name="Dashboard_ViewApplicationHistory" xml:space="preserve"><value>Antragsverlauf anzeigen</value></data>
-  <data name="Dashboard_GovernanceDescription" xml:space="preserve"><value>Asociados sind stimmberechtigte Mitglieder, die an Governance-Entscheidungen wie Versammlungen und Wahlen teilnehmen. Dies ist f&#xFC;r Community-Leiter und langfristig engagierte Freiwillige gedacht.</value></data>
+  <data name="Dashboard_GovernanceDescription" xml:space="preserve"><value>Asociados sind humans mit Stimmrecht, die an Governance-Entscheidungen wie Versammlungen und Wahlen teilnehmen. Dies ist f&#xFC;r Community-Leiter und langfristig engagierte humans gedacht.</value></data>
   <data name="Dashboard_GovernanceOptional" xml:space="preserve"><value>Die Teilnahme an der Governance ist freiwillig und hat keinen Einfluss auf Ihren Zugang zu Ressourcen.</value></data>
   <data name="Dashboard_LearnMore" xml:space="preserve"><value>Mehr erfahren</value></data>
   <data name="Dashboard_OnboardingTitle" xml:space="preserve"><value>Erste Schritte</value></data>
@@ -304,7 +304,7 @@
   <!-- Governance Index View -->
   <data name="Governance_NotYetApplied" xml:space="preserve"><value>Noch nicht beworben</value></data>
   <data name="Governance_AsociadoDescription" xml:space="preserve"><value>Asociados sind die formellen stimmberechtigten Mitglieder von Nobodies Collective. Als Asociado können Sie an Mitgliederversammlungen teilnehmen, über kollektive Entscheidungen abstimmen und an Wahlen teilnehmen.</value></data>
-  <data name="Governance_Optional" xml:space="preserve"><value>Dies ist freiwillig. Die meisten Freiwilligen müssen keine Asociados werden. Sie haben bereits Zugang zu Ressourcen, sobald Sie Ihr Profil und Ihre Einwilligungen abgeschlossen haben.</value></data>
+  <data name="Governance_Optional" xml:space="preserve"><value>Dies ist freiwillig. Die meisten humans müssen keine Asociados werden. Sie haben bereits Zugang zu Ressourcen, sobald Sie Ihr Profil und Ihre Einwilligungen abgeschlossen haben.</value></data>
   <data name="Governance_ApplyButton" xml:space="preserve"><value>Als Asociado bewerben</value></data>
   <data name="Governance_ColaboradorCanApply" xml:space="preserve"><value>Colaboradores k&#xF6;nnen sich auch f&#xFC;r den Asociado-Status bewerben, wenn sie an der Governance teilnehmen m&#xF6;chten.</value></data>
   <data name="Governance_ApplyForAsociado" xml:space="preserve"><value>Als Asociado bewerben</value></data>
@@ -325,7 +325,7 @@
   <data name="Governance_VoteOnDecisions" xml:space="preserve"><value>Über kollektive Entscheidungen abstimmen</value></data>
   <data name="Governance_ParticipateElections" xml:space="preserve"><value>An Vorstandswahlen teilnehmen</value></data>
   <data name="Governance_WhoShouldApply" xml:space="preserve"><value>Wer sollte sich bewerben?</value></data>
-  <data name="Governance_WhoShouldApplyDescription" xml:space="preserve"><value>Die Governance-Mitgliedschaft ist für Freiwillige in Führungspositionen gedacht:</value></data>
+  <data name="Governance_WhoShouldApplyDescription" xml:space="preserve"><value>Die Governance-Mitgliedschaft ist für humans in Führungspositionen gedacht:</value></data>
   <data name="Governance_CampLeads" xml:space="preserve"><value>Camp Leads und Koordinatoren</value></data>
   <data name="Governance_MetaVolunteers" xml:space="preserve"><value>Meta-Freiwillige und Team Leads</value></data>
   <data name="Governance_LongTermMembers" xml:space="preserve"><value>Langfristig engagierte Community-Mitglieder</value></data>

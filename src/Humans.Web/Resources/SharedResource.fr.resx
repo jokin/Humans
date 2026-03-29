@@ -142,7 +142,7 @@
   <data name="Dashboard_NoConsentsRequired" xml:space="preserve"><value>Aucun document ne n&#xE9;cessite de consentement pour le moment.</value></data>
   <data name="Dashboard_LatestApplication" xml:space="preserve"><value>Derni&#xE8;re candidature :</value></data>
   <data name="Dashboard_ViewApplicationHistory" xml:space="preserve"><value>Voir l'historique des candidatures</value></data>
-  <data name="Dashboard_GovernanceDescription" xml:space="preserve"><value>Les asociados sont des membres votants qui participent aux d&#xE9;cisions de gouvernance telles que les assembl&#xE9;es et les &#xE9;lections. Cela est destin&#xE9; aux leaders communautaires et aux b&#xE9;n&#xE9;voles engag&#xE9;s sur le long terme.</value></data>
+  <data name="Dashboard_GovernanceDescription" xml:space="preserve"><value>Les asociados sont des humans votants qui participent aux d&#xE9;cisions de gouvernance telles que les assembl&#xE9;es et les &#xE9;lections. Cela est destin&#xE9; aux leaders communautaires et aux humans engag&#xE9;s sur le long terme.</value></data>
   <data name="Dashboard_GovernanceOptional" xml:space="preserve"><value>La participation &#xE0; la gouvernance est facultative et n'affecte pas votre acc&#xE8;s aux ressources.</value></data>
   <data name="Dashboard_LearnMore" xml:space="preserve"><value>En savoir plus</value></data>
   <data name="Dashboard_OnboardingTitle" xml:space="preserve"><value>Premiers pas</value></data>
@@ -304,7 +304,7 @@
   <!-- Governance Index View -->
   <data name="Governance_NotYetApplied" xml:space="preserve"><value>Pas encore de candidature</value></data>
   <data name="Governance_AsociadoDescription" xml:space="preserve"><value>Les asociados sont les membres votants de Nobodies Collective. En tant qu'asociado, vous pouvez assister aux assembl&#xE9;es g&#xE9;n&#xE9;rales, voter sur les d&#xE9;cisions collectives et participer aux &#xE9;lections.</value></data>
-  <data name="Governance_Optional" xml:space="preserve"><value>Cela est facultatif. La plupart des b&#xE9;n&#xE9;voles n'ont pas besoin de devenir asociados. Vous avez d&#xE9;j&#xE0; acc&#xE8;s aux ressources une fois votre profil et vos consentements compl&#xE9;t&#xE9;s.</value></data>
+  <data name="Governance_Optional" xml:space="preserve"><value>Cela est facultatif. La plupart des humans n'ont pas besoin de devenir asociados. Vous avez d&#xE9;j&#xE0; acc&#xE8;s aux ressources une fois votre profil et vos consentements compl&#xE9;t&#xE9;s.</value></data>
   <data name="Governance_ApplyButton" xml:space="preserve"><value>Postuler pour devenir asociado</value></data>
   <data name="Governance_ColaboradorCanApply" xml:space="preserve"><value>Les Colaboradores peuvent &#xE9;galement postuler pour le statut d'Asociado s'ils souhaitent participer &#xE0; la gouvernance.</value></data>
   <data name="Governance_ApplyForAsociado" xml:space="preserve"><value>Postuler pour Asociado</value></data>
@@ -325,7 +325,7 @@
   <data name="Governance_VoteOnDecisions" xml:space="preserve"><value>Voter sur les d&#xE9;cisions collectives</value></data>
   <data name="Governance_ParticipateElections" xml:space="preserve"><value>Participer aux &#xE9;lections du conseil</value></data>
   <data name="Governance_WhoShouldApply" xml:space="preserve"><value>Qui devrait postuler&#xA0;?</value></data>
-  <data name="Governance_WhoShouldApplyDescription" xml:space="preserve"><value>L'adh&#xE9;sion &#xE0; la gouvernance est destin&#xE9;e aux b&#xE9;n&#xE9;voles occupant des postes de responsabilit&#xE9; :</value></data>
+  <data name="Governance_WhoShouldApplyDescription" xml:space="preserve"><value>L'adh&#xE9;sion &#xE0; la gouvernance est destin&#xE9;e aux humans occupant des postes de responsabilit&#xE9; :</value></data>
   <data name="Governance_CampLeads" xml:space="preserve"><value>Responsables et coordinateurs de camps</value></data>
   <data name="Governance_MetaVolunteers" xml:space="preserve"><value>M&#xE9;ta-b&#xE9;n&#xE9;voles et responsables d'&#xE9;quipe</value></data>
   <data name="Governance_LongTermMembers" xml:space="preserve"><value>Membres engag&#xE9;s sur le long terme</value></data>

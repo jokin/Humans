@@ -142,7 +142,7 @@
   <data name="Dashboard_NoConsentsRequired" xml:space="preserve"><value>No se requiere consentimiento en este momento.</value></data>
   <data name="Dashboard_LatestApplication" xml:space="preserve"><value>&#xDA;ltima solicitud:</value></data>
   <data name="Dashboard_ViewApplicationHistory" xml:space="preserve"><value>Ver historial de solicitudes</value></data>
-  <data name="Dashboard_GovernanceDescription" xml:space="preserve"><value>Los asociados son miembros con derecho a voto que participan en las decisiones de gobernanza como asambleas y elecciones. Esto est&#xE1; destinado a l&#xED;deres comunitarios y voluntarios comprometidos a largo plazo.</value></data>
+  <data name="Dashboard_GovernanceDescription" xml:space="preserve"><value>Los asociados son humans con derecho a voto que participan en las decisiones de gobernanza como asambleas y elecciones. Esto est&#xE1; destinado a l&#xED;deres comunitarios y humans comprometidos a largo plazo.</value></data>
   <data name="Dashboard_GovernanceOptional" xml:space="preserve"><value>La participaci&#xF3;n en la gobernanza es opcional y no afecta a su acceso a los recursos.</value></data>
   <data name="Dashboard_LearnMore" xml:space="preserve"><value>M&#xE1;s informaci&#xF3;n</value></data>
   <data name="Dashboard_OnboardingTitle" xml:space="preserve"><value>Primeros pasos</value></data>
@@ -306,7 +306,7 @@
   <!-- Governance Index View -->
   <data name="Governance_NotYetApplied" xml:space="preserve"><value>A&#xFA;n no ha solicitado</value></data>
   <data name="Governance_AsociadoDescription" xml:space="preserve"><value>Los asociados son los miembros con derecho a voto de Nobodies Collective. Como asociado, puede asistir a asambleas generales, votar en decisiones colectivas y participar en elecciones.</value></data>
-  <data name="Governance_Optional" xml:space="preserve"><value>Esto es opcional. La mayor&#xED;a de los voluntarios no necesitan convertirse en asociados. Ya tiene acceso a los recursos una vez que haya completado su perfil y consentimientos.</value></data>
+  <data name="Governance_Optional" xml:space="preserve"><value>Esto es opcional. La mayor&#xED;a de los humans no necesitan convertirse en asociados. Ya tiene acceso a los recursos una vez que haya completado su perfil y consentimientos.</value></data>
   <data name="Governance_ApplyButton" xml:space="preserve"><value>Solicitar ser asociado</value></data>
   <data name="Governance_ColaboradorCanApply" xml:space="preserve"><value>Los Colaboradores tambi&#xE9;n pueden solicitar el estatus de Asociado si desean participar en la gobernanza.</value></data>
   <data name="Governance_ApplyForAsociado" xml:space="preserve"><value>Solicitar ser Asociado</value></data>
@@ -327,7 +327,7 @@
   <data name="Governance_VoteOnDecisions" xml:space="preserve"><value>Votar en decisiones colectivas</value></data>
   <data name="Governance_ParticipateElections" xml:space="preserve"><value>Participar en elecciones de la junta</value></data>
   <data name="Governance_WhoShouldApply" xml:space="preserve"><value>&#xBF;Qui&#xE9;n deber&#xED;a solicitarlo?</value></data>
-  <data name="Governance_WhoShouldApplyDescription" xml:space="preserve"><value>La membres&#xED;a de gobernanza est&#xE1; destinada a voluntarios en roles de liderazgo:</value></data>
+  <data name="Governance_WhoShouldApplyDescription" xml:space="preserve"><value>La membres&#xED;a de gobernanza est&#xE1; destinada a humans en roles de liderazgo:</value></data>
   <data name="Governance_CampLeads" xml:space="preserve"><value>L&#xED;deres y coordinadores de campamentos</value></data>
   <data name="Governance_MetaVolunteers" xml:space="preserve"><value>Meta-voluntarios y l&#xED;deres de equipo</value></data>
   <data name="Governance_LongTermMembers" xml:space="preserve"><value>Miembros comprometidos a largo plazo</value></data>

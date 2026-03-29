@@ -142,7 +142,7 @@
   <data name="Dashboard_NoConsentsRequired" xml:space="preserve"><value>Al momento non sono richiesti consensi per alcun documento.</value></data>
   <data name="Dashboard_LatestApplication" xml:space="preserve"><value>Ultima domanda:</value></data>
   <data name="Dashboard_ViewApplicationHistory" xml:space="preserve"><value>Visualizza storico domande</value></data>
-  <data name="Dashboard_GovernanceDescription" xml:space="preserve"><value>Gli asociados sono membri votanti che partecipano alle decisioni di governance come assemblee ed elezioni. Questo &#xE8; pensato per i leader della comunit&#xE0; e i volontari impegnati a lungo termine.</value></data>
+  <data name="Dashboard_GovernanceDescription" xml:space="preserve"><value>Gli asociados sono humans votanti che partecipano alle decisioni di governance come assemblee ed elezioni. Questo &#xE8; pensato per i leader della comunit&#xE0; e i humans impegnati a lungo termine.</value></data>
   <data name="Dashboard_GovernanceOptional" xml:space="preserve"><value>La partecipazione alla governance &#xE8; facoltativa e non influisce sul Suo accesso alle risorse.</value></data>
   <data name="Dashboard_LearnMore" xml:space="preserve"><value>Maggiori informazioni</value></data>
   <data name="Dashboard_OnboardingTitle" xml:space="preserve"><value>Per iniziare</value></data>
@@ -304,7 +304,7 @@
   <!-- Governance Index View -->
   <data name="Governance_NotYetApplied" xml:space="preserve"><value>Non ancora candidato/a</value></data>
   <data name="Governance_AsociadoDescription" xml:space="preserve"><value>Gli asociados sono i membri votanti formali di Nobodies Collective. Come asociado, può partecipare alle assemblee generali, votare sulle decisioni collettive e partecipare alle elezioni.</value></data>
-  <data name="Governance_Optional" xml:space="preserve"><value>Questo è facoltativo. La maggior parte dei volontari non ha bisogno di diventare asociado. Ha già accesso alle risorse una volta completato il profilo e i consensi.</value></data>
+  <data name="Governance_Optional" xml:space="preserve"><value>Questo è facoltativo. La maggior parte dei humans non ha bisogno di diventare asociado. Ha già accesso alle risorse una volta completato il profilo e i consensi.</value></data>
   <data name="Governance_ApplyButton" xml:space="preserve"><value>Candidati come Asociado</value></data>
   <data name="Governance_ColaboradorCanApply" xml:space="preserve"><value>I Colaboradores possono anche candidarsi per lo status di Asociado se desiderano partecipare alla governance.</value></data>
   <data name="Governance_ApplyForAsociado" xml:space="preserve"><value>Candidati come Asociado</value></data>
@@ -325,7 +325,7 @@
   <data name="Governance_VoteOnDecisions" xml:space="preserve"><value>Votare sulle decisioni collettive</value></data>
   <data name="Governance_ParticipateElections" xml:space="preserve"><value>Partecipare alle elezioni del Consiglio</value></data>
   <data name="Governance_WhoShouldApply" xml:space="preserve"><value>Chi dovrebbe candidarsi?</value></data>
-  <data name="Governance_WhoShouldApplyDescription" xml:space="preserve"><value>L'iscrizione alla governance è pensata per i volontari in ruoli di leadership:</value></data>
+  <data name="Governance_WhoShouldApplyDescription" xml:space="preserve"><value>L'iscrizione alla governance è pensata per i humans in ruoli di leadership:</value></data>
   <data name="Governance_CampLeads" xml:space="preserve"><value>Camp lead e coordinatori</value></data>
   <data name="Governance_MetaVolunteers" xml:space="preserve"><value>Meta-volontari e team lead</value></data>
   <data name="Governance_LongTermMembers" xml:space="preserve"><value>Membri della comunità impegnati a lungo termine</value></data>
