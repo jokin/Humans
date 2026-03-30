@@ -238,76 +238,35 @@ public class TicketController : HumansControllerBase
     [HttpGet("Codes")]
     public async Task<IActionResult> Codes(string? search)
     {
-        var campaigns = await _dbContext.Set<Domain.Entities.Campaign>()
-            .Where(c => c.Status == CampaignStatus.Active || c.Status == CampaignStatus.Completed)
-            .Include(c => c.Grants).ThenInclude(g => g.Code)
-            .Include(c => c.Grants).ThenInclude(g => g.User)
-            .OrderByDescending(c => c.CreatedAt)
-            .AsSplitQuery()
-            .ToListAsync();
-
-        var campaignSummaries = campaigns.Select(c =>
-        {
-            var total = c.Grants.Count;
-            var redeemed = c.Grants.Count(g => g.RedeemedAt is not null);
-            return new CampaignCodeSummary
-            {
-                CampaignId = c.Id,
-                CampaignTitle = c.Title,
-                TotalGrants = total,
-                Redeemed = redeemed,
-                Unused = total - redeemed,
-                RedemptionRate = total > 0 ? Math.Round(redeemed * 100m / total, 1) : 0
-            };
-        }).ToList();
-
-        var allGrants = campaigns.SelectMany(c => c.Grants).AsEnumerable();
-        if (search.HasSearchTerm(1))
-        {
-            allGrants = allGrants.Where(g =>
-                g.Code?.Code.ContainsOrdinalIgnoreCase(search) == true ||
-                g.User.DisplayName.ContainsOrdinalIgnoreCase(search));
-        }
-
-        // Load orders with discount codes to show who redeemed and on which order
-        var ordersWithCodes = await _dbContext.TicketOrders
-            .Where(o => o.DiscountCode != null)
-            .Select(o => new { o.DiscountCode, o.BuyerName, o.BuyerEmail, o.VendorOrderId })
-            .ToListAsync();
-
-        var orderByCode = ordersWithCodes
-            .GroupBy(o => o.DiscountCode!, StringComparer.OrdinalIgnoreCase)
-            .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
-
-        var codeRows = allGrants.Select(g =>
-        {
-            var code = g.Code?.Code;
-            orderByCode.TryGetValue(code ?? "", out var matchedOrder);
-            return new CodeDetailRow
-            {
-                Code = code ?? "\u2014",
-                RecipientName = g.User.DisplayName,
-                RecipientUserId = g.UserId,
-                CampaignTitle = campaigns.First(c => c.Id == g.CampaignId).Title,
-                Status = g.RedeemedAt is not null ? "Redeemed" : (g.LatestEmailStatus?.ToString() ?? "Pending"),
-                RedeemedAt = g.RedeemedAt,
-                RedeemedByName = matchedOrder?.BuyerName,
-                RedeemedByEmail = matchedOrder?.BuyerEmail,
-                RedeemedOrderVendorId = matchedOrder?.VendorOrderId,
-            };
-        }).ToList();
-
-        var totalSent = campaignSummaries.Sum(c => c.TotalGrants);
-        var totalRedeemed = campaignSummaries.Sum(c => c.Redeemed);
+        var data = await _ticketQueryService.GetCodeTrackingDataAsync(search);
 
         var model = new TicketCodeTrackingViewModel
         {
-            TotalCodesSent = totalSent,
-            CodesRedeemed = totalRedeemed,
-            CodesUnused = totalSent - totalRedeemed,
-            RedemptionRate = totalSent > 0 ? Math.Round(totalRedeemed * 100m / totalSent, 1) : 0,
-            Campaigns = campaignSummaries,
-            Codes = codeRows,
+            TotalCodesSent = data.TotalCodesSent,
+            CodesRedeemed = data.CodesRedeemed,
+            CodesUnused = data.CodesUnused,
+            RedemptionRate = data.RedemptionRate,
+            Campaigns = data.Campaigns.Select(c => new CampaignCodeSummary
+            {
+                CampaignId = c.CampaignId,
+                CampaignTitle = c.CampaignTitle,
+                TotalGrants = c.TotalGrants,
+                Redeemed = c.Redeemed,
+                Unused = c.Unused,
+                RedemptionRate = c.RedemptionRate,
+            }).ToList(),
+            Codes = data.Codes.Select(c => new CodeDetailRow
+            {
+                Code = c.Code,
+                RecipientName = c.RecipientName,
+                RecipientUserId = c.RecipientUserId,
+                CampaignTitle = c.CampaignTitle,
+                Status = c.Status,
+                RedeemedAt = c.RedeemedAt,
+                RedeemedByName = c.RedeemedByName,
+                RedeemedByEmail = c.RedeemedByEmail,
+                RedeemedOrderVendorId = c.RedeemedOrderVendorId,
+            }).ToList(),
             Search = search,
         };
 

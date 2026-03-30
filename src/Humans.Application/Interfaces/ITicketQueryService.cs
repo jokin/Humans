@@ -34,4 +34,10 @@ public interface ITicketQueryService
     /// Compute weekly and quarterly sales aggregates for reporting.
     /// </summary>
     Task<TicketSalesAggregates> GetSalesAggregatesAsync();
+
+    /// <summary>
+    /// Get code tracking data: campaign summaries and individual code details
+    /// with redemption status. Optionally filters codes by search term.
+    /// </summary>
+    Task<CodeTrackingData> GetCodeTrackingDataAsync(string? search);
 }

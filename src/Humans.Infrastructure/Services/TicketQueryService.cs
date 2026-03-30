@@ -227,6 +227,81 @@ public class TicketQueryService : ITicketQueryService
         };
     }
 
+    public async Task<CodeTrackingData> GetCodeTrackingDataAsync(string? search)
+    {
+        var campaigns = await _dbContext.Set<Campaign>()
+            .Where(c => c.Status == CampaignStatus.Active || c.Status == CampaignStatus.Completed)
+            .Include(c => c.Grants).ThenInclude(g => g.Code)
+            .Include(c => c.Grants).ThenInclude(g => g.User)
+            .OrderByDescending(c => c.CreatedAt)
+            .AsSplitQuery()
+            .ToListAsync();
+
+        var campaignSummaries = campaigns.Select(c =>
+        {
+            var total = c.Grants.Count;
+            var redeemed = c.Grants.Count(g => g.RedeemedAt is not null);
+            return new CampaignCodeSummaryDto
+            {
+                CampaignId = c.Id,
+                CampaignTitle = c.Title,
+                TotalGrants = total,
+                Redeemed = redeemed,
+                Unused = total - redeemed,
+                RedemptionRate = total > 0 ? Math.Round(redeemed * 100m / total, 1) : 0
+            };
+        }).ToList();
+
+        var allGrants = campaigns.SelectMany(c => c.Grants).AsEnumerable();
+        if (!string.IsNullOrWhiteSpace(search) && search.Trim().Length >= 1)
+        {
+            allGrants = allGrants.Where(g =>
+                g.Code?.Code.Contains(search, StringComparison.OrdinalIgnoreCase) == true ||
+                g.User.DisplayName.Contains(search, StringComparison.OrdinalIgnoreCase));
+        }
+
+        // Load orders with discount codes to correlate redemptions
+        var ordersWithCodes = await _dbContext.TicketOrders
+            .Where(o => o.DiscountCode != null)
+            .Select(o => new { o.DiscountCode, o.BuyerName, o.BuyerEmail, o.VendorOrderId })
+            .ToListAsync();
+
+        var orderByCode = ordersWithCodes
+            .GroupBy(o => o.DiscountCode!, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+
+        var codeRows = allGrants.Select(g =>
+        {
+            var code = g.Code?.Code;
+            orderByCode.TryGetValue(code ?? "", out var matchedOrder);
+            return new CodeDetailDto
+            {
+                Code = code ?? "\u2014",
+                RecipientName = g.User.DisplayName,
+                RecipientUserId = g.UserId,
+                CampaignTitle = campaigns.First(c => c.Id == g.CampaignId).Title,
+                Status = g.RedeemedAt is not null ? "Redeemed" : (g.LatestEmailStatus?.ToString() ?? "Pending"),
+                RedeemedAt = g.RedeemedAt,
+                RedeemedByName = matchedOrder?.BuyerName,
+                RedeemedByEmail = matchedOrder?.BuyerEmail,
+                RedeemedOrderVendorId = matchedOrder?.VendorOrderId,
+            };
+        }).ToList();
+
+        var totalSent = campaignSummaries.Sum(c => c.TotalGrants);
+        var totalRedeemed = campaignSummaries.Sum(c => c.Redeemed);
+
+        return new CodeTrackingData
+        {
+            TotalCodesSent = totalSent,
+            CodesRedeemed = totalRedeemed,
+            CodesUnused = totalSent - totalRedeemed,
+            RedemptionRate = totalSent > 0 ? Math.Round(totalRedeemed * 100m / totalSent, 1) : 0,
+            Campaigns = campaignSummaries,
+            Codes = codeRows,
+        };
+    }
+
     public async Task<TicketSalesAggregates> GetSalesAggregatesAsync()
     {
         // Load all paid orders with attendee counts in memory (small dataset at ~1,500 orders)

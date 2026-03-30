@@ -81,3 +81,37 @@ public class QuarterlySalesAggregate
     public decimal GrossRevenue { get; init; }
     public int OrderCount { get; init; }
 }
+
+/// <summary>Aggregated code tracking data: campaign summaries + individual code details.</summary>
+public class CodeTrackingData
+{
+    public int TotalCodesSent { get; init; }
+    public int CodesRedeemed { get; init; }
+    public int CodesUnused { get; init; }
+    public decimal RedemptionRate { get; init; }
+    public List<CampaignCodeSummaryDto> Campaigns { get; init; } = [];
+    public List<CodeDetailDto> Codes { get; init; } = [];
+}
+
+public class CampaignCodeSummaryDto
+{
+    public Guid CampaignId { get; init; }
+    public string CampaignTitle { get; init; } = string.Empty;
+    public int TotalGrants { get; init; }
+    public int Redeemed { get; init; }
+    public int Unused { get; init; }
+    public decimal RedemptionRate { get; init; }
+}
+
+public class CodeDetailDto
+{
+    public string Code { get; init; } = string.Empty;
+    public string RecipientName { get; init; } = string.Empty;
+    public Guid RecipientUserId { get; init; }
+    public string CampaignTitle { get; init; } = string.Empty;
+    public string Status { get; init; } = string.Empty;
+    public Instant? RedeemedAt { get; init; }
+    public string? RedeemedByName { get; init; }
+    public string? RedeemedByEmail { get; init; }
+    public string? RedeemedOrderVendorId { get; init; }
+}
