@@ -1,9 +1,11 @@
+using Humans.Application.DTOs;
+
 namespace Humans.Application.Interfaces;
 
 /// <summary>
 /// Query service for ticket data — checks whether a user has tickets,
-/// counts matched tickets, etc. All matching logic (MatchedUserId,
-/// email fallback, case-insensitive) lives here.
+/// counts matched tickets, and computes aggregate dashboard statistics.
+/// All matching logic (MatchedUserId, email fallback, case-insensitive) lives here.
 /// </summary>
 public interface ITicketQueryService
 {
@@ -21,4 +23,15 @@ public interface ITicketQueryService
     /// Used for aggregate reporting like volunteer ticket coverage.
     /// </summary>
     Task<HashSet<Guid>> GetUserIdsWithTicketsAsync();
+
+    /// <summary>
+    /// Compute aggregated dashboard statistics: revenue, fees, daily sales,
+    /// recent orders, volunteer coverage, and sync state.
+    /// </summary>
+    Task<TicketDashboardStats> GetDashboardStatsAsync();
+
+    /// <summary>
+    /// Compute weekly and quarterly sales aggregates for reporting.
+    /// </summary>
+    Task<TicketSalesAggregates> GetSalesAggregatesAsync();
 }
