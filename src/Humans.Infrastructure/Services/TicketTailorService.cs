@@ -163,7 +163,18 @@ public class TicketTailorService : ITicketVendorService
         string eventId, CancellationToken ct = default)
     {
         var response = await _httpClient.GetAsync($"{BaseUrl}/events/{eventId}", ct);
-        response.EnsureSuccessStatusCode();
+
+        if (!response.IsSuccessStatusCode)
+        {
+            _logger.LogWarning(
+                "TicketTailor event summary API returned {StatusCode} for event {EventId}",
+                (int)response.StatusCode, eventId);
+
+            if ((int)response.StatusCode >= 500)
+                return new VendorEventSummaryDto(eventId, "Unknown", 0, 0, 0);
+
+            response.EnsureSuccessStatusCode();
+        }
 
         var evt = await response.Content.ReadFromJsonAsync<TtEvent>(JsonOptions, ct);
 
