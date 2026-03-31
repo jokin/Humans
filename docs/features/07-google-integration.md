@@ -231,6 +231,29 @@ All Drive API calls MUST use:
 - `SupportsAllDrives = true`
 - `Fields` including `permissionDetails` when listing permissions
 
+### Multi-Team Permission Level Resolution
+When the same Drive resource (same `GoogleId`) is linked to multiple teams with different `DrivePermissionLevel` values, the system resolves the **maximum** level before setting permissions. For example, if Team A links a folder as Viewer and Team B links the same folder as Contributor, a user who belongs to both teams gets Contributor access.
+
+This resolution happens:
+- **Before the Drive API call** — not after. The max level is computed and passed to `AddUserToDriveAsync`.
+- **In `SyncDriveResourceGroupAsync`** — resources are grouped by `GoogleId`, and the max level across the group is used for all adds.
+- **In `AddUserToTeamResourcesAsync`** — when a user is added to a team, the max level is queried across all active resources with the same `GoogleId`.
+- **During reconciliation** — the daily job detects `WrongRole` drift when a user's current Google permission is lower than the resolved max, and upgrades it.
+
+## Subteam Member Rollup
+
+When a department (parent team) has child sub-teams, the effective membership for Google resource sync includes both direct department members and all active members of child teams. This ensures sub-team members automatically get access to department-level resources.
+
+**Key behaviors:**
+- Rollup is one-way: sub-team members get parent department resources. Parent members do NOT get sub-team resources.
+- On subteam join: `AddUserToTeamResourcesAsync` immediately adds the user to parent department resources.
+- On subteam leave: removal is deferred to the reconciliation job, which recomputes effective membership. If the user is still a direct department member or in another sub-team, they keep access.
+- The department detail page (`/Teams/{slug}`) shows a "Humans via sub-teams" section with source team badges, visually distinct from direct members.
+
+**Sync methods that include rollup:**
+- `SyncGroupResourceAsync` — includes child team members via `GetChildTeamMembersAsync`
+- `SyncDriveResourceGroupAsync` — includes child team members via `GetChildTeamMembersAsync`
+
 ## Permission Sync
 
 ### Full Sync (SyncResourcePermissionsAsync)
@@ -240,7 +263,8 @@ For Shared Drive folders:
 3. Filter to direct managed permissions only (exclude inherited, owner, service account)
 4. Add missing permissions (expected but not in Google)
 5. Remove stale permissions (in Google but not expected)
-6. Update `LastSyncedAt`
+6. Detect permission level drift (member has access but at wrong level) and upgrade
+7. Update `LastSyncedAt`
 
 For Google Groups:
 1. Load expected members from DB (team members where `LeftAt == null`, plus child team members for departments)

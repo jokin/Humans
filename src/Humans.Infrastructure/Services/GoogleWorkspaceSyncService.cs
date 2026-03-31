@@ -194,6 +194,43 @@ public class GoogleWorkspaceSyncService : IGoogleSyncService
             .ToListAsync(cancellationToken);
     }
 
+    /// <summary>
+    /// Resolves the maximum DrivePermissionLevel for a specific user on a Drive resource,
+    /// considering only resources whose teams the user is an active member of.
+    /// </summary>
+    private async Task<DrivePermissionLevel> ResolvePermissionLevelForUserAsync(
+        string googleId,
+        Guid userId,
+        CancellationToken cancellationToken)
+    {
+        var levels = await _dbContext.GoogleResources
+            .AsNoTracking()
+            .Where(r => r.GoogleId == googleId && r.IsActive
+                && r.Team.Members.Any(tm => tm.UserId == userId && tm.LeftAt == null))
+            .Select(r => r.DrivePermissionLevel)
+            .Where(l => l != DrivePermissionLevel.None)
+            .ToListAsync(cancellationToken);
+
+        if (levels.Count == 0)
+            return DrivePermissionLevel.Contributor;
+
+        return levels.Max();
+    }
+
+    /// <summary>
+    /// Maps a Google Drive API role string to the corresponding DrivePermissionLevel enum.
+    /// Returns null if the role is not recognized.
+    /// </summary>
+    private static DrivePermissionLevel? ParseApiRole(string? role) => role switch
+    {
+        "reader" => DrivePermissionLevel.Viewer,
+        "commenter" => DrivePermissionLevel.Commenter,
+        "writer" => DrivePermissionLevel.Contributor,
+        "fileOrganizer" => DrivePermissionLevel.ContentManager,
+        "organizer" => DrivePermissionLevel.Manager,
+        _ => null
+    };
+
     /// <inheritdoc />
     public async Task<GoogleResource> ProvisionTeamFolderAsync(
         Guid teamId,
@@ -463,9 +500,18 @@ public class GoogleWorkspaceSyncService : IGoogleSyncService
     /// All code paths (outbox, reconciliation, manual sync) must call this method.
     /// Respects SyncSettings — skips if GoogleDrive mode is None.
     /// </summary>
+    /// <param name="resource">The Google resource to grant access on.</param>
+    /// <param name="userEmail">The user's email address.</param>
+    /// <param name="permissionLevelOverride">
+    /// Optional override for the permission level. When the same Drive resource is linked
+    /// to multiple teams, this should be the resolved maximum level across all teams.
+    /// If null, uses the resource's own DrivePermissionLevel.
+    /// </param>
+    /// <param name="cancellationToken">Cancellation token.</param>
     private async Task AddUserToDriveAsync(
         GoogleResource resource,
         string userEmail,
+        DrivePermissionLevel? permissionLevelOverride = null,
         CancellationToken cancellationToken = default)
     {
         var mode = await _syncSettingsService.GetModeAsync(SyncServiceType.GoogleDrive, cancellationToken);
@@ -475,8 +521,9 @@ public class GoogleWorkspaceSyncService : IGoogleSyncService
             return;
         }
 
+        var effectiveLevel = permissionLevelOverride ?? resource.DrivePermissionLevel;
         var drive = await GetDriveServiceAsync();
-        var apiRole = resource.DrivePermissionLevel.ToApiRole();
+        var apiRole = effectiveLevel.ToApiRole();
         var permission = new Google.Apis.Drive.v3.Data.Permission
         {
             Type = "user",
@@ -492,11 +539,12 @@ public class GoogleWorkspaceSyncService : IGoogleSyncService
 
             await _auditLogService.LogGoogleSyncAsync(
                 AuditAction.GoogleResourceAccessGranted, resource.Id,
-                $"Granted Drive access ({resource.DrivePermissionLevel}) to {userEmail} ({resource.Name})",
+                $"Granted Drive access ({effectiveLevel}) to {userEmail} ({resource.Name})",
                 nameof(GoogleWorkspaceSyncService),
                 userEmail, apiRole, GoogleSyncSource.ManualSync, success: true);
 
-            _logger.LogInformation("Granted Drive access to {Email} on {GoogleId}", userEmail, resource.GoogleId);
+            _logger.LogInformation("Granted Drive access to {Email} on {GoogleId} at level {Level}",
+                userEmail, resource.GoogleId, effectiveLevel);
         }
         catch (Google.GoogleApiException ex) when (ex.Error?.Code == 400)
         {
@@ -651,7 +699,10 @@ public class GoogleWorkspaceSyncService : IGoogleSyncService
             }
             else
             {
-                await AddUserToDriveAsync(resource, googleEmail, cancellationToken);
+                // Resolve permission level based on this user's team memberships
+                var level = await ResolvePermissionLevelForUserAsync(
+                    resource.GoogleId, userId, cancellationToken);
+                await AddUserToDriveAsync(resource, googleEmail, level, cancellationToken);
             }
         }
 
@@ -672,7 +723,9 @@ public class GoogleWorkspaceSyncService : IGoogleSyncService
                 }
                 else
                 {
-                    await AddUserToDriveAsync(resource, googleEmail, cancellationToken);
+                    var level = await ResolvePermissionLevelForUserAsync(
+                        resource.GoogleId, userId, cancellationToken);
+                    await AddUserToDriveAsync(resource, googleEmail, level, cancellationToken);
                 }
             }
         }
@@ -933,21 +986,21 @@ public class GoogleWorkspaceSyncService : IGoogleSyncService
                     ResourceType = resource.ResourceType.ToString(),
                     GoogleId = resource.GoogleId,
                     Url = resource.Url,
-                    LinkedTeams = [resource.Team.Name],
+                    LinkedTeams = [new TeamLink(resource.Team.Name, resource.Team.Slug)],
                     ErrorMessage = "Group not found in Google"
                 };
             }
 
             // Build member sync status list
             var members = new List<MemberSyncStatus>();
-            var teamName = resource.Team.Name;
+            var teamLink = new TeamLink(resource.Team.Name, resource.Team.Slug);
 
             foreach (var expected in expectedMembers)
             {
                 var state = currentEmails.Contains(expected.Email!)
                     ? MemberSyncState.Correct
                     : MemberSyncState.Missing;
-                members.Add(new MemberSyncStatus(expected.Email!, expected.DisplayName, state, [teamName]));
+                members.Add(new MemberSyncStatus(expected.Email!, expected.DisplayName, state, [teamLink]));
             }
 
             foreach (var email in currentEmails)
@@ -1005,7 +1058,7 @@ public class GoogleWorkspaceSyncService : IGoogleSyncService
                 ResourceType = resource.ResourceType.ToString(),
                 GoogleId = resource.GoogleId,
                 Url = resource.Url,
-                LinkedTeams = [teamName],
+                LinkedTeams = [teamLink],
                 Members = members
             };
         }
@@ -1021,7 +1074,7 @@ public class GoogleWorkspaceSyncService : IGoogleSyncService
                 ResourceType = resource.ResourceType.ToString(),
                 GoogleId = resource.GoogleId,
                 Url = resource.Url,
-                LinkedTeams = [resource.Team.Name],
+                LinkedTeams = [new TeamLink(resource.Team.Name, resource.Team.Slug)],
                 ErrorMessage = ex.Message
             };
         }
@@ -1034,16 +1087,26 @@ public class GoogleWorkspaceSyncService : IGoogleSyncService
         CancellationToken cancellationToken)
     {
         var primary = resources[0];
+        // Build a lookup from team slug to permission level for per-member resolution
+        var levelByTeamSlug = new Dictionary<string, DrivePermissionLevel>(StringComparer.Ordinal);
+        foreach (var resource in resources)
+        {
+            var slug = resource.Team.Slug;
+            if (!levelByTeamSlug.TryGetValue(slug, out var existing) || resource.DrivePermissionLevel > existing)
+                levelByTeamSlug[slug] = resource.DrivePermissionLevel;
+        }
 
         try
         {
             // Expected: union of all linked teams' active members
-            var membersByEmail = new Dictionary<string, (string DisplayName, List<string> TeamNames)>(
+            var membersByEmail = new Dictionary<string, (string DisplayName, List<TeamLink> TeamLinks)>(
                 NormalizingEmailComparer.Instance);
 
             foreach (var resource in resources)
             {
-                var teamName = resource.Team.Name;
+                var level = resource.DrivePermissionLevel is DrivePermissionLevel.None
+                    ? null : resource.DrivePermissionLevel.ToString();
+                var teamLink = new TeamLink(resource.Team.Name, resource.Team.Slug, level);
                 foreach (var tm in resource.Team.Members)
                 {
                     var memberEmail = tm.User.GetGoogleServiceEmail();
@@ -1051,12 +1114,12 @@ public class GoogleWorkspaceSyncService : IGoogleSyncService
 
                     if (membersByEmail.TryGetValue(memberEmail, out var existing))
                     {
-                        if (!existing.TeamNames.Contains(teamName, StringComparer.Ordinal))
-                            existing.TeamNames.Add(teamName);
+                        if (!existing.TeamLinks.Any(tl => string.Equals(tl.Name, teamLink.Name, StringComparison.Ordinal)))
+                            existing.TeamLinks.Add(teamLink);
                     }
                     else
                     {
-                        membersByEmail[memberEmail] = (tm.User.DisplayName, new List<string> { teamName });
+                        membersByEmail[memberEmail] = (tm.User.DisplayName, new List<TeamLink> { teamLink });
                     }
                 }
 
@@ -1067,20 +1130,22 @@ public class GoogleWorkspaceSyncService : IGoogleSyncService
                     var memberEmail = cm.User.GetGoogleServiceEmail();
                     if (memberEmail is null) continue;
 
-                    var childTeamName = cm.Team.Name;
+                    var childTeamLink = new TeamLink(cm.Team.Name, cm.Team.Slug, level);
                     if (membersByEmail.TryGetValue(memberEmail, out var existing2))
                     {
-                        if (!existing2.TeamNames.Contains(childTeamName, StringComparer.Ordinal))
-                            existing2.TeamNames.Add(childTeamName);
+                        if (!existing2.TeamLinks.Any(tl => string.Equals(tl.Name, childTeamLink.Name, StringComparison.Ordinal)))
+                            existing2.TeamLinks.Add(childTeamLink);
                     }
                     else
                     {
-                        membersByEmail[memberEmail] = (cm.User.DisplayName, new List<string> { childTeamName });
+                        membersByEmail[memberEmail] = (cm.User.DisplayName, new List<TeamLink> { childTeamLink });
                     }
                 }
             }
 
-            var linkedTeams = resources.Select(r => r.Team.Name).Distinct(StringComparer.Ordinal).ToList();
+            var linkedTeams = resources.Select(r => new TeamLink(r.Team.Name, r.Team.Slug,
+                    r.DrivePermissionLevel is DrivePermissionLevel.None ? null : r.DrivePermissionLevel.ToString()))
+                .DistinctBy(tl => tl.Slug, StringComparer.Ordinal).ToList();
 
             // Current: Drive permissions
             var drive = await GetDriveServiceAsync();
@@ -1105,13 +1170,41 @@ public class GoogleWorkspaceSyncService : IGoogleSyncService
             // Build member sync status list
             var members = new List<MemberSyncStatus>();
 
-            foreach (var (email, (displayName, teamNames)) in membersByEmail)
+            foreach (var (email, (displayName, teamLinks)) in membersByEmail)
             {
-                var state = allEmails.Contains(email)
-                    ? MemberSyncState.Correct
-                    : MemberSyncState.Missing;
+                // Resolve this member's expected level from their specific team memberships
+                var memberMaxLevel = DrivePermissionLevel.None;
+                foreach (var tl in teamLinks)
+                {
+                    if (levelByTeamSlug.TryGetValue(tl.Slug, out var tlLevel) && tlLevel > memberMaxLevel)
+                        memberMaxLevel = tlLevel;
+                }
+                var memberExpectedRole = memberMaxLevel > DrivePermissionLevel.None
+                    ? memberMaxLevel.ToApiRole() : null;
+
+                MemberSyncState state;
                 roleByEmail.TryGetValue(email, out var currentRole);
-                members.Add(new MemberSyncStatus(email, displayName, state, teamNames, currentRole));
+
+                if (!allEmails.Contains(email))
+                {
+                    state = MemberSyncState.Missing;
+                }
+                else if (!directEmails.Contains(email))
+                {
+                    // Member has access but only via inherited Shared Drive permission —
+                    // the system can't manage this, so mark as Inherited
+                    state = MemberSyncState.Inherited;
+                }
+                else
+                {
+                    // Member has a direct permission — check if the level matches their expected
+                    var currentLevel = ParseApiRole(currentRole);
+                    state = currentLevel.HasValue && currentLevel.Value < memberMaxLevel
+                        ? MemberSyncState.WrongRole
+                        : MemberSyncState.Correct;
+                }
+
+                members.Add(new MemberSyncStatus(email, displayName, state, teamLinks, currentRole, memberExpectedRole));
             }
 
             var saEmail = await GetServiceAccountEmailAsync();
@@ -1134,11 +1227,13 @@ public class GoogleWorkspaceSyncService : IGoogleSyncService
             // Execute if not Preview
             if (action == SyncAction.Execute)
             {
-                foreach (var member in members.Where(m => m.State == MemberSyncState.Missing))
+                // Add missing members and fix wrong permission levels
+                foreach (var member in members.Where(m => m.State is MemberSyncState.Missing or MemberSyncState.WrongRole))
                 {
                     try
                     {
-                        await AddUserToDriveAsync(primary, member.Email, cancellationToken);
+                        var memberLevel = ParseApiRole(member.ExpectedRole) ?? DrivePermissionLevel.Contributor;
+                        await AddUserToDriveAsync(primary, member.Email, memberLevel, cancellationToken);
                     }
                     catch (Exception ex)
                     {
@@ -1214,7 +1309,9 @@ public class GoogleWorkspaceSyncService : IGoogleSyncService
                 GoogleId = primary.GoogleId,
                 Url = primary.Url,
                 PermissionLevel = primary.DrivePermissionLevel.ToString(),
-                LinkedTeams = resources.Select(r => r.Team.Name).Distinct(StringComparer.Ordinal).ToList(),
+                LinkedTeams = resources.Select(r => new TeamLink(r.Team.Name, r.Team.Slug,
+                        r.DrivePermissionLevel is DrivePermissionLevel.None ? null : r.DrivePermissionLevel.ToString()))
+                    .DistinctBy(tl => tl.Slug, StringComparer.Ordinal).ToList(),
                 ErrorMessage = ex.Message
             };
         }
