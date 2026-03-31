@@ -804,20 +804,25 @@ public class ProfileController : HumansControllerBase
             if (user is null)
                 return NotFound();
 
-            var profile = await _profileService.GetShiftProfileAsync(user.Id, includeMedical: true);
+            var profile = await _profileService.GetShiftProfileAsync(user.Id, includeMedical: false);
 
+            var quirks = profile?.Quirks ?? [];
+            var skills = profile?.Skills ?? [];
+            var languages = profile?.Languages ?? [];
             var viewModel = new ShiftInfoViewModel
             {
-                SelectedSkills = profile?.Skills ?? [],
-                SelectedQuirks = profile?.Quirks ?? [],
-                SelectedAllergies = profile?.Allergies ?? [],
-                SelectedIntolerances = profile?.Intolerances ?? [],
-                SelectedLanguages = profile?.Languages ?? [],
-                DietaryPreference = profile?.DietaryPreference,
-                MedicalConditions = profile?.MedicalConditions,
-                AllergyOtherText = profile?.AllergyOtherText,
-                IntoleranceOtherText = profile?.IntoleranceOtherText
+                SelectedSkills = skills.Where(s => !s.StartsWith("Other:", StringComparison.Ordinal)).ToList(),
+                SkillOtherText = skills.FirstOrDefault(s => s.StartsWith("Other:", StringComparison.Ordinal))?.Substring(6).Trim(),
+                SelectedQuirks = ShiftInfoViewModel.ExtractToggleQuirks(quirks),
+                TimePreference = ShiftInfoViewModel.ExtractTimePreference(quirks),
+                SelectedLanguages = languages.Where(l => !l.StartsWith("Other:", StringComparison.Ordinal)).ToList(),
+                LanguageOtherText = languages.FirstOrDefault(l => l.StartsWith("Other:", StringComparison.Ordinal))?.Substring(6).Trim(),
             };
+            // If there was "Other: text" stored, ensure "Other" is in the selected list
+            if (viewModel.SkillOtherText is not null && !viewModel.SelectedSkills.Contains("Other", StringComparer.Ordinal))
+                viewModel.SelectedSkills.Add("Other");
+            if (viewModel.LanguageOtherText is not null && !viewModel.SelectedLanguages.Contains("Other", StringComparer.Ordinal))
+                viewModel.SelectedLanguages.Add("Other");
 
             return View(viewModel);
         }
@@ -841,15 +846,21 @@ public class ProfileController : HumansControllerBase
 
             var shiftProfile = await _profileService.GetOrCreateShiftProfileAsync(user.Id);
 
-            shiftProfile.Skills = model.SelectedSkills ?? [];
-            shiftProfile.Quirks = model.SelectedQuirks ?? [];
-            shiftProfile.Allergies = model.SelectedAllergies ?? [];
-            shiftProfile.Intolerances = model.SelectedIntolerances ?? [];
-            shiftProfile.AllergyOtherText = model.SelectedAllergies?.Contains("Other", StringComparer.Ordinal) == true ? model.AllergyOtherText : null;
-            shiftProfile.IntoleranceOtherText = model.SelectedIntolerances?.Contains("Other", StringComparer.Ordinal) == true ? model.IntoleranceOtherText : null;
-            shiftProfile.Languages = model.SelectedLanguages ?? [];
-            shiftProfile.DietaryPreference = model.DietaryPreference;
-            shiftProfile.MedicalConditions = model.MedicalConditions;
+            var skills = model.SelectedSkills ?? [];
+            if (skills.Contains("Other", StringComparer.Ordinal) && !string.IsNullOrWhiteSpace(model.SkillOtherText))
+            {
+                skills.Remove("Other");
+                skills.Add($"Other: {model.SkillOtherText.Trim()}");
+            }
+            shiftProfile.Skills = skills;
+            shiftProfile.Quirks = ShiftInfoViewModel.MergeQuirks(model.TimePreference, model.SelectedQuirks ?? []);
+            var languages = model.SelectedLanguages ?? [];
+            if (languages.Contains("Other", StringComparer.Ordinal) && !string.IsNullOrWhiteSpace(model.LanguageOtherText))
+            {
+                languages.Remove("Other");
+                languages.Add($"Other: {model.LanguageOtherText.Trim()}");
+            }
+            shiftProfile.Languages = languages;
 
             await _profileService.UpdateShiftProfileAsync(shiftProfile);
 
