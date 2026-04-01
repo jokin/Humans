@@ -3,6 +3,7 @@ using System;
 using Humans.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using NodaTime;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
@@ -12,9 +13,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Humans.Infrastructure.Migrations
 {
     [DbContext(typeof(HumansDbContext))]
-    partial class HumansDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260401211716_AddTicketingProjectionAndBudgetFlags")]
+    partial class AddTicketingProjectionAndBudgetFlags
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -990,11 +993,6 @@ namespace Humans.Infrastructure.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
 
-                    b.Property<bool>("InboxEnabled")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(true);
-
                     b.Property<bool>("OptedOut")
                         .HasColumnType("boolean");
 
@@ -1250,97 +1248,6 @@ namespace Humans.Infrastructure.Migrations
                     b.ToTable("email_outbox_messages", (string)null);
                 });
 
-            modelBuilder.Entity("Humans.Domain.Entities.EventCategory", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<int>("DisplayOrder")
-                        .HasColumnType("integer");
-
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("boolean");
-
-                    b.Property<bool>("IsSensitive")
-                        .HasColumnType("boolean");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasMaxLength(60)
-                        .HasColumnType("character varying(60)");
-
-                    b.Property<string>("Slug")
-                        .IsRequired()
-                        .HasMaxLength(60)
-                        .HasColumnType("character varying(60)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("IsActive");
-
-                    b.HasIndex("Slug")
-                        .IsUnique();
-
-                    b.ToTable("event_categories", (string)null);
-
-                    b.HasData(
-                        new
-                        {
-                            Id = new Guid("00000000-0000-0000-0026-000000000001"),
-                            DisplayOrder = 1,
-                            IsActive = true,
-                            IsSensitive = false,
-                            Name = "Workshop",
-                            Slug = "workshop"
-                        },
-                        new
-                        {
-                            Id = new Guid("00000000-0000-0000-0026-000000000002"),
-                            DisplayOrder = 2,
-                            IsActive = true,
-                            IsSensitive = false,
-                            Name = "Party",
-                            Slug = "party"
-                        },
-                        new
-                        {
-                            Id = new Guid("00000000-0000-0000-0026-000000000003"),
-                            DisplayOrder = 3,
-                            IsActive = true,
-                            IsSensitive = false,
-                            Name = "Food and drink",
-                            Slug = "food-and-drink"
-                        },
-                        new
-                        {
-                            Id = new Guid("00000000-0000-0000-0026-000000000004"),
-                            DisplayOrder = 4,
-                            IsActive = true,
-                            IsSensitive = false,
-                            Name = "Chillout",
-                            Slug = "chillout"
-                        },
-                        new
-                        {
-                            Id = new Guid("00000000-0000-0000-0026-000000000005"),
-                            DisplayOrder = 5,
-                            IsActive = true,
-                            IsSensitive = true,
-                            Name = "Spiritual / Healing",
-                            Slug = "spiritual-healing"
-                        },
-                        new
-                        {
-                            Id = new Guid("00000000-0000-0000-0026-000000000006"),
-                            DisplayOrder = 6,
-                            IsActive = true,
-                            IsSensitive = false,
-                            Name = "Other",
-                            Slug = "other"
-                        });
-                });
-
             modelBuilder.Entity("Humans.Domain.Entities.EventSettings", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1588,9 +1495,6 @@ namespace Humans.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<bool>("RestrictInheritedAccess")
-                        .HasColumnType("boolean");
-
                     b.Property<Guid>("TeamId")
                         .HasColumnType("uuid");
 
@@ -1664,151 +1568,6 @@ namespace Humans.Infrastructure.Migrations
                     b.ToTable("google_sync_outbox", (string)null);
                 });
 
-            modelBuilder.Entity("Humans.Domain.Entities.GuideEvent", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("AdminNotes")
-                        .HasMaxLength(1000)
-                        .HasColumnType("character varying(1000)");
-
-                    b.Property<Guid?>("CampId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("CategoryId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Description")
-                        .IsRequired()
-                        .HasMaxLength(300)
-                        .HasColumnType("character varying(300)");
-
-                    b.Property<int>("DurationMinutes")
-                        .HasColumnType("integer");
-
-                    b.Property<Guid?>("GuideSharedVenueId")
-                        .HasColumnType("uuid");
-
-                    b.Property<bool>("IsRecurring")
-                        .HasColumnType("boolean");
-
-                    b.Property<Instant>("LastUpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("LocationNote")
-                        .HasMaxLength(120)
-                        .HasColumnType("character varying(120)");
-
-                    b.Property<int>("PriorityRank")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("RecurrenceDays")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.Property<Instant>("StartAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(30)
-                        .HasColumnType("character varying(30)");
-
-                    b.Property<Instant>("SubmittedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("SubmitterUserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Title")
-                        .IsRequired()
-                        .HasMaxLength(80)
-                        .HasColumnType("character varying(80)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("CampId");
-
-                    b.HasIndex("CategoryId");
-
-                    b.HasIndex("GuideSharedVenueId");
-
-                    b.HasIndex("Status");
-
-                    b.HasIndex("SubmitterUserId");
-
-                    b.ToTable("guide_events", (string)null);
-                });
-
-            modelBuilder.Entity("Humans.Domain.Entities.GuideSettings", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<Instant>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("EventSettingsId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Instant>("GuidePublishAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<int>("MaxPrintSlots")
-                        .HasColumnType("integer");
-
-                    b.Property<Instant>("SubmissionCloseAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Instant>("SubmissionOpenAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Instant>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("EventSettingsId")
-                        .IsUnique();
-
-                    b.ToTable("guide_settings", (string)null);
-                });
-
-            modelBuilder.Entity("Humans.Domain.Entities.GuideSharedVenue", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Description")
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
-
-                    b.Property<int>("DisplayOrder")
-                        .HasColumnType("integer");
-
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("boolean");
-
-                    b.Property<string>("LocationDescription")
-                        .HasMaxLength(120)
-                        .HasColumnType("character varying(120)");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasMaxLength(120)
-                        .HasColumnType("character varying(120)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("IsActive");
-
-                    b.ToTable("guide_shared_venues", (string)null);
-                });
-
             modelBuilder.Entity("Humans.Domain.Entities.LegalDocument", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1856,118 +1615,6 @@ namespace Humans.Infrastructure.Migrations
                     b.HasIndex("TeamId", "IsActive");
 
                     b.ToTable("legal_documents", (string)null);
-                });
-
-            modelBuilder.Entity("Humans.Domain.Entities.ModerationAction", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Action")
-                        .IsRequired()
-                        .HasMaxLength(30)
-                        .HasColumnType("character varying(30)");
-
-                    b.Property<Guid>("ActorUserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Instant>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("GuideEventId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Reason")
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ActorUserId");
-
-                    b.HasIndex("GuideEventId");
-
-                    b.ToTable("moderation_actions", (string)null);
-                });
-
-            modelBuilder.Entity("Humans.Domain.Entities.Notification", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("ActionLabel")
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)");
-
-                    b.Property<string>("ActionUrl")
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
-
-                    b.Property<string>("Body")
-                        .HasMaxLength(2000)
-                        .HasColumnType("character varying(2000)");
-
-                    b.Property<string>("Class")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)");
-
-                    b.Property<Instant>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Priority")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)");
-
-                    b.Property<Instant?>("ResolvedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid?>("ResolvedByUserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Source")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)");
-
-                    b.Property<string>("TargetGroupName")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.Property<string>("Title")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("CreatedAt");
-
-                    b.HasIndex("ResolvedByUserId");
-
-                    b.ToTable("notifications", (string)null);
-                });
-
-            modelBuilder.Entity("Humans.Domain.Entities.NotificationRecipient", b =>
-                {
-                    b.Property<Guid>("NotificationId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Instant?>("ReadAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("NotificationId", "UserId");
-
-                    b.HasIndex("UserId")
-                        .HasDatabaseName("IX_NotificationRecipient_UserId");
-
-                    b.ToTable("notification_recipients", (string)null);
                 });
 
             modelBuilder.Entity("Humans.Domain.Entities.Profile", b =>
@@ -3324,56 +2971,6 @@ namespace Humans.Infrastructure.Migrations
                     b.ToTable("user_emails", (string)null);
                 });
 
-            modelBuilder.Entity("Humans.Domain.Entities.UserEventFavourite", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<Instant>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("GuideEventId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("GuideEventId");
-
-                    b.HasIndex("UserId", "GuideEventId")
-                        .IsUnique();
-
-                    b.ToTable("user_event_favourites", (string)null);
-                });
-
-            modelBuilder.Entity("Humans.Domain.Entities.UserGuidePreference", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("ExcludedCategorySlugs")
-                        .IsRequired()
-                        .HasMaxLength(1000)
-                        .HasColumnType("character varying(1000)");
-
-                    b.Property<Instant>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("UserId")
-                        .IsUnique();
-
-                    b.ToTable("user_guide_preferences", (string)null);
-                });
-
             modelBuilder.Entity("Humans.Domain.Entities.VolunteerEventProfile", b =>
                 {
                     b.Property<Guid>("Id")
@@ -4097,50 +3694,6 @@ namespace Humans.Infrastructure.Migrations
                         .IsRequired();
                 });
 
-            modelBuilder.Entity("Humans.Domain.Entities.GuideEvent", b =>
-                {
-                    b.HasOne("Humans.Domain.Entities.Camp", "Camp")
-                        .WithMany()
-                        .HasForeignKey("CampId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.HasOne("Humans.Domain.Entities.EventCategory", "Category")
-                        .WithMany("GuideEvents")
-                        .HasForeignKey("CategoryId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("Humans.Domain.Entities.GuideSharedVenue", "GuideSharedVenue")
-                        .WithMany("GuideEvents")
-                        .HasForeignKey("GuideSharedVenueId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.HasOne("Humans.Domain.Entities.User", "SubmitterUser")
-                        .WithMany()
-                        .HasForeignKey("SubmitterUserId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("Camp");
-
-                    b.Navigation("Category");
-
-                    b.Navigation("GuideSharedVenue");
-
-                    b.Navigation("SubmitterUser");
-                });
-
-            modelBuilder.Entity("Humans.Domain.Entities.GuideSettings", b =>
-                {
-                    b.HasOne("Humans.Domain.Entities.EventSettings", "EventSettings")
-                        .WithOne()
-                        .HasForeignKey("Humans.Domain.Entities.GuideSettings", "EventSettingsId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("EventSettings");
-                });
-
             modelBuilder.Entity("Humans.Domain.Entities.LegalDocument", b =>
                 {
                     b.HasOne("Humans.Domain.Entities.Team", "Team")
@@ -4150,54 +3703,6 @@ namespace Humans.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("Team");
-                });
-
-            modelBuilder.Entity("Humans.Domain.Entities.ModerationAction", b =>
-                {
-                    b.HasOne("Humans.Domain.Entities.User", "ActorUser")
-                        .WithMany()
-                        .HasForeignKey("ActorUserId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("Humans.Domain.Entities.GuideEvent", "GuideEvent")
-                        .WithMany("ModerationActions")
-                        .HasForeignKey("GuideEventId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("ActorUser");
-
-                    b.Navigation("GuideEvent");
-                });
-
-            modelBuilder.Entity("Humans.Domain.Entities.Notification", b =>
-                {
-                    b.HasOne("Humans.Domain.Entities.User", "ResolvedByUser")
-                        .WithMany()
-                        .HasForeignKey("ResolvedByUserId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
-                    b.Navigation("ResolvedByUser");
-                });
-
-            modelBuilder.Entity("Humans.Domain.Entities.NotificationRecipient", b =>
-                {
-                    b.HasOne("Humans.Domain.Entities.Notification", "Notification")
-                        .WithMany("Recipients")
-                        .HasForeignKey("NotificationId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("Humans.Domain.Entities.User", "User")
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Notification");
-
-                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("Humans.Domain.Entities.Profile", b =>
@@ -4465,36 +3970,6 @@ namespace Humans.Infrastructure.Migrations
                     b.Navigation("User");
                 });
 
-            modelBuilder.Entity("Humans.Domain.Entities.UserEventFavourite", b =>
-                {
-                    b.HasOne("Humans.Domain.Entities.GuideEvent", "GuideEvent")
-                        .WithMany("UserEventFavourites")
-                        .HasForeignKey("GuideEventId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("Humans.Domain.Entities.User", "User")
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("GuideEvent");
-
-                    b.Navigation("User");
-                });
-
-            modelBuilder.Entity("Humans.Domain.Entities.UserGuidePreference", b =>
-                {
-                    b.HasOne("Humans.Domain.Entities.User", "User")
-                        .WithOne()
-                        .HasForeignKey("Humans.Domain.Entities.UserGuidePreference", "UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("User");
-                });
-
             modelBuilder.Entity("Humans.Domain.Entities.VolunteerEventProfile", b =>
                 {
                     b.HasOne("Humans.Domain.Entities.User", "User")
@@ -4661,26 +4136,9 @@ namespace Humans.Infrastructure.Migrations
                     b.Navigation("ConsentRecords");
                 });
 
-            modelBuilder.Entity("Humans.Domain.Entities.EventCategory", b =>
-                {
-                    b.Navigation("GuideEvents");
-                });
-
             modelBuilder.Entity("Humans.Domain.Entities.EventSettings", b =>
                 {
                     b.Navigation("Rotas");
-                });
-
-            modelBuilder.Entity("Humans.Domain.Entities.GuideEvent", b =>
-                {
-                    b.Navigation("ModerationActions");
-
-                    b.Navigation("UserEventFavourites");
-                });
-
-            modelBuilder.Entity("Humans.Domain.Entities.GuideSharedVenue", b =>
-                {
-                    b.Navigation("GuideEvents");
                 });
 
             modelBuilder.Entity("Humans.Domain.Entities.FeedbackReport", b =>
@@ -4691,11 +4149,6 @@ namespace Humans.Infrastructure.Migrations
             modelBuilder.Entity("Humans.Domain.Entities.LegalDocument", b =>
                 {
                     b.Navigation("Versions");
-                });
-
-            modelBuilder.Entity("Humans.Domain.Entities.Notification", b =>
-                {
-                    b.Navigation("Recipients");
                 });
 
             modelBuilder.Entity("Humans.Domain.Entities.Profile", b =>
