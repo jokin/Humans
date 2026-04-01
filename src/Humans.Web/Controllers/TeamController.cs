@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Localization;
+using Humans.Application.Configuration;
 using Humans.Application.Interfaces;
 using Humans.Domain.Constants;
 using Humans.Domain.Entities;
@@ -24,9 +25,11 @@ public class TeamController : HumansControllerBase
     private readonly ITeamPageService _teamPageService;
     private readonly IProfileService _profileService;
     private readonly IGoogleSyncService _googleSyncService;
+    private readonly ITeamResourceService _teamResourceService;
     private readonly ISystemTeamSync _systemTeamSync;
     private readonly IStringLocalizer<SharedResource> _localizer;
     private readonly IConfiguration _configuration;
+    private readonly ConfigurationRegistry _configRegistry;
     private readonly ILogger<TeamController> _logger;
     private readonly IClock _clock;
 
@@ -36,9 +39,11 @@ public class TeamController : HumansControllerBase
         UserManager<User> userManager,
         IProfileService profileService,
         IGoogleSyncService googleSyncService,
+        ITeamResourceService teamResourceService,
         ISystemTeamSync systemTeamSync,
         IStringLocalizer<SharedResource> localizer,
         IConfiguration configuration,
+        ConfigurationRegistry configRegistry,
         IClock clock,
         ILogger<TeamController> logger)
         : base(userManager)
@@ -47,9 +52,11 @@ public class TeamController : HumansControllerBase
         _teamPageService = teamPageService;
         _profileService = profileService;
         _googleSyncService = googleSyncService;
+        _teamResourceService = teamResourceService;
         _systemTeamSync = systemTeamSync;
         _localizer = localizer;
         _configuration = configuration;
+        _configRegistry = configRegistry;
         _clock = clock;
         _logger = logger;
     }
@@ -308,25 +315,6 @@ public class TeamController : HumansControllerBase
         return View(viewModel);
     }
 
-    [HttpGet("Search")]
-    public async Task<IActionResult> Search(string? q)
-    {
-        var viewModel = new HumanSearchViewModel { Query = q };
-
-        if (!q.HasSearchTerm())
-        {
-            return View(viewModel);
-        }
-
-        var results = await _profileService.SearchHumansAsync(q);
-
-        viewModel.Results = results
-            .Select(r => r.ToHumanSearchViewModel(Url))
-            .ToList();
-
-        return View(viewModel);
-    }
-
     [HttpGet("Roster")]
     public async Task<IActionResult> Roster(string? priority, string? status, string? period)
     {
@@ -371,7 +359,8 @@ public class TeamController : HumansControllerBase
             CountryCode = p.CountryCode
         }).ToList();
 
-        ViewData["GoogleMapsApiKey"] = _configuration["GoogleMaps:ApiKey"];
+        ViewData["GoogleMapsApiKey"] = _configuration.GetRequiredSetting(
+            _configRegistry, "GoogleMaps:ApiKey", "Google Maps", isSensitive: true);
 
         return View(new MapViewModel { Markers = markers });
     }
@@ -800,6 +789,26 @@ public class TeamController : HumansControllerBase
         PendingShiftSignupCount = team.PendingShiftSignupCount,
         IsHidden = team.IsHidden
     };
+
+    [HttpGet("{teamId:guid}/GoogleResources")]
+    [Authorize(Roles = RoleGroups.TeamsAdminBoardOrAdmin)]
+    public async Task<IActionResult> GetTeamGoogleResources(Guid teamId, CancellationToken cancellationToken)
+    {
+        var resources = await _teamResourceService.GetTeamResourcesAsync(teamId, cancellationToken);
+        var result = resources.Select(r => new
+        {
+            name = r.Name,
+            type = r.ResourceType switch
+            {
+                GoogleResourceType.DriveFolder => "Drive Folder",
+                GoogleResourceType.SharedDrive => "Shared Drive",
+                GoogleResourceType.Group => "Google Group",
+                GoogleResourceType.DriveFile => "Drive File",
+                _ => r.ResourceType.ToString()
+            }
+        });
+        return Json(result);
+    }
 
     private async Task<List<Microsoft.AspNetCore.Mvc.Rendering.SelectListItem>> GetEligibleParentTeamsAsync(
         Guid? excludeTeamId, CancellationToken cancellationToken)

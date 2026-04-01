@@ -23,6 +23,7 @@ public class TeamService : ITeamService
     private readonly HumansDbContext _dbContext;
     private readonly IAuditLogService _auditLogService;
     private readonly IEmailService _emailService;
+    private readonly INotificationService _notificationService;
     private readonly IRoleAssignmentService _roleAssignmentService;
     private readonly IShiftManagementService _shiftManagementService;
     private readonly IClock _clock;
@@ -33,6 +34,7 @@ public class TeamService : ITeamService
         HumansDbContext dbContext,
         IAuditLogService auditLogService,
         IEmailService emailService,
+        INotificationService notificationService,
         IRoleAssignmentService roleAssignmentService,
         IShiftManagementService shiftManagementService,
         IClock clock,
@@ -42,6 +44,7 @@ public class TeamService : ITeamService
         _dbContext = dbContext;
         _auditLogService = auditLogService;
         _emailService = emailService;
+        _notificationService = notificationService;
         _roleAssignmentService = roleAssignmentService;
         _shiftManagementService = shiftManagementService;
         _clock = clock;
@@ -1865,6 +1868,23 @@ public class TeamService : ITeamService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to send added-to-team email for user {UserId} team {TeamId}", userId, team.Id);
+        }
+
+        // Dispatch in-app notification independently of email success
+        try
+        {
+            await _notificationService.SendAsync(
+                NotificationSource.TeamMemberAdded,
+                NotificationClass.Informational,
+                NotificationPriority.Normal,
+                $"You were added to {team.Name}",
+                [userId],
+                actionUrl: $"/Teams/{team.Slug}",
+                cancellationToken: cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to dispatch added-to-team inbox notification for user {UserId} team {TeamId}", userId, team.Id);
         }
     }
 

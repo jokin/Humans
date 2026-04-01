@@ -1,6 +1,7 @@
 using System.Reflection;
 using System.Security.Cryptography;
 using System.Text;
+using Humans.Application.Configuration;
 using Humans.Application.Extensions;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
@@ -46,6 +47,7 @@ public class DevLoginController : Controller
     private readonly IClock _clock;
     private readonly IWebHostEnvironment _env;
     private readonly IConfiguration _config;
+    private readonly ConfigurationRegistry _configRegistry;
     private readonly IMemoryCache _cache;
     private readonly ILogger<DevLoginController> _logger;
 
@@ -56,6 +58,7 @@ public class DevLoginController : Controller
         IClock clock,
         IWebHostEnvironment env,
         IConfiguration config,
+        ConfigurationRegistry configRegistry,
         IMemoryCache cache,
         ILogger<DevLoginController> logger)
     {
@@ -65,6 +68,7 @@ public class DevLoginController : Controller
         _clock = clock;
         _env = env;
         _config = config;
+        _configRegistry = configRegistry;
         _cache = cache;
         _logger = logger;
     }
@@ -153,7 +157,8 @@ public class DevLoginController : Controller
         if (_env.IsProduction())
             return false;
 
-        return _config.GetValue<bool>("DevAuth:Enabled");
+        return _config.GetSettingValue(
+            _configRegistry, "DevAuth:Enabled", "Development", defaultValue: false);
     }
 
     private async Task EnsurePersonaAsync(DevPersonaInfo info, Guid id)
@@ -218,15 +223,45 @@ public class DevLoginController : Controller
             UpdatedAt = now
         });
 
+        var profileId = Guid.NewGuid();
         _db.Profiles.Add(new Profile
         {
-            Id = Guid.NewGuid(),
+            Id = profileId,
             UserId = id,
             BurnerName = displayName,
             FirstName = firstName,
             LastName = lastName,
             IsApproved = true,
             ConsentCheckStatus = ConsentCheckStatus.Cleared,
+            City = "Barcelona",
+            CountryCode = "ES",
+            Bio = $"Dev persona for testing the {info.DisplayName} role.",
+            Pronouns = "they/them",
+            DateOfBirth = new LocalDate(4, 6, 15), // June 15 (year 4 = leap year placeholder)
+            CreatedAt = now,
+            UpdatedAt = now
+        });
+
+        // Seed sample contact fields so profile page exercises the contact rendering path
+        _db.ContactFields.Add(new ContactField
+        {
+            Id = Guid.NewGuid(),
+            ProfileId = profileId,
+            FieldType = ContactFieldType.Signal,
+            Value = $"+34 600 000 {id.ToString()[..3]}",
+            Visibility = ContactFieldVisibility.AllActiveProfiles,
+            DisplayOrder = 0,
+            CreatedAt = now,
+            UpdatedAt = now
+        });
+        _db.ContactFields.Add(new ContactField
+        {
+            Id = Guid.NewGuid(),
+            ProfileId = profileId,
+            FieldType = ContactFieldType.Telegram,
+            Value = $"@dev_{info.Slug}",
+            Visibility = ContactFieldVisibility.MyTeams,
+            DisplayOrder = 1,
             CreatedAt = now,
             UpdatedAt = now
         });
