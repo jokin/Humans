@@ -233,9 +233,9 @@ public class BudgetController : HumansControllerBase
             var category = await _budgetService.GetCategoryByIdAsync(id);
             if (category is null) return NotFound();
 
-            // Block access to restricted groups for non-finance users
+            // Block access to restricted/ticketing groups for non-finance users
             var isFinanceAdmin = RoleChecks.IsFinanceAdmin(User);
-            if (category.BudgetGroup?.IsRestricted == true && !isFinanceAdmin)
+            if ((category.BudgetGroup?.IsRestricted == true || category.BudgetGroup?.IsTicketingGroup == true) && !isFinanceAdmin)
                 return Forbid();
 
             var coordinatorTeamIds = await _budgetService.GetEffectiveCoordinatorTeamIdsAsync(user.Id);

@@ -21,6 +21,7 @@
 - A budget year follows the lifecycle: Draft then Active then Closed. Only one year can be Active at a time.
 - A coordinator can only create, edit, or delete line items in categories linked to a department they coordinate.
 - Restricted groups are only visible and editable by FinanceAdmin and Admin. Coordinators cannot see them.
+- Ticketing groups and their category details are only accessible to FinanceAdmin and Admin. Ticketing income/expenses still appear in the public budget summary aggregates, but coordinators cannot view individual ticketing categories or line items.
 - Every create, update, or delete on a group, category, or line item generates an audit log entry recording old value, new value, actor, and timestamp.
 - "Sync Departments" creates a category for each department that does not already have one in the selected year.
 
@@ -29,6 +30,7 @@
 - Regular humans **cannot** edit any budget data. They can only view the summary.
 - Coordinators **cannot** edit budget groups, categories, or restricted groups. They can only manage line items in categories linked to their own department.
 - Coordinators **cannot** see restricted budget groups.
+- Coordinators **cannot** see ticketing group details (categories or line items). Ticketing data only appears in summary aggregates.
 - Coordinators **cannot** create, activate, or close budget years.
 
 ## Triggers

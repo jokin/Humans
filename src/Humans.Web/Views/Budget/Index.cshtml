@@ -3,7 +3,7 @@
 @{
     ViewData["Title"] = $"Budget - {Model.Year.Name}";
     var groups = Model.Year.Groups
-        .Where(g => !g.IsRestricted || Model.IsFinanceAdmin)
+        .Where(g => (!g.IsRestricted && !g.IsTicketingGroup) || Model.IsFinanceAdmin)
         .OrderBy(g => g.SortOrder)
         .ToList();
     var totalAllocated = groups.SelectMany(g => g.Categories).Sum(c => c.AllocatedAmount);
