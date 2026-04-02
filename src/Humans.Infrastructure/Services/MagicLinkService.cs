@@ -154,6 +154,22 @@ public class MagicLinkService : IMagicLinkService
         return await _userManager.FindByEmailAsync(email);
     }
 
+    public async Task<User?> FindUserByAnyEmailAsync(string email, CancellationToken ct = default)
+    {
+        // 1. Check verified UserEmails first (strongest match)
+        var verified = await FindUserByVerifiedEmailAsync(email, ct);
+        if (verified is not null)
+            return verified;
+
+        // 2. Check User.Email on other accounts (the account's identity email).
+        // We intentionally skip unverified UserEmail rows — those are in a "pending
+        // verification/merge review" state and auto-linking would bypass the
+        // AccountMergeRequest admin review gate.
+        var normalizedEmail = _userManager.NormalizeEmail(email);
+        return await _userManager.Users
+            .FirstOrDefaultAsync(u => u.NormalizedEmail == normalizedEmail, ct);
+    }
+
     private async Task SendLoginLinkAsync(User user, string sendToEmail, string? returnUrl, CancellationToken ct)
     {
         // Rate limit: one magic link per 60 seconds per user
