@@ -317,6 +317,7 @@ builder.Services.AddScoped<Humans.Web.Filters.EventGuideFeatureFilter>();
 builder.Services.AddControllersWithViews(options =>
     {
         options.Filters.Add<MembershipRequiredFilter>();
+        options.Filters.Add<Humans.Web.Filters.AuthorizationPillFilter>();
         options.Filters.Add<Humans.Web.Filters.GlobalExceptionFilter>();
     })
     .AddViewLocalization(LanguageViewLocationExpanderFormat.Suffix)
