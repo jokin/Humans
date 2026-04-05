@@ -191,7 +191,7 @@ public class TeamJoinRequestViewModel
 
 public class PendingRequestsViewModel : PagedListViewModel
 {
-    public PendingRequestsViewModel() : base(20)
+    public PendingRequestsViewModel() : base()
     {
     }
 
@@ -279,7 +279,7 @@ public class CallToActionViewModel
 public class TeamMembersViewModel
     : PagedListViewModel
 {
-    public TeamMembersViewModel() : base(20)
+    public TeamMembersViewModel() : base()
     {
     }
 
@@ -541,7 +541,7 @@ public class HumanSearchResultViewModel
 
 public class AdminTeamListViewModel : PagedListViewModel
 {
-    public AdminTeamListViewModel() : base(20)
+    public AdminTeamListViewModel() : base()
     {
     }
 
