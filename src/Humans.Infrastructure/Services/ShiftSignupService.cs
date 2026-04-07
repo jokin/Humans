@@ -763,7 +763,7 @@ public class ShiftSignupService : IShiftSignupService
     public async Task<SignupResult> RefuseRangeAsync(Guid signupBlockId, Guid reviewerUserId, string? reason)
     {
         var signups = await _dbContext.ShiftSignups
-            .Include(s => s.Shift).ThenInclude(s => s.Rota)
+            .Include(s => s.Shift).ThenInclude(s => s.Rota).ThenInclude(r => r.EventSettings)
             .Where(s => s.SignupBlockId == signupBlockId && s.Status == SignupStatus.Pending)
             .ToListAsync();
 
@@ -1009,8 +1009,15 @@ public class ShiftSignupService : IShiftSignupService
     {
         try
         {
-            var teamId = signup.Shift.Rota.TeamId;
-            var rotaName = signup.Shift.Rota.Name;
+            var shift = signup.Shift;
+            var rota = shift.Rota;
+            var teamId = rota.TeamId;
+            var rotaName = rota.Name;
+
+            // Enrich description with shift date and rota name for context
+            var es = rota.EventSettings;
+            var shiftDate = es.GateOpeningDate.PlusDays(shift.DayOffset);
+            var enrichedDescription = $"{changeDescription} ({rotaName}, {FormatShiftDate(shiftDate)})";
 
             // Find coordinators for this department team
             var coordinatorIds = await _dbContext.TeamMembers
@@ -1029,8 +1036,8 @@ public class ShiftSignupService : IShiftSignupService
                 NotificationPriority.Normal,
                 $"Shift signup change: {rotaName}",
                 coordinatorIds,
-                body: changeDescription,
-                actionUrl: $"/Shifts/Dashboard?departmentId={teamId}",
+                body: enrichedDescription,
+                actionUrl: $"/Shifts/Dashboard?departmentId={teamId}&rotaId={rota.Id}",
                 actionLabel: "View \u2192");
         }
         catch (Exception ex)
