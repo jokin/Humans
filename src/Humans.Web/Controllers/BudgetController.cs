@@ -86,9 +86,8 @@ public class BudgetController : HumansControllerBase
                 return View("NoActiveBudget");
             }
 
-            // Only show non-restricted groups in public summary
-            var visibleGroups = activeYear.Groups.Where(g => !g.IsRestricted).ToList();
-            var summary = _budgetService.ComputeBudgetSummary(visibleGroups);
+            var visibleGroups = activeYear.Groups.ToList();
+            var summary = _budgetService.ComputeBudgetSummaryWithBuffers(visibleGroups);
 
             var totalLineItems = visibleGroups
                 .SelectMany(g => g.Categories)
