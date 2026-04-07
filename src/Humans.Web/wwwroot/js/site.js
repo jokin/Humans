@@ -218,6 +218,40 @@ document.addEventListener('click', function (e) {
     });
 })();
 
+// Show a Bootstrap toast notification
+// Usage: showToast('Success!', 'success') or showToast('Error!', 'danger')
+function showToast(message, type) {
+    type = type || 'success';
+    var container = document.getElementById('toastContainer');
+    if (!container) return;
+    var iconClass = type === 'success' ? 'fa-check-circle text-success' : 'fa-exclamation-circle text-danger';
+    var toastEl = document.createElement('div');
+    toastEl.className = 'toast align-items-center border-0';
+    toastEl.setAttribute('role', 'alert');
+    toastEl.setAttribute('aria-live', 'assertive');
+    toastEl.setAttribute('aria-atomic', 'true');
+    var wrapper = document.createElement('div');
+    wrapper.className = 'd-flex';
+    var body = document.createElement('div');
+    body.className = 'toast-body';
+    var icon = document.createElement('i');
+    icon.className = 'fa-solid ' + iconClass + ' me-2';
+    body.appendChild(icon);
+    body.appendChild(document.createTextNode(message));
+    wrapper.appendChild(body);
+    var closeBtn = document.createElement('button');
+    closeBtn.type = 'button';
+    closeBtn.className = 'btn-close me-2 m-auto';
+    closeBtn.setAttribute('data-bs-dismiss', 'toast');
+    closeBtn.setAttribute('aria-label', 'Close');
+    wrapper.appendChild(closeBtn);
+    toastEl.appendChild(wrapper);
+    container.appendChild(toastEl);
+    var toast = new bootstrap.Toast(toastEl, { delay: 4000 });
+    toast.show();
+    toastEl.addEventListener('hidden.bs.toast', function () { toastEl.remove(); });
+}
+
 // Human profile popover (lazy-loaded on first hover)
 (function () {
     var cache = {};
