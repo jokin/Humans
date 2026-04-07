@@ -89,6 +89,9 @@ public class ApplicationDecisionService : IApplicationDecisionService
             $"{application.MembershipTier} application approved",
             reviewerUserId);
 
+        // Capture voter IDs before GDPR deletion clears the navigation collection
+        var voterIds = application.BoardVotes.Select(v => v.BoardMemberUserId).ToList();
+
         // GDPR: delete individual board votes
         _dbContext.BoardVotes.RemoveRange(application.BoardVotes);
 
@@ -120,6 +123,8 @@ public class ApplicationDecisionService : IApplicationDecisionService
 
         _cache.InvalidateNavBadgeCounts();
         _cache.InvalidateNotificationMeters();
+        foreach (var id in voterIds)
+            _cache.InvalidateVotingBadge(id);
         _metrics.RecordApplicationProcessed("approved");
         _logger.LogInformation("Application {ApplicationId} approved by {UserId}",
             application.Id, reviewerUserId);
@@ -197,6 +202,9 @@ public class ApplicationDecisionService : IApplicationDecisionService
             $"{application.MembershipTier} application rejected",
             reviewerUserId);
 
+        // Capture voter IDs before GDPR deletion clears the navigation collection
+        var voterIds = application.BoardVotes.Select(v => v.BoardMemberUserId).ToList();
+
         // GDPR: delete individual board votes
         _dbContext.BoardVotes.RemoveRange(application.BoardVotes);
 
@@ -225,6 +233,8 @@ public class ApplicationDecisionService : IApplicationDecisionService
 
         _cache.InvalidateNavBadgeCounts();
         _cache.InvalidateNotificationMeters();
+        foreach (var id in voterIds)
+            _cache.InvalidateVotingBadge(id);
         _metrics.RecordApplicationProcessed("rejected");
         _logger.LogInformation("Application {ApplicationId} rejected by {UserId}",
             application.Id, reviewerUserId);

@@ -115,6 +115,7 @@ public class AdminHumanDetailViewModel
     public int ConsentCount { get; set; }
     public List<AdminHumanApplicationViewModel> Applications { get; set; } = [];
     public List<AdminRoleAssignmentViewModel> RoleAssignments { get; set; } = [];
+    public IReadOnlyList<ProfileLanguageDisplayViewModel> Languages { get; set; } = [];
 }
 
 public class AdminHumanApplicationViewModel
@@ -377,6 +378,26 @@ public class DbStatEntryViewModel
     public double AverageMs { get; set; }
     public double MaxMs { get; set; }
     public double TotalMs { get; set; }
+}
+
+public class CacheStatsViewModel
+{
+    public long TotalHits { get; set; }
+    public long TotalMisses { get; set; }
+
+    public double OverallHitRatePercent => TotalHits + TotalMisses > 0
+        ? Math.Round(TotalHits * 100.0 / (TotalHits + TotalMisses), 1)
+        : 0;
+
+    public List<CacheStatEntryViewModel> Entries { get; set; } = [];
+}
+
+public class CacheStatEntryViewModel
+{
+    public string KeyType { get; set; } = string.Empty;
+    public long Hits { get; set; }
+    public long Misses { get; set; }
+    public double HitRatePercent { get; set; }
 }
 
 public class DuplicateAccountListViewModel

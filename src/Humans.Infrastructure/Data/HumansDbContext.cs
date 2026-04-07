@@ -46,6 +46,9 @@ public class HumansDbContext : IdentityDbContext<User, IdentityRole<Guid>, Guid>
     public DbSet<CampHistoricalName> CampHistoricalNames => Set<CampHistoricalName>();
     public DbSet<CampImage> CampImages => Set<CampImage>();
     public DbSet<CampSettings> CampSettings => Set<CampSettings>();
+    public DbSet<CampPolygon> CampPolygons => Set<CampPolygon>();
+    public DbSet<CampPolygonHistory> CampPolygonHistories => Set<CampPolygonHistory>();
+    public DbSet<CityPlanningSettings> CityPlanningSettings => Set<CityPlanningSettings>();
     public DbSet<EmailOutboxMessage> EmailOutboxMessages { get; set; } = null!;
     public DbSet<Campaign> Campaigns { get; set; } = null!;
     public DbSet<CampaignCode> CampaignCodes { get; set; } = null!;
@@ -74,6 +77,7 @@ public class HumansDbContext : IdentityDbContext<User, IdentityRole<Guid>, Guid>
     public DbSet<VolunteerTagPreference> VolunteerTagPreferences => Set<VolunteerTagPreference>();
     public DbSet<Notification> Notifications => Set<Notification>();
     public DbSet<NotificationRecipient> NotificationRecipients => Set<NotificationRecipient>();
+    public DbSet<ProfileLanguage> ProfileLanguages => Set<ProfileLanguage>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {

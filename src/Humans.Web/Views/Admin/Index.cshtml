@@ -1,3 +1,4 @@
+@inject Microsoft.AspNetCore.Hosting.IWebHostEnvironment HostEnv
 @{
     ViewData["Title"] = "Admin Tools";
 }
@@ -44,6 +45,9 @@
                 <a asp-action="DbStats" class="list-group-item list-group-item-action">
                     <i class="fa-solid fa-database me-2"></i>Database Query Statistics
                 </a>
+                <a asp-action="CacheStats" class="list-group-item list-group-item-action">
+                    <i class="fa-solid fa-bolt me-2"></i>Cache Statistics
+                </a>
                 <a asp-controller="Google" asp-action="Accounts" class="list-group-item list-group-item-action">
                     <i class="fa-solid fa-at me-2"></i>@@nobodies.team Accounts
                 </a>
@@ -70,5 +74,22 @@
                 </a>
             </div>
         </div>
+
+        @if (!HostEnv.IsProduction())
+        {
+        <div class="card mb-4 border-info">
+            <div class="card-header bg-info text-white">Seed Development Data</div>
+            <div class="card-body">
+                <p class="text-muted mb-3">Populate this environment with realistic demo data.</p>
+                <div class="d-flex gap-2">
+                    <form asp-controller="DevSeed" asp-action="SeedBudget" method="post">
+                        <button type="submit" class="btn btn-outline-info">
+                            <i class="fa-solid fa-coins me-1"></i> Seed Budget Data
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+        }
     </div>
 </div>

@@ -282,6 +282,30 @@ public class BudgetService : IBudgetService
         _logger.LogInformation("Archived budget year {YearId} ({Year})", yearId, year.Year);
     }
 
+    public async Task RestoreYearAsync(Guid yearId, Guid actorUserId)
+    {
+        var year = await _dbContext.BudgetYears.FindAsync(yearId)
+            ?? throw new InvalidOperationException($"Budget year {yearId} not found");
+
+        if (!year.IsDeleted)
+            return;
+
+        var now = _clock.GetCurrentInstant();
+
+        year.IsDeleted = false;
+        year.DeletedAt = null;
+        year.Status = BudgetYearStatus.Draft;
+        year.UpdatedAt = now;
+
+        LogAudit(year.Id, nameof(BudgetYear), year.Id,
+            $"Restored budget year '{year.Name}' ({year.Year})",
+            actorUserId, now);
+
+        await _dbContext.SaveChangesAsync();
+
+        _logger.LogInformation("Restored budget year {YearId} ({Year})", yearId, year.Year);
+    }
+
     public async Task<int> SyncDepartmentsAsync(Guid budgetYearId, Guid actorUserId)
     {
         await EnsureYearNotClosedAsync(budgetYearId);
@@ -1034,6 +1058,60 @@ public class BudgetService : IBudgetService
             NetBalance = netBalance,
             IncomeSlices = incomeSlices,
             ExpenseSlices = expenseSlices
+        };
+    }
+
+    public BudgetSummaryResult ComputeBudgetSummaryWithBuffers(IEnumerable<BudgetGroup> groups)
+    {
+        var groupList = groups.ToList();
+        var summary = ComputeBudgetSummary(groupList);
+
+        // Per-group buffer: allocated minus line-item total.
+        // Negative = expense buffer, positive = income buffer.
+        var groupBuffers = groupList
+            .Where(g => !g.IsTicketingGroup)
+            .Select(g => new
+            {
+                Name = $"{g.Name} Buffer",
+                Raw = g.Categories.Sum(c =>
+                    c.AllocatedAmount - c.LineItems.Where(li => !li.IsCashflowOnly).Sum(li => li.Amount))
+            })
+            .Where(b => b.Raw != 0)
+            .ToList();
+
+        var allExpenseEntries = summary.ExpenseSlices
+            .Select(s => new { s.Name, s.Amount })
+            .Concat(groupBuffers.Where(b => b.Raw < 0).Select(b => new { b.Name, Amount = Math.Abs(b.Raw) }))
+            .ToList();
+        var totalExpense = allExpenseEntries.Sum(s => s.Amount);
+
+        var allIncomeEntries = summary.IncomeSlices
+            .Select(s => new { s.Name, s.Amount })
+            .Concat(groupBuffers.Where(b => b.Raw > 0).Select(b => new { b.Name, Amount = b.Raw }))
+            .ToList();
+        var totalIncome = allIncomeEntries.Sum(s => s.Amount);
+
+        return new BudgetSummaryResult
+        {
+            TotalIncome = summary.TotalIncome,
+            TotalExpenses = summary.TotalExpenses,
+            NetBalance = summary.NetBalance,
+            IncomeSlices = allIncomeEntries
+                .Select(s => new BudgetSliceResult
+                {
+                    Name = s.Name,
+                    Amount = s.Amount,
+                    Percentage = totalIncome > 0 ? s.Amount / totalIncome * 100 : 0
+                })
+                .ToList(),
+            ExpenseSlices = allExpenseEntries
+                .Select(s => new BudgetSliceResult
+                {
+                    Name = s.Name,
+                    Amount = s.Amount,
+                    Percentage = totalExpense > 0 ? s.Amount / totalExpense * 100 : 0
+                })
+                .ToList()
         };
     }
 

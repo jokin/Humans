@@ -18,7 +18,7 @@ namespace Humans.Infrastructure.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.3")
+                .HasAnnotation("ProductVersion", "10.0.5")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -703,6 +703,74 @@ namespace Humans.Infrastructure.Migrations
                     b.ToTable("camp_leads", (string)null);
                 });
 
+            modelBuilder.Entity("Humans.Domain.Entities.CampPolygon", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<double>("AreaSqm")
+                        .HasColumnType("double precision");
+
+                    b.Property<Guid>("CampSeasonId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("GeoJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Instant>("LastModifiedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("LastModifiedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CampSeasonId")
+                        .IsUnique();
+
+                    b.HasIndex("LastModifiedByUserId");
+
+                    b.ToTable("camp_polygons", (string)null);
+                });
+
+            modelBuilder.Entity("Humans.Domain.Entities.CampPolygonHistory", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<double>("AreaSqm")
+                        .HasColumnType("double precision");
+
+                    b.Property<Guid>("CampSeasonId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("GeoJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Instant>("ModifiedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("ModifiedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Note")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ModifiedByUserId");
+
+                    b.HasIndex("CampSeasonId", "ModifiedAt");
+
+                    b.ToTable("camp_polygon_histories", (string)null);
+                });
+
             modelBuilder.Entity("Humans.Domain.Entities.CampSeason", b =>
                 {
                     b.Property<Guid>("Id")
@@ -972,6 +1040,47 @@ namespace Humans.Infrastructure.Migrations
                         .IsUnique();
 
                     b.ToTable("campaign_grants", (string)null);
+                });
+
+            modelBuilder.Entity("Humans.Domain.Entities.CityPlanningSettings", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Instant?>("ClosedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsPlacementOpen")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("LimitZoneGeoJson")
+                        .HasColumnType("text");
+
+                    b.Property<string>("OfficialZonesGeoJson")
+                        .HasColumnType("text");
+
+                    b.Property<Instant?>("OpenedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<LocalDateTime?>("PlacementClosesAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<LocalDateTime?>("PlacementOpensAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<Instant>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Year")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Year")
+                        .IsUnique();
+
+                    b.ToTable("city_planning_settings", (string)null);
                 });
 
             modelBuilder.Entity("Humans.Domain.Entities.CommunicationPreference", b =>
@@ -1837,6 +1946,32 @@ namespace Humans.Infrastructure.Migrations
                         .IsUnique();
 
                     b.ToTable("profiles", (string)null);
+                });
+
+            modelBuilder.Entity("Humans.Domain.Entities.ProfileLanguage", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("LanguageCode")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<string>("Proficiency")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<Guid>("ProfileId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProfileId");
+
+                    b.ToTable("profile_languages", (string)null);
                 });
 
             modelBuilder.Entity("Humans.Domain.Entities.RoleAssignment", b =>
@@ -3564,6 +3699,44 @@ namespace Humans.Infrastructure.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("Humans.Domain.Entities.CampPolygon", b =>
+                {
+                    b.HasOne("Humans.Domain.Entities.CampSeason", "CampSeason")
+                        .WithMany()
+                        .HasForeignKey("CampSeasonId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Humans.Domain.Entities.User", "LastModifiedByUser")
+                        .WithMany()
+                        .HasForeignKey("LastModifiedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("CampSeason");
+
+                    b.Navigation("LastModifiedByUser");
+                });
+
+            modelBuilder.Entity("Humans.Domain.Entities.CampPolygonHistory", b =>
+                {
+                    b.HasOne("Humans.Domain.Entities.CampSeason", "CampSeason")
+                        .WithMany()
+                        .HasForeignKey("CampSeasonId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Humans.Domain.Entities.User", "ModifiedByUser")
+                        .WithMany()
+                        .HasForeignKey("ModifiedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("CampSeason");
+
+                    b.Navigation("ModifiedByUser");
+                });
+
             modelBuilder.Entity("Humans.Domain.Entities.CampSeason", b =>
                 {
                     b.HasOne("Humans.Domain.Entities.Camp", "Camp")
@@ -3837,6 +4010,17 @@ namespace Humans.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("Humans.Domain.Entities.ProfileLanguage", b =>
+                {
+                    b.HasOne("Humans.Domain.Entities.Profile", "Profile")
+                        .WithMany("Languages")
+                        .HasForeignKey("ProfileId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Profile");
                 });
 
             modelBuilder.Entity("Humans.Domain.Entities.RoleAssignment", b =>
@@ -4282,6 +4466,8 @@ namespace Humans.Infrastructure.Migrations
             modelBuilder.Entity("Humans.Domain.Entities.Profile", b =>
                 {
                     b.Navigation("ContactFields");
+
+                    b.Navigation("Languages");
 
                     b.Navigation("VolunteerHistory");
                 });

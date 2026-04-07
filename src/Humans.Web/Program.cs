@@ -19,12 +19,15 @@ using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using Humans.Application.Configuration;
+using Humans.Application.Interfaces;
 using Humans.Domain.Entities;
 using Humans.Web.Extensions;
+using Microsoft.Extensions.Caching.Memory;
 using Humans.Infrastructure.Data;
 using Humans.Infrastructure.Services;
 using Humans.Web.Authorization;
 using Humans.Web.Health;
+using Humans.Web.Hubs;
 using Humans.Web.Middleware;
 using Microsoft.Extensions.Localization;
 using Npgsql;
@@ -66,6 +69,10 @@ builder.Services.AddSingleton(configRegistry);
 
 // Configure NodaTime clock
 builder.Services.AddSingleton<IClock>(SystemClock.Instance);
+if (!builder.Environment.IsProduction())
+{
+    builder.Services.AddScoped<DevelopmentBudgetSeeder>();
+}
 
 // Configure JSON options with NodaTime support
 builder.Services.ConfigureHttpJsonOptions(options =>
@@ -94,6 +101,13 @@ builder.Services.AddSingleton(sp =>
 // Query monitoring — singleton interceptor tracks execution counts by table + operation
 builder.Services.AddSingleton<QueryStatistics>();
 builder.Services.AddSingleton<QueryMonitoringInterceptor>();
+
+// Cache monitoring — decorator wraps real MemoryCache to track hit/miss stats per key type.
+// Register TrackingMemoryCache as both IMemoryCache (decorator) and ICacheStatsProvider (stats).
+builder.Services.AddSingleton<TrackingMemoryCache>(sp =>
+    new TrackingMemoryCache(new MemoryCache(new MemoryCacheOptions())));
+builder.Services.AddSingleton<IMemoryCache>(sp => sp.GetRequiredService<TrackingMemoryCache>());
+builder.Services.AddSingleton<ICacheStatsProvider>(sp => sp.GetRequiredService<TrackingMemoryCache>());
 
 // Configure EF Core with PostgreSQL
 builder.Services.AddDbContext<HumansDbContext>((sp, options) =>
@@ -160,7 +174,16 @@ builder.Services.AddAuthentication()
             {
                 var logger = context.HttpContext.RequestServices.GetRequiredService<ILoggerFactory>()
                     .CreateLogger("GoogleOAuth");
-                logger.LogWarning(context.Failure, "Google sign-in failed: {Error}", context.Failure?.Message);
+
+                var isCorrelationFailure = context.Failure?.Message?.Contains("Correlation", StringComparison.OrdinalIgnoreCase) == true;
+                if (isCorrelationFailure)
+                {
+                    logger.LogDebug(context.Failure, "Google sign-in correlation failed (expected for stale/duplicate requests)");
+                }
+                else
+                {
+                    logger.LogWarning(context.Failure, "Google sign-in failed: {Error}", context.Failure?.Message);
+                }
 
                 context.Response.Redirect("/Account/Login?error=sign-in-failed");
                 context.HandleResponse();
@@ -315,6 +338,7 @@ builder.Services.AddControllersWithViews(options =>
     .AddViewLocalization(LanguageViewLocationExpanderFormat.Suffix)
     .AddDataAnnotationsLocalization();
 builder.Services.AddRazorPages();
+builder.Services.AddSignalR();
 
 var supportedCultures = CultureCatalog.SupportedCultureCodes.ToArray();
 builder.Services.Configure<RequestLocalizationOptions>(options =>
@@ -520,6 +544,7 @@ app.MapControllerRoute(
     pattern: "{controller=Home}/{action=Index}/{id?}");
 
 app.MapRazorPages();
+app.MapHub<CityPlanningHub>("/hubs/city-planning");
 
 // Run database migrations on startup (must happen before Hangfire job registration
 // because Hangfire needs its tables to exist for distributed lock acquisition)
