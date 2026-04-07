@@ -67,6 +67,10 @@ builder.Services.AddSingleton(configRegistry);
 
 // Configure NodaTime clock
 builder.Services.AddSingleton<IClock>(SystemClock.Instance);
+if (!builder.Environment.IsProduction())
+{
+    builder.Services.AddScoped<DevelopmentBudgetSeeder>();
+}
 
 // Configure JSON options with NodaTime support
 builder.Services.ConfigureHttpJsonOptions(options =>

@@ -31,7 +31,7 @@ public class TicketSyncJob : IRecurringJob
     {
         if (!_settings.IsConfigured)
         {
-            _logger.LogDebug("Ticket vendor not configured, skipping sync");
+            _logger.LogDebug("Ticket vendor not configured, skipping scheduled sync");
             return;
         }
 

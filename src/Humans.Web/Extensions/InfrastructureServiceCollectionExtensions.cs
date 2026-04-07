@@ -201,13 +201,29 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddScoped<LogApiKeyAuthFilter>();
 
         // Ticket vendor integration
+        var ticketVendorApiKey = Environment.GetEnvironmentVariable("TICKET_VENDOR_API_KEY") ?? string.Empty;
+
         services.Configure<TicketVendorSettings>(opts =>
         {
             configuration.GetSection(TicketVendorSettings.SectionName).Bind(opts);
-            // Populate API key from environment variable (not in appsettings — sensitive)
-            opts.ApiKey = Environment.GetEnvironmentVariable("TICKET_VENDOR_API_KEY") ?? string.Empty;
+            opts.ApiKey = ticketVendorApiKey;
         });
-        services.AddHttpClient<ITicketVendorService, TicketTailorService>();
+
+        if (environment.IsProduction())
+        {
+            services.AddHttpClient<ITicketVendorService, TicketTailorService>();
+        }
+        else
+        {
+            // Stub is self-contained — fill in defaults so IsConfigured passes
+            services.PostConfigure<TicketVendorSettings>(opts =>
+            {
+                if (string.IsNullOrEmpty(opts.EventId)) opts.EventId = "stub-event";
+                if (string.IsNullOrEmpty(opts.ApiKey)) opts.ApiKey = "stub";
+            });
+            services.AddScoped<ITicketVendorService, StubTicketVendorService>();
+        }
+
         services.AddScoped<ITicketSyncService, TicketSyncService>();
         services.AddScoped<ITicketQueryService, TicketQueryService>();
 
