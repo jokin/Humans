@@ -67,6 +67,10 @@ builder.Services.AddSingleton(configRegistry);
 
 // Configure NodaTime clock
 builder.Services.AddSingleton<IClock>(SystemClock.Instance);
+if (!builder.Environment.IsProduction())
+{
+    builder.Services.AddScoped<DevelopmentBudgetSeeder>();
+}
 
 // CORS policy for public Guide API (consumed by PWA from different origin)
 builder.Services.AddCors(options =>
