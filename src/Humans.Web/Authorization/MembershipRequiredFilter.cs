@@ -1,4 +1,6 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Controllers;
 using Microsoft.AspNetCore.Mvc.Filters;
 
 namespace Humans.Web.Authorization;
@@ -33,7 +35,6 @@ public class MembershipRequiredFilter : IAsyncActionFilter
         "Guest",            // Profileless account dashboard
         "Legal",            // Public legal documents ([AllowAnonymous])
         "Notification",     // Notification inbox — accessible to all authenticated users
-        "Team",             // Public team directory + detail ([AllowAnonymous] on Index/Details)
     };
 
     public Task OnActionExecutionAsync(ActionExecutingContext context, ActionExecutionDelegate next)
@@ -48,6 +49,14 @@ public class MembershipRequiredFilter : IAsyncActionFilter
 
         // Admin/Board/Coordinator bypass — they always have access
         if (RoleChecks.BypassesMembershipRequirement(user))
+        {
+            return next();
+        }
+
+        // AllowAnonymous endpoints bypass membership check (e.g. Team/Index, Camp/Index)
+        if (context.ActionDescriptor is ControllerActionDescriptor cad &&
+            (cad.MethodInfo.IsDefined(typeof(AllowAnonymousAttribute), true) ||
+             cad.ControllerTypeInfo.IsDefined(typeof(AllowAnonymousAttribute), true)))
         {
             return next();
         }
