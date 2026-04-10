@@ -369,25 +369,6 @@ public class NotificationInboxService : INotificationInboxService
         InvalidateBadgeCaches([userId]);
     }
 
-    /// <inheritdoc />
-    public async Task<(int Actionable, int Informational)> GetUnreadBadgeCountsAsync(
-        Guid userId, CancellationToken ct = default)
-    {
-        var actionableCount = await _dbContext.NotificationRecipients
-            .CountAsync(nr => nr.UserId == userId &&
-                              nr.ReadAt == null &&
-                              nr.Notification.ResolvedAt == null &&
-                              nr.Notification.Class == NotificationClass.Actionable, ct);
-
-        var informationalCount = await _dbContext.NotificationRecipients
-            .CountAsync(nr => nr.UserId == userId &&
-                              nr.ReadAt == null &&
-                              nr.Notification.ResolvedAt == null &&
-                              nr.Notification.Class == NotificationClass.Informational, ct);
-
-        return (actionableCount, informationalCount);
-    }
-
     private static NotificationRowDto MapToRow(NotificationRecipient nr)
     {
         var n = nr.Notification;
@@ -425,6 +406,20 @@ public class NotificationInboxService : INotificationInboxService
         return parts.Length >= 2
             ? $"{parts[0][0]}{parts[^1][0]}".ToUpperInvariant()
             : parts[0][..Math.Min(2, parts[0].Length)].ToUpperInvariant();
+    }
+
+    public async Task<(int Actionable, int Informational)> GetUnreadBadgeCountsAsync(
+        Guid userId, CancellationToken ct = default)
+    {
+        var counts = await _dbContext.NotificationRecipients
+            .Where(nr => nr.UserId == userId && nr.ReadAt == null && nr.Notification.ResolvedAt == null)
+            .GroupBy(nr => nr.Notification.Class)
+            .Select(g => new { Class = g.Key, Count = g.Count() })
+            .ToListAsync(ct);
+        var actionable = counts.FirstOrDefault(c => c.Class == NotificationClass.Actionable)?.Count ?? 0;
+        var informational = counts.FirstOrDefault(c => c.Class == NotificationClass.Informational)?.Count ?? 0;
+
+        return (actionable, informational);
     }
 
     private void InvalidateBadgeCaches(IEnumerable<Guid> userIds)
