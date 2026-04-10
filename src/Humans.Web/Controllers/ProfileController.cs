@@ -615,12 +615,12 @@ public class ProfileController : HumansControllerBase
         }
         catch (InvalidOperationException ex)
         {
-            _logger.LogWarning(ex, "Email verification failed for user {UserId}", userId);
+            _logger.LogInformation("Email verification failed for user {UserId}: {Message}", userId, ex.Message);
             return VerifyEmailError(_localizer["Profile_InvalidVerificationLink"].Value);
         }
         catch (ValidationException ex)
         {
-            _logger.LogWarning(ex, "Email verification validation failed for user {UserId}", userId);
+            _logger.LogInformation("Email verification validation failed for user {UserId}: {Message}", userId, ex.Message);
             return VerifyEmailError(ex.Message);
         }
     }
