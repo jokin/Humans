@@ -65,6 +65,16 @@
     </div>
     }
 
+    <!-- Admin panel link -->
+    @if (isMapAdmin)
+    {
+    <div class="position-absolute top-0 end-0 m-3">
+        <a href="/CityPlanning/Admin" class="btn btn-outline-primary btn-sm shadow-sm">
+            <i class="fa fa-cog me-1"></i> @Localizer["CityPlanning_AdminLink"]
+        </a>
+    </div>
+    }
+
     <!-- Toolbars -->
     <div class="position-absolute bottom-0 start-50 translate-middle-x mb-3 d-flex flex-row gap-2">
         @if (isPlacementOpen || isMapAdmin)
@@ -98,16 +108,6 @@
             <button id="history-btn" class="btn btn-outline-primary btn-sm" style="display:none" disabled>
                 <i class="fa-solid fa-history me-1"></i> @Localizer["CityPlanning_HistoryButton"]
             </button>
-            </div>
-        </div>
-        }
-        @if (isMapAdmin)
-        {
-        <div class="card">
-            <div class="card-body">
-                <a href="/CityPlanning/Admin" class="btn btn-outline-primary btn-sm">
-                    <i class="fa-solid fa-cog me-1"></i> @Localizer["CityPlanning_AdminLink"]
-                </a>
             </div>
         </div>
         }
