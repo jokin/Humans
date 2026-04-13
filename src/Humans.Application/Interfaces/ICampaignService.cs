@@ -1,6 +1,5 @@
 using Humans.Application.DTOs;
 using Humans.Domain.Entities;
-using NodaTime;
 
 namespace Humans.Application.Interfaces;
 
@@ -10,12 +9,6 @@ public record WaveSendPreview(
     int UnsubscribedExcluded,
     int CodesAvailable,
     int CodesRemainingAfterSend);
-
-/// <summary>
-/// A discount-code redemption discovered by ticket sync — code string and the
-/// instant the redeeming ticket order was purchased.
-/// </summary>
-public record DiscountCodeRedemption(string Code, Instant RedeemedAt);
 
 public interface ICampaignService
 {
@@ -38,14 +31,4 @@ public interface ICampaignService
     Task<int> SendWaveAsync(Guid campaignId, Guid teamId, CancellationToken ct = default);
     Task ResendToGrantAsync(Guid grantId, CancellationToken ct = default);
     Task RetryAllFailedAsync(Guid campaignId, CancellationToken ct = default);
-
-    /// <summary>
-    /// Marks campaign grants as redeemed based on discovered discount-code redemptions.
-    /// Matches codes case-insensitively against active/completed campaigns' unredeemed grants.
-    /// When a code matches grants in multiple campaigns, the most recently created campaign wins.
-    /// Returns the number of grants marked as redeemed.
-    /// </summary>
-    Task<int> MarkGrantsRedeemedAsync(
-        IReadOnlyCollection<DiscountCodeRedemption> redemptions,
-        CancellationToken ct = default);
 }

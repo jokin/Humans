@@ -1,12 +1,16 @@
 using AwesomeAssertions;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using NodaTime;
 using NodaTime.Testing;
 using NSubstitute;
 using Humans.Application.Interfaces;
 using Humans.Domain.Entities;
 using Humans.Domain.Enums;
+using Humans.Infrastructure.Configuration;
 using Humans.Infrastructure.Data;
 using Humans.Infrastructure.Services;
 using Xunit;
@@ -18,7 +22,7 @@ public class CampaignServiceTests : IDisposable
     private readonly HumansDbContext _dbContext;
     private readonly FakeClock _clock;
     private readonly CampaignService _service;
-    private readonly IEmailService _emailService = Substitute.For<IEmailService>();
+    private readonly IHumansMetrics _metrics = Substitute.For<IHumansMetrics>();
 
     public CampaignServiceTests()
     {
@@ -29,12 +33,22 @@ public class CampaignServiceTests : IDisposable
         _dbContext = new HumansDbContext(options);
         _clock = new FakeClock(Instant.FromUtc(2026, 3, 1, 12, 0));
 
+        var hostEnvironment = Substitute.For<IHostEnvironment>();
+        hostEnvironment.EnvironmentName.Returns("Production");
+
+        var emailSettings = Options.Create(new EmailSettings
+        {
+            BaseUrl = "https://humans.nobodies.team"
+        });
+
         _service = new CampaignService(
             _dbContext,
             _clock,
+            _metrics,
             Substitute.For<INotificationService>(),
             Substitute.For<ICommunicationPreferenceService>(),
-            _emailService,
+            emailSettings,
+            hostEnvironment,
             NullLogger<CampaignService>.Instance);
     }
 
@@ -266,7 +280,7 @@ public class CampaignServiceTests : IDisposable
     // ==========================================================================
 
     [Fact]
-    public async Task SendWaveAsync_AssignsCodeToTeamMember_CreatesGrantAndEnqueuesEmail()
+    public async Task SendWaveAsync_AssignsCodeToTeamMember_CreatesGrantAndOutbox()
     {
         var campaign = await SeedActiveCampaignWithCodesAsync(
             new[] { "CODE-A", "CODE-B" },
@@ -289,23 +303,21 @@ public class CampaignServiceTests : IDisposable
         grants[0].UserId.Should().Be(user.Id);
         grants[0].LatestEmailStatus.Should().Be(EmailOutboxStatus.Queued);
 
-        // CampaignService delegates to IEmailService — verify the request was passed through.
-        await _emailService.Received(1).SendCampaignCodeAsync(
-            Arg.Is<CampaignCodeEmailRequest>(r =>
-                r.CampaignGrantId == grants[0].Id
-                && r.UserId == user.Id
-                && r.RecipientEmail == user.Email
-                && (r.Code == "CODE-A" || r.Code == "CODE-B")),
-            Arg.Any<CancellationToken>());
+        var outbox = await _dbContext.EmailOutboxMessages
+            .Where(m => m.CampaignGrantId == grants[0].Id)
+            .ToListAsync();
+        outbox.Should().ContainSingle();
+        outbox[0].TemplateName.Should().Be("campaign_code");
+        outbox[0].RecipientEmail.Should().Be(user.Email);
+        outbox[0].Status.Should().Be(EmailOutboxStatus.Queued);
     }
 
     [Fact]
-    public async Task SendWaveAsync_PassesTemplateBodyAndSubjectToEmailService()
+    public async Task SendWaveAsync_SubstitutesNameInSubject()
     {
         var campaign = await SeedActiveCampaignWithCodesAsync(
             new[] { "CODE-1" },
-            emailSubject: "Hi {{Name}}, your code",
-            emailBodyTemplate: "<p>Hi {{Name}}, your code is {{Code}}</p>");
+            emailSubject: "Hi {{Name}}, your code");
 
         var user = SeedUser(displayName: "Charlie");
         var team = SeedTeam("Gamma");
@@ -314,15 +326,8 @@ public class CampaignServiceTests : IDisposable
 
         await _service.SendWaveAsync(campaign.Id, team.Id);
 
-        // CampaignService delegates rendering to IEmailService: it must pass through
-        // the raw template subject/body + code so OutboxEmailService can render it.
-        await _emailService.Received(1).SendCampaignCodeAsync(
-            Arg.Is<CampaignCodeEmailRequest>(r =>
-                r.Subject == "Hi {{Name}}, your code"
-                && r.MarkdownBody == "<p>Hi {{Name}}, your code is {{Code}}</p>"
-                && r.Code == "CODE-1"
-                && r.RecipientName == "Charlie"),
-            Arg.Any<CancellationToken>());
+        var outbox = await _dbContext.EmailOutboxMessages.SingleAsync();
+        outbox.Subject.Should().Be("Hi Charlie, your code");
     }
 
     [Fact]
@@ -365,11 +370,8 @@ public class CampaignServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task SendWaveAsync_PassesRawCodeAndRecipientToEmailService()
+    public async Task SendWaveAsync_HtmlEncodesValuesInBody()
     {
-        // HTML-encoding of values happens inside OutboxEmailService (owner of the
-        // outbox table) — CampaignService must forward raw values to it so that
-        // encoding is applied consistently across all email templates.
         var campaign = await SeedActiveCampaignWithCodesAsync(
             new[] { "A<B>C" },
             emailBodyTemplate: "<p>Code: {{Code}}, Name: {{Name}}</p>");
@@ -381,11 +383,10 @@ public class CampaignServiceTests : IDisposable
 
         await _service.SendWaveAsync(campaign.Id, team.Id);
 
-        await _emailService.Received(1).SendCampaignCodeAsync(
-            Arg.Is<CampaignCodeEmailRequest>(r =>
-                r.Code == "A<B>C"
-                && r.RecipientName == "O'Brien & Co"),
-            Arg.Any<CancellationToken>());
+        var outbox = await _dbContext.EmailOutboxMessages.SingleAsync();
+        // Body should contain HTML-encoded values
+        outbox.HtmlBody.Should().Contain("A&lt;B&gt;C");
+        outbox.HtmlBody.Should().Contain("O&#39;Brien &amp; Co");
     }
 
     // ==========================================================================
@@ -393,7 +394,7 @@ public class CampaignServiceTests : IDisposable
     // ==========================================================================
 
     [Fact]
-    public async Task ResendToGrantAsync_EnqueuesNewEmailAndResetsGrantStatus()
+    public async Task ResendToGrantAsync_CreatesNewOutboxMessage()
     {
         var campaign = await SeedActiveCampaignWithCodesAsync(new[] { "RESEND-CODE" });
 
@@ -403,7 +404,6 @@ public class CampaignServiceTests : IDisposable
         await _dbContext.SaveChangesAsync();
 
         await _service.SendWaveAsync(campaign.Id, team.Id);
-        _emailService.ClearReceivedCalls();
 
         var grant = await _dbContext.CampaignGrants.SingleAsync();
         grant.LatestEmailStatus = EmailOutboxStatus.Failed;
@@ -411,9 +411,10 @@ public class CampaignServiceTests : IDisposable
 
         await _service.ResendToGrantAsync(grant.Id);
 
-        await _emailService.Received(1).SendCampaignCodeAsync(
-            Arg.Is<CampaignCodeEmailRequest>(r => r.CampaignGrantId == grant.Id),
-            Arg.Any<CancellationToken>());
+        var outboxMessages = await _dbContext.EmailOutboxMessages
+            .Where(m => m.CampaignGrantId == grant.Id)
+            .ToListAsync();
+        outboxMessages.Should().HaveCount(2);
 
         var updatedGrant = await _dbContext.CampaignGrants.FindAsync(grant.Id);
         updatedGrant!.LatestEmailStatus.Should().Be(EmailOutboxStatus.Queued);
@@ -424,7 +425,7 @@ public class CampaignServiceTests : IDisposable
     // ==========================================================================
 
     [Fact]
-    public async Task RetryAllFailedAsync_EnqueuesEmailsForFailedGrantsOnly()
+    public async Task RetryAllFailedAsync_CreatesOutboxForFailedGrants()
     {
         var campaign = await SeedActiveCampaignWithCodesAsync(new[] { "FAIL-1", "FAIL-2" });
 
@@ -436,7 +437,6 @@ public class CampaignServiceTests : IDisposable
         await _dbContext.SaveChangesAsync();
 
         await _service.SendWaveAsync(campaign.Id, team.Id);
-        _emailService.ClearReceivedCalls();
 
         // Mark one as failed
         var grants = await _dbContext.CampaignGrants.ToListAsync();
@@ -445,10 +445,9 @@ public class CampaignServiceTests : IDisposable
 
         await _service.RetryAllFailedAsync(campaign.Id);
 
-        // Only the failed grant should be re-enqueued.
-        await _emailService.Received(1).SendCampaignCodeAsync(
-            Arg.Is<CampaignCodeEmailRequest>(r => r.CampaignGrantId == grants[0].Id),
-            Arg.Any<CancellationToken>());
+        // Should have 3 outbox messages total (2 original + 1 retry)
+        var outboxCount = await _dbContext.EmailOutboxMessages.CountAsync();
+        outboxCount.Should().Be(3);
 
         var retriedGrant = await _dbContext.CampaignGrants.FindAsync(grants[0].Id);
         retriedGrant!.LatestEmailStatus.Should().Be(EmailOutboxStatus.Queued);
