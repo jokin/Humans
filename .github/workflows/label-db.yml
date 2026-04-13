@@ -1,11 +1,12 @@
 name: Label PRs with EF migrations
 
 on:
-  pull_request:
+  pull_request_target:
     types: [opened, synchronize]
 
 permissions:
   pull-requests: write
+  issues: write
 
 jobs:
   check-migrations:
