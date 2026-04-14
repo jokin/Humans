@@ -60,6 +60,16 @@ Log.Logger = logConfig.CreateLogger();
 
 builder.Host.UseSerilog();
 
+// Validate the DI container at startup so cycles and captive dependencies
+// fail the process fast instead of manifesting as silent hangs at first request.
+// (The runtime cycle check can't see through factory-lambda registrations; ValidateOnBuild
+// eagerly resolves every service through its real constructor graph.)
+builder.Host.UseDefaultServiceProvider(options =>
+{
+    options.ValidateOnBuild = true;
+    options.ValidateScopes = true;
+});
+
 // Add services to the container
 
 // Configuration registry — auto-collects metadata about every config setting the app touches.
@@ -439,9 +449,9 @@ var app = builder.Build();
 // so all Instant.ToDisplay*() calls automatically use the user's session timezone.
 DateTimeDisplayExtensions.Initialize(app.Services.GetRequiredService<IHttpContextAccessor>());
 
-// Eagerly resolve HumansMetricsService so the background gauge-refresh timer starts
+// Eagerly resolve IHumansMetrics so the background gauge-refresh timer starts
 // immediately — otherwise observable gauges emit nothing until first injection.
-app.Services.GetRequiredService<HumansMetricsService>();
+app.Services.GetRequiredService<IHumansMetrics>();
 
 // Localization diagnostic check
 {
