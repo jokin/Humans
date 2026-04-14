@@ -83,8 +83,7 @@ public static class InfrastructureServiceCollectionExtensions
 
         services.AddScoped<ISyncSettingsService, SyncSettingsService>();
 
-        services.AddSingleton<HumansMetricsService>();
-        services.AddSingleton<IHumansMetrics>(sp => sp.GetRequiredService<HumansMetricsService>());
+        services.AddSingleton<IHumansMetrics, HumansMetricsService>();
 
         services.AddScoped<ITeamService, TeamService>();
         services.AddScoped<ITeamPageService, TeamPageService>();
@@ -164,8 +163,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddScoped<IProfileService, ProfileService>();
         services.AddScoped<IUserService, UserService>();
         services.AddScoped<IDashboardService, DashboardService>();
-        services.AddScoped<SystemTeamSyncJob>();
-        services.AddScoped<ISystemTeamSync>(sp => sp.GetRequiredService<SystemTeamSyncJob>());
+        services.AddScoped<ISystemTeamSync, SystemTeamSyncJob>();
         services.AddScoped<SyncLegalDocumentsJob>();
         services.AddScoped<SendReConsentReminderJob>();
         services.AddScoped<ProcessAccountDeletionsJob>();
