@@ -1002,10 +1002,10 @@ public class ProfileController : HumansControllerBase
 
             return File(data, contentType);
         }
-        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        catch (OperationCanceledException)
         {
-            _logger.LogWarning("Profile picture request for {ProfileId} was cancelled by the client", id);
-            return StatusCode(499);
+            _logger.LogWarning("Profile picture request for {ProfileId} was cancelled", id);
+            return new EmptyResult();
         }
     }
 
