@@ -135,9 +135,9 @@ Follow the batch worker process documented in `.claude/agents/batch-worker.md`.
 
 Read these files before starting:
 - `CLAUDE.md` — project rules and architecture
-- `.claude/CODING_RULES.md` — mandatory coding rules
-- `.claude/CODE_REVIEW_RULES.md` — code review checklist
-- `.claude/DATA_MODEL.md` — data model reference
+- `docs/architecture/coding-rules.md` — mandatory coding rules
+- `docs/architecture/code-review-rules.md` — code review checklist
+- `docs/architecture/data-model.md` — data model reference
 
 ## Work order
 
@@ -157,7 +157,7 @@ Read these files before starting:
 ## Review gates
 
 1. **After implementing each issue:** Run spec compliance review per `.claude/agents/spec-compliance-reviewer.md`. Compare your code against EVERY acceptance criterion. Max 3 fix iterations.
-2. **After all issues:** Run code review per `.claude/CODE_REVIEW_RULES.md`. Check every rule. Max 3 fix iterations.
+2. **After all issues:** Run code review per `docs/architecture/code-review-rules.md`. Check every rule. Max 3 fix iterations.
 3. **Before PR:** Run `dotnet format Humans.slnx --verify-no-changes`.
 
 ## PR target

@@ -73,7 +73,7 @@ Humans need a way to report bugs, request features, and ask questions directly f
 
 ## Data Model
 
-See `.claude/DATA_MODEL.md` — `FeedbackReport` and `FeedbackMessage` entities.
+See `docs/architecture/data-model.md` — `FeedbackReport` and `FeedbackMessage` entities.
 
 **Table:** `feedback_reports`
 

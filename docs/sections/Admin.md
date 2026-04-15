@@ -51,7 +51,7 @@
 
 ## Architecture — Current vs Target
 
-See `.claude/DESIGN_RULES.md` for the full rules.
+See `docs/architecture/design-rules.md` for the full rules.
 
 **Owning services:** `DuplicateAccountService`, `AccountMergeService`
 **Owned tables:** Admin section is primarily an orchestrator — it calls other section services. `AccountMergeService` owns `account_merge_requests`.

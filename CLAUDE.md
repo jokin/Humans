@@ -8,7 +8,7 @@ Manage the full membership lifecycle for Nobodies Collective: volunteer applicat
 
 ## Critical: Design Rules
 
-**See [`.claude/DESIGN_RULES.md`](.claude/DESIGN_RULES.md) for architectural rules:**
+**See [`docs/architecture/design-rules.md`](docs/architecture/design-rules.md) for architectural rules:**
 - **Services own their data** — controllers cannot talk to DB, only services can
 - **Table ownership is strict** — each service owns specific tables, no cross-service DB access
 - **Cache ownership follows data ownership** — only the owning service manages its cache
@@ -17,7 +17,7 @@ Manage the full membership lifecycle for Nobodies Collective: volunteer applicat
 
 ## Critical: Coding Rules
 
-**See [`.claude/CODING_RULES.md`](.claude/CODING_RULES.md) for critical rules:**
+**See [`docs/architecture/coding-rules.md`](docs/architecture/coding-rules.md) for critical rules:**
 - Do not remove "unused" properties (reflection usage)
 - Never rename fields in serialized objects (breaks JSON deserialization)
 - JSON serialization requirements
@@ -35,7 +35,7 @@ Clean Architecture with 4 layers:
 
 ## Domain Entities
 
-See [`.claude/DATA_MODEL.md`](.claude/DATA_MODEL.md) for full data model, relationships, and serialization notes. Key entities: `User`, `Profile`, `ContactField`, `Application` (Colaborador/Asociado tier applications), `BoardVote` (transient), `RoleAssignment`, `LegalDocument`/`DocumentVersion`, `ConsentRecord` (append-only), `Team`/`TeamMember`, `GoogleResource`, `BudgetYear`/`BudgetGroup`/`BudgetCategory`/`BudgetLineItem`, `BudgetAuditLog` (append-only), `CityPlanningSettings`, `CampPolygon`, `CampPolygonHistory`.
+See [`docs/architecture/data-model.md`](docs/architecture/data-model.md) for full data model, relationships, and serialization notes. Key entities: `User`, `Profile`, `ContactField`, `Application` (Colaborador/Asociado tier applications), `BoardVote` (transient), `RoleAssignment`, `LegalDocument`/`DocumentVersion`, `ConsentRecord` (append-only), `Team`/`TeamMember`, `GoogleResource`, `BudgetYear`/`BudgetGroup`/`BudgetCategory`/`BudgetLineItem`, `BudgetAuditLog` (append-only), `CityPlanningSettings`, `CampPolygon`, `CampPolygonHistory`.
 
 ## Important: Shared Drives Only
 
@@ -124,19 +124,19 @@ dotnet run --project src/Humans.Web
 
 ## Maintenance Log
 
-**After running any recurring maintenance process** (context cleanup, feature spec sync, NuGet check, code simplification, etc.), update `.claude/MAINTENANCE_LOG.md` with the current date and next-due date.
+**After running any recurring maintenance process** (context cleanup, feature spec sync, NuGet check, code simplification, etc.), update `docs/architecture/maintenance-log.md` with the current date and next-due date.
 
 ## Extended Docs
 
 | Topic | File |
 |-------|------|
-| **Design rules** | **`.claude/DESIGN_RULES.md`** |
-| Dependency graph | `.claude/DEPENDENCY_GRAPH.md` |
-| **Coding rules** | **`.claude/CODING_RULES.md`** |
-| **Code review rules** | **`.claude/CODE_REVIEW_RULES.md`** |
-| Data model | `.claude/DATA_MODEL.md` |
-| Analyzers/ReSharper | `.claude/CODE_ANALYSIS.md` |
-| Maintenance log | `.claude/MAINTENANCE_LOG.md` |
+| **Design rules** | **`docs/architecture/design-rules.md`** |
+| Dependency graph | `docs/architecture/dependency-graph.md` |
+| **Coding rules** | **`docs/architecture/coding-rules.md`** |
+| **Code review rules** | **`docs/architecture/code-review-rules.md`** |
+| Data model | `docs/architecture/data-model.md` |
+| Analyzers/ReSharper | `docs/architecture/code-analysis.md` |
+| Maintenance log | `docs/architecture/maintenance-log.md` |
 | **Feature specs** | **`docs/features/`** |
 | **Section invariants** | **`docs/sections/`** |
 | **EF migration reviewer** | **`.claude/agents/ef-migration-reviewer.md`** |

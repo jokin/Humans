@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Guardrail: enforce that google_resources is accessed only through
-# TeamResourceService (the owning service), per .claude/DESIGN_RULES.md.
+# TeamResourceService (the owning service), per docs/architecture/design-rules.md.
 #
 # This script fails if any file under src/ touches DbSet<GoogleResource>
 # or _dbContext.GoogleResources / dbContext.GoogleResources / db.GoogleResources
@@ -61,7 +61,7 @@ if [[ -n "$MATCHES" ]]; then
   echo "methods (GetTeamResourcesAsync, GetResourcesByTeamIdsAsync," >&2
   echo "GetTeamResourceSummariesAsync, GetActiveResourceCountsByTeamAsync," >&2
   echo "GetUserTeamResourcesAsync, GetActiveDriveFoldersAsync, GetResourceCountAsync)" >&2
-  echo "instead of reaching into the DbSet directly. See .claude/DESIGN_RULES.md." >&2
+  echo "instead of reaching into the DbSet directly. See docs/architecture/design-rules.md." >&2
   exit 1
 fi
 

@@ -53,7 +53,7 @@
 
 ## Architecture — Current vs Target
 
-See `.claude/DESIGN_RULES.md` for the full rules.
+See `docs/architecture/design-rules.md` for the full rules.
 
 **Owning services:** `ApplicationDecisionService`
 **Owned tables:** `applications`, `application_state_histories`, `board_votes`

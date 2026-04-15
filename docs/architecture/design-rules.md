@@ -66,7 +66,7 @@ Each section's service owns these tables. Cross-service access goes through the 
 | **System Settings** | *(accessed via owning services)* | `system_settings` |
 | **Unsubscribe** | `UnsubscribeService` | *(operates on User.UnsubscribedFromCampaigns via UserService)* |
 
-See [`.claude/DEPENDENCY_GRAPH.md`](DEPENDENCY_GRAPH.md) for the full directed dependency graph with current vs target edges and circular dependency analysis.
+See [`docs/architecture/dependency-graph.md`](dependency-graph.md) for the full directed dependency graph with current vs target edges and circular dependency analysis.
 
 ## 4. Cross-Service Communication
 
