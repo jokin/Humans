@@ -69,11 +69,21 @@ Clean Architecture with four layers:
 
 ```
 Web             Controllers, Views, ViewModels
-Application     Interfaces, DTOs, Use Cases
-Infrastructure  EF Core, Services, Jobs
+Application     Interfaces, DTOs, Services (business logic), Use Cases
+Infrastructure  EF Core, Repositories, Stores, Caching Decorators, Jobs, Integrations
 Domain          Entities, Enums, Value Objects
 ```
 
-Primary macro-level guidance lives in [architecture.md](architecture.md).
+| Document | Description |
+|----------|-------------|
+| [Design Rules](architecture/design-rules.md) | Persistence, service ownership, repository / store / decorator pattern, cross-domain join ban, authorization, migration strategy |
+| [Conventions](architecture/conventions.md) | Domain invariants, transactions, integration, time/config, rendering (Razor vs fetch), testing, exception rule, smell checklist |
+| [Dependency Graph](architecture/dependency-graph.md) | Service-to-service dependency graph, current vs target edges, circular dependency analysis |
+| [Data Model](architecture/data-model.md) | Entities, relationships, serialization notes |
+| [Coding Rules](architecture/coding-rules.md) | NodaTime, JSON, enums, string comparisons, nav, magic strings |
+| [Code Review Rules](architecture/code-review-rules.md) | Hard-reject rules for code review |
+| [Service / Data Access Map](architecture/service-data-access-map.md) | Per-service table access inventory |
+| [Code Analysis](architecture/code-analysis.md) | Analyzers, ReSharper configuration |
+| [Maintenance Log](architecture/maintenance-log.md) | Recurring maintenance tasks and last-run dates |
 
-See the [root CLAUDE.md](../CLAUDE.md) for build commands, coding rules, and project conventions.
+See the [root CLAUDE.md](../CLAUDE.md) for build commands and project overview.
