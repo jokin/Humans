@@ -1,12 +1,12 @@
 ---
 name: check-pr
-description: "Check an externally created PR for coding rule violations. Fetches the PR diff and reviews against CODING_RULES.md and CODE_REVIEW_RULES.md."
+description: "Check an externally created PR for coding rule violations. Fetches the PR diff and reviews against coding-rules.md and code-review-rules.md."
 argument-hint: "PR 64 | https://github.com/.../pull/64"
 ---
 
 # Check PR for Coding Rule Compliance
 
-Review an externally created pull request for violations of this project's coding rules. This is NOT a general code review — it specifically checks compliance with `.claude/CODING_RULES.md` and `.claude/CODE_REVIEW_RULES.md`.
+Review an externally created pull request for violations of this project's coding rules. This is NOT a general code review — it specifically checks compliance with `docs/architecture/coding-rules.md` and `docs/architecture/code-review-rules.md`.
 
 ## Input
 
@@ -20,8 +20,8 @@ Review an externally created pull request for violations of this project's codin
 ### 1. Load the rules
 
 Read both rule files in full:
-- `.claude/CODING_RULES.md` — coding standards (serialization, DbContext, enums, NodaTime, etc.)
-- `.claude/CODE_REVIEW_RULES.md` — hard reject rules (auth gaps, missing Include, bool sentinels, etc.)
+- `docs/architecture/coding-rules.md` — coding standards (serialization, DbContext, enums, NodaTime, etc.)
+- `docs/architecture/code-review-rules.md` — hard reject rules (auth gaps, missing Include, bool sentinels, etc.)
 
 ### 2. Fetch the PR diff
 
@@ -38,7 +38,7 @@ gh pr view <number> --repo <repo> --json title,body,files
 
 For every file in the diff, check for violations of ALL rules. Focus on:
 
-**From CODING_RULES.md:**
+**From coding-rules.md:**
 - Direct `ApplicationDbContext` injection or usage in controllers (no exceptions)
 - `DateTime`/`DateOnly` instead of NodaTime types in non-view-model code
 - String comparisons without explicit `StringComparison`
@@ -52,7 +52,7 @@ For every file in the diff, check for violations of ALL rules. Focus on:
 - New `_userManager.GetUserAsync(User)` calls instead of base class helpers
 - Direct `TempData["SuccessMessage"]` assignments instead of `SetSuccess`/`SetError`/`SetInfo`
 
-**From CODE_REVIEW_RULES.md:**
+**From code-review-rules.md:**
 - `disabled="@boolValue"` or similar Razor boolean attribute traps
 - Missing `[Authorize]` or `[ValidateAntiForgeryToken]` on POST actions
 - Missing `.Include()` for navigation property access
@@ -78,7 +78,7 @@ Read the full file at the relevant lines (not just the diff) to confirm the viol
 ### VIOLATIONS
 
 For each violation:
-- **Rule:** <rule name from CODING_RULES.md or CODE_REVIEW_RULES.md>
+- **Rule:** <rule name from coding-rules.md or code-review-rules.md>
 - **File:** <path>:<line>
 - **Code:** <the offending code snippet>
 - **Fix:** <what should change>
@@ -92,8 +92,8 @@ For each violation:
 - Severity: BLOCK / WARN / CLEAN
 ```
 
-Use **BLOCK** if any CODE_REVIEW_RULES.md hard-reject rule is violated.
-Use **WARN** if only CODING_RULES.md standards are violated.
+Use **BLOCK** if any code-review-rules.md hard-reject rule is violated.
+Use **WARN** if only coding-rules.md standards are violated.
 Use **CLEAN** if no violations found.
 
 ## After Review

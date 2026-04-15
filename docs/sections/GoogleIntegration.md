@@ -69,7 +69,7 @@ Team-level resource linking stays at `/Teams/{slug}/Resources` in `TeamAdminCont
 
 ## Architecture — Current vs Target
 
-See `.claude/DESIGN_RULES.md` for the full rules.
+See `docs/architecture/design-rules.md` for the full rules.
 
 **Owning services:** `GoogleSyncService`, `GoogleAdminService`, `GoogleWorkspaceUserService`, `DriveActivityMonitorService`, `SyncSettingsService`, `EmailProvisioningService`
 **Owned tables:** `google_resources`, `sync_service_settings`

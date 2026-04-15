@@ -47,7 +47,7 @@
 
 ## Architecture — Current vs Target
 
-See `.claude/DESIGN_RULES.md` for the full rules.
+See `docs/architecture/design-rules.md` for the full rules.
 
 **Owning services:** `TicketQueryService`, `TicketSyncService`, `TicketingBudgetService`
 **Owned tables:** `ticket_orders`, `ticket_attendees`, `ticket_sync_states`

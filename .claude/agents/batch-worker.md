@@ -21,7 +21,7 @@ For each issue in the work order (sequentially, never parallel):
 
 1. Read the issue spec carefully. Identify every acceptance criterion and behavioral requirement.
 2. Explore the codebase to understand existing patterns and relevant files.
-3. Implement the feature/fix. Follow all project coding rules (`.claude/CODING_RULES.md`).
+3. Implement the feature/fix. Follow all project coding rules (`docs/architecture/coding-rules.md`).
 4. Run `dotnet build Humans.slnx` — fix any build errors before proceeding.
 5. Commit the implementation with a message referencing the issue number.
 
@@ -51,7 +51,7 @@ After all issues are implemented and spec-reviewed:
 
 1. Run `dotnet build Humans.slnx` — ensure clean build.
 2. Run `dotnet format Humans.slnx --verify-no-changes` — fix any formatting issues.
-3. Review the full batch diff against `.claude/CODE_REVIEW_RULES.md`. Check every rule:
+3. Review the full batch diff against `docs/architecture/code-review-rules.md`. Check every rule:
    - Razor boolean attributes
    - Authorization gaps
    - Missing .Include()

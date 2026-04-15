@@ -33,7 +33,7 @@ See the [README](README.md#development-setup) for local setup instructions.
 
 ## Code Standards
 
-- Follow the conventions in `.claude/CODING_RULES.md`
+- Follow the conventions in `docs/architecture/coding-rules.md`
 - Every new page must have a navigation link (no orphan pages)
 - Use `nameof()` and constants instead of magic strings
 - Use NodaTime for all date/time handling

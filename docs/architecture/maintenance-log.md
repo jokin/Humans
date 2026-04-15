@@ -11,7 +11,7 @@ Tracks when recurring maintenance processes were last run.
 | Context cleanup | 2026-03-18 | 2026-04-18 | Monthly | — | CLAUDE.md, .claude/, todos.md |
 | Feature spec sync | 2026-04-05 | 2026-05-05 | Monthly | — | docs/features/ vs implementation |
 | i18n audit | 2026-02-24 | 2026-03-24 | Monthly | gemini: ~2% | Missing translations |
-| Data model doc sync | 2026-02-12 | As needed | As needed | — | .claude/DATA_MODEL.md vs entities |
+| Data model doc sync | 2026-02-12 | As needed | As needed | — | docs/architecture/data-model.md vs entities |
 | Navigation audit | 2026-03-22 | 2026-04-22 | Monthly | — | `/nav-audit` — discoverability, backlinks |
 | GDPR audit | — | — | Quarterly | — | Exports, consent, PII logging |
 | Migration squash check | 2026-02-24 | 2026-03-24 | Monthly | — | Check `/Admin/DbVersion` on prod, QA (humans.n.burn.camp), and local dev. Oldest `lastApplied` across all three is the safe squash boundary. |

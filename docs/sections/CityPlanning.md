@@ -45,7 +45,7 @@
 
 ## Architecture — Current vs Target
 
-See `.claude/DESIGN_RULES.md` for the full rules.
+See `docs/architecture/design-rules.md` for the full rules.
 
 **Owning services:** `CityPlanningService`
 **Owned tables:** `city_planning_settings`, `camp_polygons`, `camp_polygon_histories`
