@@ -3,6 +3,7 @@
 using System.ComponentModel.DataAnnotations;
 using System.Globalization;
 using System.Web;
+using Humans.Application.Authorization;
 using Humans.Application.Configuration;
 using Humans.Application.Extensions;
 using Microsoft.AspNetCore.Authorization;
@@ -11,6 +12,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Localization;
 using Humans.Application.DTOs;
 using Humans.Application.Interfaces;
+using Humans.Application.Interfaces.Gdpr;
 using Humans.Domain.Constants;
 using Humans.Domain.Entities;
 using Humans.Domain.Enums;
@@ -40,6 +42,7 @@ public class ProfileController : HumansControllerBase
     private readonly IRoleAssignmentService _roleAssignmentService;
     private readonly IShiftSignupService _shiftSignupService;
     private readonly IShiftManagementService _shiftMgmt;
+    private readonly IGdprExportService _gdprExportService;
     private readonly IConfiguration _configuration;
     private readonly ConfigurationRegistry _configRegistry;
     private readonly ILogger<ProfileController> _logger;
@@ -48,6 +51,7 @@ public class ProfileController : HumansControllerBase
     private readonly ITicketQueryService _ticketQueryService;
     private readonly IMemoryCache _cache;
     private readonly IClock _clock;
+    private readonly IAuthorizationService _authorizationService;
 
     private const int MaxProfilePictureUploadBytes = 20 * 1024 * 1024; // 20MB upload limit
     private static readonly HashSet<string> AllowedImageContentTypes = new(StringComparer.OrdinalIgnoreCase)
@@ -85,6 +89,7 @@ public class ProfileController : HumansControllerBase
         IRoleAssignmentService roleAssignmentService,
         IShiftSignupService shiftSignupService,
         IShiftManagementService shiftMgmt,
+        IGdprExportService gdprExportService,
         IConfiguration configuration,
         ConfigurationRegistry configRegistry,
         ILogger<ProfileController> logger,
@@ -92,7 +97,8 @@ public class ProfileController : HumansControllerBase
         HumansDbContext dbContext,
         ITicketQueryService ticketQueryService,
         IMemoryCache cache,
-        IClock clock)
+        IClock clock,
+        IAuthorizationService authorizationService)
         : base(userManager)
     {
         _userManager = userManager;
@@ -107,6 +113,7 @@ public class ProfileController : HumansControllerBase
         _roleAssignmentService = roleAssignmentService;
         _shiftSignupService = shiftSignupService;
         _shiftMgmt = shiftMgmt;
+        _gdprExportService = gdprExportService;
         _configuration = configuration;
         _configRegistry = configRegistry;
         _logger = logger;
@@ -115,6 +122,7 @@ public class ProfileController : HumansControllerBase
         _ticketQueryService = ticketQueryService;
         _cache = cache;
         _clock = clock;
+        _authorizationService = authorizationService;
     }
 
     // ─── Own Profile (Me) ────────────────────────────────────────────
@@ -567,7 +575,7 @@ public class ProfileController : HumansControllerBase
         }
         catch (ValidationException ex)
         {
-            _logger.LogWarning(ex, "Failed to add email address for user {UserId}", user.Id);
+            _logger.LogWarning("Rejected email add for user {UserId}: {Reason}", user.Id, ex.Message);
             ModelState.AddModelError(nameof(model.NewEmail), ex.Message);
             return View(nameof(Emails), await BuildEmailsViewModelAsync(user));
         }
@@ -950,19 +958,33 @@ public class ProfileController : HumansControllerBase
 
     [HttpGet("Me/DownloadData")]
     [ResponseCache(Duration = 0, Location = ResponseCacheLocation.None, NoStore = true)]
-    public async Task<IActionResult> DownloadData()
+    public async Task<IActionResult> DownloadData(CancellationToken ct)
     {
         var user = await GetCurrentUserAsync();
         if (user is null)
             return NotFound();
 
-        var exportData = await _profileService.ExportDataAsync(user.Id);
+        var export = await _gdprExportService.ExportForUserAsync(user.Id, ct);
 
-        var json = System.Text.Json.JsonSerializer.Serialize(exportData, ExportJsonOptions);
+        var payload = BuildExportPayload(export);
+        var json = System.Text.Json.JsonSerializer.Serialize(payload, ExportJsonOptions);
         var bytes = System.Text.Encoding.UTF8.GetBytes(json);
         var fileName = $"nobodies-profiles-export-{_clock.GetCurrentInstant().ToDateTimeUtc().ToIsoDateString()}.json";
 
         return File(bytes, "application/json", fileName);
+    }
+
+    private static Dictionary<string, object?> BuildExportPayload(GdprExport export)
+    {
+        var payload = new Dictionary<string, object?>(StringComparer.Ordinal)
+        {
+            ["ExportedAt"] = export.ExportedAt
+        };
+        foreach (var (section, data) in export.Sections)
+        {
+            payload[section] = data;
+        }
+        return payload;
     }
 
     // ─── Shared (Profile Picture) ────────────────────────────────────
@@ -971,12 +993,20 @@ public class ProfileController : HumansControllerBase
     [ResponseCache(Duration = 3600, Location = ResponseCacheLocation.Client)]
     public async Task<IActionResult> Picture(Guid id, CancellationToken ct)
     {
-        var (data, contentType) = await _profileService.GetProfilePictureAsync(id, ct);
+        try
+        {
+            var (data, contentType) = await _profileService.GetProfilePictureAsync(id, ct);
 
-        if (data is null || string.IsNullOrEmpty(contentType))
-            return NotFound();
+            if (data is null || string.IsNullOrEmpty(contentType))
+                return NotFound();
 
-        return File(data, contentType);
+            return File(data, contentType);
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogWarning("Profile picture request for {ProfileId} was cancelled", id);
+            return new EmptyResult();
+        }
     }
 
     // ─── View Another Profile ────────────────────────────────────────
@@ -1001,10 +1031,11 @@ public class ProfileController : HumansControllerBase
 
         // Load no-show history for coordinators/NoInfoAdmin/Admin viewing other profiles
         List<NoShowHistoryItem>? noShowHistory = null;
+        var viewerCanViewShiftHistory = false;
         if (!isOwnProfile)
         {
             var viewerIsCoordinator = (await _shiftMgmt.GetCoordinatorTeamIdsAsync(viewer.Id)).Count > 0;
-            var viewerCanViewShiftHistory = viewerIsCoordinator || ShiftRoleChecks.IsPrivilegedSignupApprover(User);
+            viewerCanViewShiftHistory = viewerIsCoordinator || ShiftRoleChecks.IsPrivilegedSignupApprover(User);
 
             if (viewerCanViewShiftHistory)
             {
@@ -1039,6 +1070,7 @@ public class ProfileController : HumansControllerBase
             IsOwnProfile = isOwnProfile,
             IsApproved = profile.IsApproved,
             NoShowHistory = noShowHistory,
+            CanViewShiftSignups = viewerCanViewShiftHistory,
         };
 
         return View("Index", viewModel);
@@ -1493,16 +1525,21 @@ public class ProfileController : HumansControllerBase
             return Unauthorized();
         }
 
+        var authResult = await _authorizationService.AuthorizeAsync(
+            User, model.RoleName, RoleAssignmentOperationRequirement.Manage);
+        if (!authResult.Succeeded)
+        {
+            _logger.LogWarning(
+                "Authorization denied for role assignment: principal {Principal} attempted to assign role {Role} to user {UserId}",
+                User.Identity?.Name, model.RoleName, id);
+            return Forbid();
+        }
+
         var result = await _roleAssignmentService.AssignRoleAsync(
-            id, model.RoleName, currentUser.Id, model.Notes, User);
+            id, model.RoleName, currentUser.Id, model.Notes);
 
         if (!result.Success)
         {
-            if (string.Equals(result.ErrorKey, "Unauthorized", StringComparison.Ordinal))
-            {
-                return Forbid();
-            }
-
             SetError(string.Format(_localizer["Admin_RoleAlreadyActive"].Value, model.RoleName));
             return RedirectToAction(nameof(AdminDetail), new { id });
         }
@@ -1520,6 +1557,7 @@ public class ProfileController : HumansControllerBase
 
         if (roleAssignment is null)
         {
+            // Return NotFound rather than Unauthorized to prevent role-assignment enumeration.
             return NotFound();
         }
 
@@ -1529,16 +1567,21 @@ public class ProfileController : HumansControllerBase
             return Unauthorized();
         }
 
+        var authResult = await _authorizationService.AuthorizeAsync(
+            User, roleAssignment.RoleName, RoleAssignmentOperationRequirement.Manage);
+        if (!authResult.Succeeded)
+        {
+            _logger.LogWarning(
+                "Authorization denied for ending role: principal {Principal} attempted to end role {Role} for user {UserId}",
+                User.Identity?.Name, roleAssignment.RoleName, roleAssignment.UserId);
+            return NotFound();
+        }
+
         var result = await _roleAssignmentService.EndRoleAsync(
-            roleId, currentUser.Id, notes, User);
+            roleId, currentUser.Id, notes);
 
         if (!result.Success)
         {
-            if (string.Equals(result.ErrorKey, "Unauthorized", StringComparison.Ordinal))
-            {
-                return Forbid();
-            }
-
             SetError(_localizer["Admin_RoleNotActive"].Value);
             return RedirectToAction(nameof(AdminDetail), new { id = roleAssignment.UserId });
         }

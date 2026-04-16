@@ -1,12 +1,10 @@
-using System.Security.Claims;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using NodaTime;
-using Humans.Application.Authorization;
 using Humans.Application.Extensions;
 using Humans.Application.Interfaces;
+using Humans.Application.Interfaces.Gdpr;
 using Humans.Domain.Constants;
 using Humans.Domain.Entities;
 using Humans.Domain.Enums;
@@ -14,17 +12,12 @@ using Humans.Infrastructure.Data;
 
 namespace Humans.Infrastructure.Services;
 
-/// <summary>
-/// Role assignment validation/query service.
-/// Mutations enforce authorization at the service boundary via IAuthorizationService.
-/// </summary>
-public class RoleAssignmentService : IRoleAssignmentService
+public class RoleAssignmentService : IRoleAssignmentService, IUserDataContributor
 {
     private readonly HumansDbContext _dbContext;
     private readonly IAuditLogService _auditLogService;
     private readonly INotificationService _notificationService;
     private readonly ISystemTeamSync _systemTeamSyncJob;
-    private readonly IAuthorizationService _authorizationService;
     private readonly IClock _clock;
     private readonly IMemoryCache _cache;
     private readonly ILogger<RoleAssignmentService> _logger;
@@ -34,7 +27,6 @@ public class RoleAssignmentService : IRoleAssignmentService
         IAuditLogService auditLogService,
         INotificationService notificationService,
         ISystemTeamSync systemTeamSyncJob,
-        IAuthorizationService authorizationService,
         IClock clock,
         IMemoryCache cache,
         ILogger<RoleAssignmentService> logger)
@@ -43,7 +35,6 @@ public class RoleAssignmentService : IRoleAssignmentService
         _auditLogService = auditLogService;
         _notificationService = notificationService;
         _systemTeamSyncJob = systemTeamSyncJob;
-        _authorizationService = authorizationService;
         _clock = clock;
         _cache = cache;
         _logger = logger;
@@ -129,20 +120,9 @@ public class RoleAssignmentService : IRoleAssignmentService
 
     public async Task<OnboardingResult> AssignRoleAsync(
         Guid userId, string roleName, Guid assignerId,
-        string? notes, ClaimsPrincipal principal,
+        string? notes,
         CancellationToken ct = default)
     {
-        var authResult = await _authorizationService.AuthorizeAsync(
-            principal, roleName, RoleAssignmentOperationRequirement.Manage);
-
-        if (!authResult.Succeeded)
-        {
-            _logger.LogWarning(
-                "Authorization denied for role assignment: principal {Principal} attempted to assign role {Role} to user {UserId}",
-                principal.Identity?.Name, roleName, userId);
-            return new OnboardingResult(false, "Unauthorized");
-        }
-
         var now = _clock.GetCurrentInstant();
 
         var hasOverlap = await HasOverlappingAssignmentAsync(userId, roleName, now, cancellationToken: ct);
@@ -201,7 +181,7 @@ public class RoleAssignmentService : IRoleAssignmentService
 
     public async Task<OnboardingResult> EndRoleAsync(
         Guid assignmentId, Guid enderId,
-        string? notes, ClaimsPrincipal principal,
+        string? notes,
         CancellationToken ct = default)
     {
         var roleAssignment = await _dbContext.RoleAssignments
@@ -211,17 +191,6 @@ public class RoleAssignmentService : IRoleAssignmentService
         if (roleAssignment is null)
         {
             return new OnboardingResult(false, "NotFound");
-        }
-
-        var authResult = await _authorizationService.AuthorizeAsync(
-            principal, roleAssignment.RoleName, RoleAssignmentOperationRequirement.Manage);
-
-        if (!authResult.Succeeded)
-        {
-            _logger.LogWarning(
-                "Authorization denied for ending role: principal {Principal} attempted to end role {Role} for user {UserId}",
-                principal.Identity?.Name, roleAssignment.RoleName, roleAssignment.UserId);
-            return new OnboardingResult(false, "Unauthorized");
         }
 
         var now = _clock.GetCurrentInstant();
@@ -320,5 +289,22 @@ public class RoleAssignmentService : IRoleAssignmentService
                 ra.ValidFrom <= now &&
                 (ra.ValidTo == null || ra.ValidTo > now),
                 cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<UserDataSlice>> ContributeForUserAsync(Guid userId, CancellationToken ct)
+    {
+        var assignments = await _dbContext.RoleAssignments
+            .AsNoTracking()
+            .Where(ra => ra.UserId == userId)
+            .ToListAsync(ct);
+
+        var shaped = assignments.Select(ra => new
+        {
+            ra.RoleName,
+            ValidFrom = ra.ValidFrom.ToInvariantInstantString(),
+            ValidTo = ra.ValidTo.ToInvariantInstantString()
+        }).ToList();
+
+        return [new UserDataSlice(GdprExportSections.RoleAssignments, shaped)];
     }
 }

@@ -1,9 +1,21 @@
 using Humans.Application.Configuration;
 using Humans.Application.Interfaces;
+using Humans.Application.Interfaces.Caching;
+using Humans.Application.Interfaces.Gdpr;
+using Humans.Application.Interfaces.Governance;
+using Humans.Application.Interfaces.Repositories;
+using Humans.Application.Interfaces.Stores;
+using Humans.Application.Services.Gdpr;
+using Humans.Infrastructure.Caching;
 using Humans.Infrastructure.Configuration;
+using Humans.Infrastructure.HostedServices;
 using Humans.Infrastructure.Jobs;
+using Humans.Infrastructure.Repositories;
 using Humans.Infrastructure.Services;
+using Humans.Infrastructure.Services.Governance;
+using Humans.Infrastructure.Stores;
 using Humans.Web.Filters;
+using GovernanceApplicationDecisionService = Humans.Application.Services.Governance.ApplicationDecisionService;
 
 namespace Humans.Web.Extensions;
 
@@ -85,14 +97,29 @@ public static class InfrastructureServiceCollectionExtensions
 
         services.AddSingleton<IHumansMetrics, HumansMetricsService>();
 
-        services.AddScoped<ITeamService, TeamService>();
+        // Contributor-bearing services: register the concrete type once, then
+        // forward both the primary interface and IUserDataContributor to that
+        // single scoped instance so IGdprExportService can resolve every slice
+        // via IEnumerable<IUserDataContributor>.
+        services.AddScoped<TeamService>();
+        services.AddScoped<ITeamService>(sp => sp.GetRequiredService<TeamService>());
+        services.AddScoped<IUserDataContributor>(sp => sp.GetRequiredService<TeamService>());
+
         services.AddScoped<ITeamPageService, TeamPageService>();
-        services.AddScoped<ICampService, CampService>();
+
+        services.AddScoped<CampService>();
+        services.AddScoped<ICampService>(sp => sp.GetRequiredService<CampService>());
+        services.AddScoped<IUserDataContributor>(sp => sp.GetRequiredService<CampService>());
+
         services.AddScoped<ICityPlanningService, CityPlanningService>();
         services.AddScoped<ICampContactService, CampContactService>();
         services.AddScoped<ICommunicationPreferenceService, CommunicationPreferenceService>();
         services.AddScoped<IUnsubscribeService, UnsubscribeService>();
-        services.AddScoped<ICampaignService, CampaignService>();
+
+        services.AddScoped<CampaignService>();
+        services.AddScoped<ICampaignService>(sp => sp.GetRequiredService<CampaignService>());
+        services.AddScoped<IUserDataContributor>(sp => sp.GetRequiredService<CampaignService>());
+
         services.AddScoped<IContactFieldService, ContactFieldService>();
         services.AddScoped<IUserEmailService, UserEmailService>();
         services.AddScoped<IEmailProvisioningService, EmailProvisioningService>();
@@ -147,21 +174,70 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddScoped<IEmailService, OutboxEmailService>();
         services.AddScoped<IEmailOutboxService, EmailOutboxService>();
         services.AddScoped<IMembershipCalculator, MembershipCalculator>();
-        services.AddScoped<IRoleAssignmentService, RoleAssignmentService>();
-        services.AddScoped<IAuditLogService, AuditLogService>();
-        services.AddScoped<IAccountMergeService, AccountMergeService>();
+
+        services.AddScoped<RoleAssignmentService>();
+        services.AddScoped<IRoleAssignmentService>(sp => sp.GetRequiredService<RoleAssignmentService>());
+        services.AddScoped<IUserDataContributor>(sp => sp.GetRequiredService<RoleAssignmentService>());
+
+        services.AddScoped<AuditLogService>();
+        services.AddScoped<IAuditLogService>(sp => sp.GetRequiredService<AuditLogService>());
+        services.AddScoped<IUserDataContributor>(sp => sp.GetRequiredService<AuditLogService>());
+
+        services.AddScoped<AccountMergeService>();
+        services.AddScoped<IAccountMergeService>(sp => sp.GetRequiredService<AccountMergeService>());
+        services.AddScoped<IUserDataContributor>(sp => sp.GetRequiredService<AccountMergeService>());
+
         services.AddScoped<IDuplicateAccountService, DuplicateAccountService>();
         services.AddScoped<IContactService, ContactService>();
         services.AddScoped<IAccountProvisioningService, AccountProvisioningService>();
         services.AddScoped<IMagicLinkService, MagicLinkService>();
-        services.AddScoped<IFeedbackService, FeedbackService>();
-        services.AddScoped<IBudgetService, BudgetService>();
+
+        services.AddScoped<FeedbackService>();
+        services.AddScoped<IFeedbackService>(sp => sp.GetRequiredService<FeedbackService>());
+        services.AddScoped<IUserDataContributor>(sp => sp.GetRequiredService<FeedbackService>());
+
+        services.AddScoped<BudgetService>();
+        services.AddScoped<IBudgetService>(sp => sp.GetRequiredService<BudgetService>());
+        services.AddScoped<IUserDataContributor>(sp => sp.GetRequiredService<BudgetService>());
+
         services.AddScoped<ITicketingBudgetService, TicketingBudgetService>();
-        services.AddScoped<IApplicationDecisionService, ApplicationDecisionService>();
+
+        // Governance — first full end-to-end implementation of the target
+        // repository/store/decorator pattern (see PR #503 /
+        // docs/superpowers/plans/2026-04-15-governance-migration.md).
+        services.AddScoped<IApplicationRepository, ApplicationRepository>();
+        services.AddSingleton<IApplicationStore, ApplicationStore>();
+
+        services.AddScoped<INavBadgeCacheInvalidator, NavBadgeCacheInvalidator>();
+        services.AddScoped<INotificationMeterCacheInvalidator, NotificationMeterCacheInvalidator>();
+        services.AddScoped<IVotingBadgeCacheInvalidator, VotingBadgeCacheInvalidator>();
+
+        services.AddScoped<GovernanceApplicationDecisionService>();
+        services.AddScoped<IApplicationDecisionService>(sp => sp.GetRequiredService<GovernanceApplicationDecisionService>());
+        services.AddScoped<IUserDataContributor>(sp => sp.GetRequiredService<GovernanceApplicationDecisionService>());
+
+        // Wrap IApplicationDecisionService with the caching decorator via
+        // Scrutor. Callers still inject IApplicationDecisionService and get
+        // the cached version transparently.
+        services.Decorate<IApplicationDecisionService, CachingApplicationDecisionService>();
+
+        // Startup warmup: load the full Application set into the store
+        // before the host starts accepting HTTP requests.
+        services.AddHostedService<ApplicationStoreWarmupHostedService>();
+
         services.AddScoped<IOnboardingService, OnboardingService>();
-        services.AddScoped<IConsentService, ConsentService>();
-        services.AddScoped<IProfileService, ProfileService>();
-        services.AddScoped<IUserService, UserService>();
+
+        services.AddScoped<ConsentService>();
+        services.AddScoped<IConsentService>(sp => sp.GetRequiredService<ConsentService>());
+        services.AddScoped<IUserDataContributor>(sp => sp.GetRequiredService<ConsentService>());
+
+        services.AddScoped<ProfileService>();
+        services.AddScoped<IProfileService>(sp => sp.GetRequiredService<ProfileService>());
+        services.AddScoped<IUserDataContributor>(sp => sp.GetRequiredService<ProfileService>());
+
+        services.AddScoped<UserService>();
+        services.AddScoped<IUserService>(sp => sp.GetRequiredService<UserService>());
+        services.AddScoped<IUserDataContributor>(sp => sp.GetRequiredService<UserService>());
         services.AddScoped<IDashboardService, DashboardService>();
         services.AddScoped<ISystemTeamSync, SystemTeamSyncJob>();
         services.AddScoped<SyncLegalDocumentsJob>();
@@ -180,13 +256,21 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddScoped<TermRenewalReminderJob>();
         services.AddScoped<CleanupNotificationsJob>();
         services.AddScoped<INotificationService, NotificationService>();
-        services.AddScoped<INotificationInboxService, NotificationInboxService>();
+
+        services.AddScoped<NotificationInboxService>();
+        services.AddScoped<INotificationInboxService>(sp => sp.GetRequiredService<NotificationInboxService>());
+        services.AddScoped<IUserDataContributor>(sp => sp.GetRequiredService<NotificationInboxService>());
+
         services.AddScoped<INotificationMeterProvider, NotificationMeterProvider>();
         services.AddScoped<IGoogleAdminService, GoogleAdminService>();
 
         // Shift management services
         services.AddScoped<IShiftManagementService, ShiftManagementService>();
-        services.AddScoped<IShiftSignupService, ShiftSignupService>();
+
+        services.AddScoped<ShiftSignupService>();
+        services.AddScoped<IShiftSignupService>(sp => sp.GetRequiredService<ShiftSignupService>());
+        services.AddScoped<IUserDataContributor>(sp => sp.GetRequiredService<ShiftSignupService>());
+
         services.AddScoped<IGeneralAvailabilityService, GeneralAvailabilityService>();
 
         // Feedback API key
@@ -228,7 +312,13 @@ public static class InfrastructureServiceCollectionExtensions
         }
 
         services.AddScoped<ITicketSyncService, TicketSyncService>();
-        services.AddScoped<ITicketQueryService, TicketQueryService>();
+
+        services.AddScoped<TicketQueryService>();
+        services.AddScoped<ITicketQueryService>(sp => sp.GetRequiredService<TicketQueryService>());
+        services.AddScoped<IUserDataContributor>(sp => sp.GetRequiredService<TicketQueryService>());
+
+        // GDPR export orchestrator — pure fan-out over every IUserDataContributor
+        services.AddScoped<IGdprExportService, GdprExportService>();
 
         // Stripe integration (read-only — fee tracking and payment method attribution)
         services.Configure<StripeSettings>(opts =>

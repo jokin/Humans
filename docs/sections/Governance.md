@@ -53,16 +53,23 @@
 
 ## Architecture — Current vs Target
 
-See `.claude/DESIGN_RULES.md` for the full rules.
+See `docs/architecture/design-rules.md` for the full rules.
 
 **Owning services:** `ApplicationDecisionService`
 **Owned tables:** `applications`, `application_state_histories`, `board_votes`
 
-Note: `role_assignments` is owned by the Auth section (`RoleAssignmentService`), not Governance. Governance is about Colaborador/Asociado tier applications and Board voting.
+## Architecture
 
-### Current State
+This section is the **first fully-migrated implementation** of the target repository/store/decorator pattern per [`../architecture/design-rules.md`](../architecture/design-rules.md) §§3–5 — landed in PR #503. Use this section as the reference shape for every subsequent section migration.
 
-**Compliant.** No violations found. Controllers do not inject DbContext. ApplicationDecisionService only queries its own tables.
+- **`ApplicationDecisionService`** lives in `Humans.Application/Services/` and injects `IApplicationRepository` + `IApplicationStore` + `IUserService` + `IProfileService` + cross-cutting services (audit, email, notification, team sync). No `HumansDbContext`, no `IMemoryCache`.
+- **`IApplicationRepository`** (`Humans.Application/Interfaces/Repositories/`, impl in `Humans.Infrastructure/Repositories/`) is the only non-test file that touches `DbContext.Applications` / `BoardVotes` / `ApplicationStateHistories`. Aggregate includes `Application` + `ApplicationStateHistory` + `BoardVote`. `FinalizeAsync(app, ct)` is the atomic approve/reject commit: application update + board-vote bulk delete in one `SaveChangesAsync`. `application_state_histories` is append-only per §12 — the repository exposes no `UpdateStateHistoryAsync`/`DeleteStateHistoryAsync`.
+- **`IApplicationStore`** (`Humans.Application/Interfaces/Stores/`, impl in `Humans.Infrastructure/Stores/`) is a dict-backed `ConcurrentDictionary<Guid, Application>` canonical store, warmed at startup via `ApplicationStoreWarmupHostedService`.
+- **`CachingApplicationDecisionService`** (`Humans.Infrastructure/Services/`) decorates `IApplicationDecisionService` via Scrutor `.Decorate<>()`. Read short-circuits serve `GetUserApplicationsAsync` from the store. Write invalidations flow through three cross-cutting interfaces: `INavBadgeCacheInvalidator`, `INotificationMeterCacheInvalidator`, `IVotingBadgeCacheInvalidator`.
+- **Cross-domain nav properties** (`Application.User`, `Application.ReviewedByUser`, `ApplicationStateHistory.ChangedByUser`, `BoardVote.BoardMemberUser`) are stripped from the entities. User/reviewer/voter display fields are resolved via `IUserService.GetByIdsAsync` and stitched into the returned DTOs (`ApplicationAdminDetailDto`, `ApplicationUserDetailDto`, `ApplicationAdminRowDto`, `ApplicationStateHistoryDto`).
 
-**Incoming violations (other services querying Governance-owned tables):**
-- `ProfileService` queries `Applications` directly
+### Known incoming violations (other sections reading Governance tables)
+
+`ProfileService` still calls `_dbContext.Applications.AnyAsync(...)` and similar in a few paths (tracked in `docs/sections/Profiles.md`). These remain as known violations until the Profiles section is migrated — at that point, ProfileService should call `IApplicationDecisionService.GetUserApplicationsAsync` instead. The Governance migration preserved these reads unchanged.
+
+`OnboardingService`, `SendBoardDailyDigestJob`, and `SendAdminDailyDigestJob` also still read governance-owned tables directly for dashboard-counting and batch jobs. Those uses are allowed until the sections owning those services migrate too.
