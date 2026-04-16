@@ -7,6 +7,7 @@ using Google.Apis.Drive.v3;
 using Google.Apis.Groupssettings.v1;
 using Google.Apis.Services;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using NodaTime;
@@ -31,6 +32,7 @@ public class GoogleWorkspaceSyncService : IGoogleSyncService
     private readonly IClock _clock;
     private readonly IAuditLogService _auditLogService;
     private readonly ISyncSettingsService _syncSettingsService;
+    private readonly IServiceProvider _serviceProvider;
     private readonly ILogger<GoogleWorkspaceSyncService> _logger;
 
     /// <summary>
@@ -51,6 +53,7 @@ public class GoogleWorkspaceSyncService : IGoogleSyncService
         IClock clock,
         IAuditLogService auditLogService,
         ISyncSettingsService syncSettingsService,
+        IServiceProvider serviceProvider,
         ILogger<GoogleWorkspaceSyncService> logger)
     {
         _dbContext = dbContext;
@@ -59,6 +62,7 @@ public class GoogleWorkspaceSyncService : IGoogleSyncService
         _clock = clock;
         _auditLogService = auditLogService;
         _syncSettingsService = syncSettingsService;
+        _serviceProvider = serviceProvider;
         _logger = logger;
     }
 
@@ -773,7 +777,7 @@ public class GoogleWorkspaceSyncService : IGoogleSyncService
             : null;
 
         var resources = await _dbContext.GoogleResources
-            .Where(r => r.TeamId == teamId && r.IsActive)
+            .Where(r => r.TeamId == teamId && r.IsActive && r.Team.IsActive)
             .ToListAsync(cancellationToken);
 
         foreach (var resource in resources)
@@ -803,7 +807,7 @@ public class GoogleWorkspaceSyncService : IGoogleSyncService
         if (team?.ParentTeamId is not null)
         {
             var parentResources = await _dbContext.GoogleResources
-                .Where(r => r.TeamId == team.ParentTeamId && r.IsActive)
+                .Where(r => r.TeamId == team.ParentTeamId && r.IsActive && r.Team.IsActive)
                 .ToListAsync(cancellationToken);
 
             foreach (var resource in parentResources)
@@ -922,6 +926,10 @@ public class GoogleWorkspaceSyncService : IGoogleSyncService
     {
         _logger.LogInformation("SyncResourcesByType: type={ResourceType}, action={Action}", resourceType, action);
 
+        // Include resources for soft-deleted teams (Team.IsActive == false). Those teams
+        // will have all TeamMember.LeftAt set, so expectedMembers is empty and reconciliation
+        // will revoke every current Google permission/membership as Extra. Skipping them here
+        // would leave stale access in place indefinitely. (See #494.)
         var resources = await _dbContext.GoogleResources
             .Include(r => r.Team)
                 .ThenInclude(t => t.Members.Where(tm => tm.LeftAt == null))
@@ -1004,7 +1012,67 @@ public class GoogleWorkspaceSyncService : IGoogleSyncService
         }
 
         if (action == SyncAction.Execute)
+        {
             await _dbContext.SaveChangesAsync(cancellationToken);
+
+            // Deactivate resources belonging to soft-deleted teams now that reconciliation
+            // has revoked their Google access. Only when the sync mode was AddAndRemove —
+            // otherwise the extras weren't actually removed on Google's side, so leave
+            // the resources active for a future reconciliation tick to clean up.
+            // Routed through the owning service so audit logs are written consistently;
+            // resolved via IServiceProvider to avoid a constructor-time dependency cycle.
+            var serviceType = resourceType == GoogleResourceType.Group
+                ? SyncServiceType.GoogleGroups
+                : SyncServiceType.GoogleDrive;
+            var mode = await _syncSettingsService.GetModeAsync(serviceType, cancellationToken);
+            if (mode == SyncMode.AddAndRemove)
+            {
+                // Only deactivate resources whose diff carries no top-level error
+                // (e.g. the Google resource itself being 404/403). Leave errored
+                // resources active so a later tick can retry. Per-member failures
+                // are logged inside Execute* but are accepted here as an acceptable
+                // risk — team deletion is rare and manual re-sync is always available.
+                //
+                // Track errored diffs by GoogleId, not diff.ResourceId: drive
+                // resources are grouped by GoogleId and a single diff represents
+                // potentially many GoogleResource rows (one per linked team). The
+                // diff only carries the group's primary ResourceId, so filtering
+                // on that would leave non-primary rows in a failed drive group
+                // eligible for deactivation and silently drop their stale access.
+                //
+                // Critically, also scope the deactivation to resourceType. The
+                // reconciliation job runs Drive first then Groups — deactivating
+                // all of a soft-deleted team's resources after the Drive pass
+                // would cause the Group pass to skip the same team's group
+                // resource (filtered by r.IsActive) and leave Group memberships
+                // in place.
+                var erroredGoogleIds = diffs
+                    .Where(d => !string.IsNullOrEmpty(d.ErrorMessage))
+                    .Select(d => d.GoogleId)
+                    .Where(id => !string.IsNullOrEmpty(id))
+                    .ToHashSet(StringComparer.Ordinal);
+                // A soft-deleted team is only eligible for deactivation when EVERY one of
+                // its resources of this type reconciled without error. If any single
+                // resource errored we defer the entire team so the next tick can retry;
+                // otherwise we'd risk leaving the errored row live while a follow-up
+                // deactivation call scopes by team+type and marks it inactive anyway.
+                var softDeletedTeamIds = resources
+                    .Where(r => !r.Team.IsActive && r.IsActive)
+                    .GroupBy(r => r.TeamId)
+                    .Where(g => g.All(r => !erroredGoogleIds.Contains(r.GoogleId)))
+                    .Select(g => g.Key)
+                    .ToList();
+                if (softDeletedTeamIds.Count > 0)
+                {
+                    var teamResourceService = _serviceProvider.GetRequiredService<ITeamResourceService>();
+                    foreach (var teamId in softDeletedTeamIds)
+                    {
+                        await teamResourceService.DeactivateResourcesForTeamAsync(
+                            teamId, resourceType, cancellationToken);
+                    }
+                }
+            }
+        }
 
         return new SyncPreviewResult { Diffs = diffs };
     }
@@ -1843,7 +1911,7 @@ public class GoogleWorkspaceSyncService : IGoogleSyncService
 
         var groupResources = await _dbContext.GoogleResources
             .Include(r => r.Team)
-            .Where(r => r.ResourceType == GoogleResourceType.Group && r.IsActive)
+            .Where(r => r.ResourceType == GoogleResourceType.Group && r.IsActive && r.Team.IsActive)
             .ToListAsync(cancellationToken);
 
         _logger.LogInformation("Checking group settings for {Count} active Google Groups", groupResources.Count);
@@ -2297,7 +2365,7 @@ public class GoogleWorkspaceSyncService : IGoogleSyncService
     public async Task<int> UpdateDriveFolderPathsAsync(CancellationToken cancellationToken = default)
     {
         var driveResources = await _dbContext.GoogleResources
-            .Where(r => r.ResourceType == GoogleResourceType.DriveFolder && r.IsActive)
+            .Where(r => r.ResourceType == GoogleResourceType.DriveFolder && r.IsActive && r.Team.IsActive)
             .ToListAsync(cancellationToken);
 
         if (driveResources.Count == 0)
@@ -2410,7 +2478,8 @@ public class GoogleWorkspaceSyncService : IGoogleSyncService
         var restrictedResources = await _dbContext.GoogleResources
             .Where(r => r.RestrictInheritedAccess
                 && r.ResourceType == GoogleResourceType.DriveFolder
-                && r.IsActive)
+                && r.IsActive
+                && r.Team.IsActive)
             .ToListAsync(cancellationToken);
 
         if (restrictedResources.Count == 0)
