@@ -111,6 +111,25 @@ public interface ITeamResourceService
     Task UnlinkResourceAsync(Guid resourceId, CancellationToken ct = default);
 
     /// <summary>
+    /// Deactivates Google resources owned by a team (soft-delete: IsActive = false) and
+    /// writes an audit log entry for each. Called by the Google reconciliation sync after
+    /// a soft-deleted team's resources have had their access revoked, so the rows stop
+    /// being processed by further reconciliation ticks.
+    /// </summary>
+    /// <param name="teamId">Team whose resources should be deactivated.</param>
+    /// <param name="resourceType">
+    /// If set, only resources of this type are deactivated. Required when the caller has
+    /// only reconciled one resource type — deactivating the other types before they have
+    /// been reconciled would cause the next per-type sync to skip them and leave Google
+    /// access in place.
+    /// </param>
+    /// <param name="ct">Cancellation token.</param>
+    Task DeactivateResourcesForTeamAsync(
+        Guid teamId,
+        GoogleResourceType? resourceType = null,
+        CancellationToken ct = default);
+
+    /// <summary>
     /// Checks whether a user can manage resources for a team.
     /// Board members can always manage. Leads can manage if the admin setting allows it.
     /// </summary>
