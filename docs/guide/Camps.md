@@ -31,6 +31,30 @@ Most of what the directory offers is open to anyone, signed in or not:
 
 There is no "join a camp" action in the app — camp rosters and who is physically camping where are managed by each camp directly.
 
+### Step-by-step: register your camp (2026)
+
+Any authenticated human can register a camp once a registration season is open. In practice, most camp leads are also [Colaboradores](Glossary.md#colaborador) — see [Governance](Governance.md) — but it's not a system requirement. If you're brand new, complete the regular onboarding first ([Onboarding](Onboarding.md)).
+
+1. Sign in to [humans.nobodies.team](https://humans.nobodies.team).
+2. Go to **Camps** in the navigation.
+3. Click **Register your camp**.
+4. Fill in the camp profile: community info (public — name, blurb, vibes, sound zone, languages, kids policy), placement info (internal — preferred zone, footprint, infrastructure needs), and co-leads.
+5. Set status to **Active** and confirm whether you're accepting humans.
+6. Submit. A Camp Admin reviews and approves; once approved your camp appears in the public listing and on the Elsewhere website.
+
+After registration, Barrio Support (Ellen — [ellen@nobodies.team](mailto:ellen@nobodies.team)) typically adds you to the **Camp Leads** team in Humans so you receive coordinator comms — water schedules, LNT reminders, power obligations. If those aren't reaching you, ask Ellen.
+
+Your camp profile is **persistent year to year** — next year you only update it, you don't start from scratch. Set the status each year you're attending; a camp that hasn't declared a status for the current year doesn't appear in the active listing.
+
+### How your camp data feeds other systems
+
+| System | What it gets |
+|---|---|
+| Public Elsewhere website | Listing data is pulled from Humans. Updates to your status, blurb, or images flow through. |
+| City planning / placement | Placement data feeds the city planning tool. Internal only — not published. |
+| Barrio Support comms | Barrio Support uses Humans to send communications to camp leads — water schedules, LNT reminders, power obligations. Being registered is how you receive these. |
+| Barrio store (rolling out) | Barrio services — water, ice, tokens — are becoming orderable through a store inside Humans. Details to follow from Production & Logistics. |
+
 ## As a [Coordinator](Glossary.md#coordinator) (Camp Coordinator)
 
 If you are a **Camp Lead** (Primary or Co-Lead), you can manage your specific camp. You cannot edit camps you don't lead.
@@ -55,7 +79,20 @@ If you are a **Camp Lead** (Primary or Co-Lead), you can manage your specific ca
 - **Export camps as CSV** from the dashboard. The export covers every camp for the current public year and includes name, slug, status, contact info, leads, and placement-relevant season data. The file is named `barrios-{year}.csv`.
 - **Delete a camp** (Admin only — not Camp Admin). This permanently removes the camp and all of its seasons, leads, images, and historical names. Confirmation is required.
 
+## Key contacts (2026)
+
+| For | Who |
+|---|---|
+| Barrio Support (pre-event) | Ellen — [ellen@nobodies.team](mailto:ellen@nobodies.team) or [barrios@nobodies.team](mailto:barrios@nobodies.team) |
+| City Planning / Placement | Melo — via Discord or the city planning channel |
+| Water, LNT, power obligations | Barrio Support — comms go out via Humans to camp leads |
+| Barrio store / purchasing | Production & Logistics — [daniela@nobodies.team](mailto:daniela@nobodies.team) |
+| App issues | [humans@nobodies.team](mailto:humans@nobodies.team) |
+| General questions | [#🎪-barrios](https://discord.gg/rBZxDv8z) on Discord |
+
 ## Related sections
 
 - [Profiles](Profiles.md) — camp leads are linked to human accounts; a valid profile is required to be a lead.
+- [Governance](Governance.md) — Colaborador application is the prerequisite for becoming a camp lead.
+- [City Planning](CityPlanning.md) — what happens to the placement data your camp profile feeds in.
 - [Glossary](Glossary.md) — definitions for "barrio", "season", "Primary Lead", "sound zone", and other camp terms.

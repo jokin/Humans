@@ -32,6 +32,10 @@ Your dashboard also surfaces shift info — upcoming signups, or a guided discov
 
 **See your shifts at `/Shifts/Mine`.** Signups are grouped into upcoming, pending, and past. To cancel, use **Bail** — on a single shift or a whole range you booked together. Once early entry closes, non-privileged humans can't bail a Set-up shift without a coordinator's help.
 
+**Shift block patterns (2026).** Set-up and Strike use half-day or full-day blocks; sign up for the weeks you're on site within your department. Event-week 24-hour services use two blocks: Monday–Thursday and Friday–Sunday — you're on one block for the full run. Other Event-week roles vary by department; your coordinator confirms.
+
+> **Don't sign up across multiple departments on the same day** — it creates double-booking and someone gets shorted. **Commit to your block.** Cherry-picking single shifts and disappearing makes coordination significantly harder.
+
 ![TODO: screenshot — `/Shifts/Mine` showing upcoming, pending, and past sections]
 
 ## As a Coordinator
@@ -40,11 +44,27 @@ If you're a department coordinator or sub-team manager, `/Teams/{slug}/Shifts` i
 
 **Create a rota.** Give it a name, period (Build, Event, or Strike), priority (Normal / Important / Essential — this feeds urgency scoring on the homepage), signup policy (Public for auto-confirm, RequireApproval for review), and any practical info humans should read first. Rotas start visible by default; toggle **IsVisibleToVolunteers** off to stage them. Tag rotas with shared labels (Heavy lifting, Working in the shade, etc.) — reuse existing tags where you can.
 
+> **Don't open a rota until the shift details are confirmed.** Half-filled or incorrectly described rotas create more work, not less. Stage them with visibility off, then flip the toggle when you're ready to take signups.
+
 **Create shifts.** Build and Strike rotas get all-day shifts — use the bulk creator to generate one per day offset. Event rotas get time-slotted shifts — the generator produces the Cartesian product of day offsets and time slots. Add individual shifts by hand with day offset, start time, duration, and min/max volunteers. Mark a shift **AdminOnly** to hide it from regular humans.
 
 **Manage signups.** The admin page shows a "Signed Up" column with names (Event rotas) or avatars (Build/Strike rotas). Pending signups have their own table — approve, refuse (with an optional reason), or handle a date-range block at once. **Voluntell** to enroll a specific human directly (auto-confirmed; emails them). **Remove** unassigns a confirmed signup. After a shift ends you can **mark no-show**, recorded on the human's profile for coordinators.
 
 **Move a rota** if it lands under the wrong department — shifts and signups come along, and the move is audit-logged. Deleting a rota or shift is blocked if there are confirmed signups; bail or remove them first.
+
+### Headcount and the permit model (2026)
+
+There's a hard cap on how many people are on site during set-up and pre-event. Every open shift slot is a person arriving who needs feeding and coordination — confirm the headcount model with Volunteer Coordination before opening new shifts.
+
+| Period | On-site cap |
+|---|---|
+| Set-up week 1 (15–21 Jun) | Max 80 people |
+| Set-up week 2 (22–28 Jun) | Max 80 people |
+| Pre-event week (29 Jun–5 Jul) | Rising toward full cap as barrios arrive |
+| Event (7–12 Jul) | Full event capacity |
+| Strike (13–22 Jul) | Max 80 people |
+
+Reach Volunteer Coordination at [volunteers@nobodies.team](mailto:volunteers@nobodies.team) (Frank, Nurse, Hardcastle).
 
 ## As a Board member / Admin
 
