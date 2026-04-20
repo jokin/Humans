@@ -4,6 +4,8 @@
 
 Google Integration wires teams up to Google Workspace. When you join a team, the app grants you access to that team's **Google Group** and any linked **[Shared Drive](Glossary.md#shared-drive) folders or files**; leaving revokes it. [Admins](Glossary.md#admin) can also provision a `@nobodies.team` **Workspace account** for any human, and the app monitors Drive folders for permission changes made outside the system.
 
+This section covers the sync mechanics, drift detection, and admin tools. For the human-facing side of email — using your `@nobodies.team` mailbox, sending from a group address, the inbox setup — see [Email](Email.md).
+
 All Drive resources are on **Shared Drives only** (no personal My Drive), and the app manages only **direct** permissions — inherited Shared Drive permissions are left alone. Sync is **mode-gated per service**: an Admin must switch Google Drive and Google Groups from `None` to `AddOnly` or `AddAndRemove` before any job or manual sync will modify Google. See [sync mode](Glossary.md#sync-mode) and [reconciliation](Glossary.md#reconciliation) for definitions.
 
 ## Key pages at a glance
@@ -22,6 +24,8 @@ All Drive resources are on **Shared Drives only** (no personal My Drive), and th
 ### Why you may have a `@nobodies.team` account
 
 An admin can provision a `@nobodies.team` account for you. You get a credentials email at your **personal** address — username, temporary password, sign-in link — and on first login you must change the password and set up 2FA. That address then becomes your **Google service email** (the app's [service account](Glossary.md#service-account) uses it to add you to Groups and Shared Drive folders for every team). Until provisioning happens, your OAuth login email is used instead.
+
+For how to use the mailbox itself, set up two-factor auth, and send "as" your team's group address, see [Email](Email.md).
 
 ### Set or change your Google service email
 
@@ -81,6 +85,7 @@ The hourly `DriveActivityMonitorJob` queries the Drive Activity API for permissi
 
 ## Related sections
 
+- [Email](Email.md) — the human-facing side of `@nobodies.team` mailboxes and group addresses.
 - [Teams](Teams.md) — membership drives Group and Drive access; resource linking lives on the team admin page.
 - [Profiles](Profiles.md) — set your Google service email on the Emails tab.
 - [Glossary](Glossary.md) — service account, Shared Drive, sync mode, reconciliation.

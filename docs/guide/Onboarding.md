@@ -33,6 +33,8 @@ If your email was imported from a mailing list, your account already exists and 
 
 Profile setup asks for your name, pronouns, location, bio, birthday, and any contact fields you want to share. An emergency contact is optional but recommended.
 
+A separate step (`/Profile/Me/ShiftInfo`) walks you through your skills, work-style preferences, and languages. Coordinators search by skill to find the right person for a role, so a thin profile is harder to place — fill these in honestly and fully even if you're not sure what you'll end up doing.
+
 During this one-shot setup you also see a tier selector. Leave it on **Volunteer** unless you want to apply for Colaborador or Asociado — picking one reveals a short inline application form submitted alongside your profile. After initial onboarding, the profile edit page shows profile fields only; the tier selector does not reappear.
 
 ### 3. Sign the required legal documents

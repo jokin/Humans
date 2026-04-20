@@ -19,6 +19,7 @@ Open `/Profile/Me/Edit` (the Home dashboard also nudges you here via its Getting
 - A profile picture, if you want one that is not your Google avatar.
 - Any contact fields you want to share — Phone, Signal, Telegram, WhatsApp, Discord, or a custom "Other" handle. Each field has its own **visibility** setting: Board only, Coordinators and Board, My teams, or All active humans. Pick per field; the default is All active humans.
 - An emergency contact (optional, recommended).
+- Your skills and shift preferences (you'll be nudged through `/Profile/Me/ShiftInfo` separately). **Fill these in honestly and fully** — coordinators search by skill to find the right person for a role, so a thin profile is harder to place.
 
 During this one-shot setup there is also a tier selector. Leave it on **Volunteer** unless you specifically want to apply for Colaborador or Asociado — those are separate tier applications reviewed by the Board and they never block your Volunteer access. Details in [Profiles](Profiles.md).
 
@@ -36,7 +37,7 @@ A Consent Coordinator reviews your profile and either **clears** it or **flags**
 
 When your profile is cleared **and** every required document is signed, the app does the rest automatically: you are added to the Volunteers system team, the rest of the app unlocks, and a welcome email goes out. No manual Board step is needed.
 
-If an Admin has provisioned a `@nobodies.team` Google Workspace account for you, you also get a credentials email at your personal address with a temporary password and a 2FA setup prompt. That address then becomes your Google service email for every team you join. Teams with linked Google Groups or [Shared Drive](Glossary.md#shared-drive) folders grant you access on the next sync — see [Google Integration](GoogleIntegration.md).
+If an Admin has provisioned a `@nobodies.team` Google Workspace account for you, you also get a credentials email at your personal address with a temporary password and a 2FA setup prompt. That address then becomes your Google service email for every team you join. Teams with linked Google Groups or [Shared Drive](Glossary.md#shared-drive) folders grant you access on the next sync. See [Email](Email.md) for how the mailbox works and how to use your team's group address; [Google Integration](GoogleIntegration.md) covers the sync mechanics underneath.
 
 ![TODO: screenshot — profile page right after auto-approval to Volunteer, with the Volunteers system team visible on the profile card and the Home dashboard checklist fully ticked]
 
@@ -59,6 +60,29 @@ If an Admin has provisioned a `@nobodies.team` Google Workspace account for you,
 - [Governance](Governance.md) — Colaborador and Asociado tier applications, Board votes, role assignments.
 - [Admin](Admin.md) — global tools, audit log, sync settings, the flagged-safety-check queue.
 - [Budget](Budget.md) — fiscal-year planning, category approvals, and the budget audit trail.
+
+## What to expect between now and Elsewhere (2026)
+
+| Period | What's happening |
+|---|---|
+| Now – May | Light pre-production: read up on your role, join team channels, flag questions. |
+| May – June | Things accelerate: decisions made, plans confirmed, possible team calls. |
+| Set-up (15 June+) | On-site work begins. Exact arrival date confirmed with your coordinator. |
+| Event (7–12 July) | Your role shifts to event operations for your department. |
+| Strike (13–22 July) | Everyone helps strike. Stay as long as you can. |
+
+## Key contacts
+
+| Reach | For |
+|---|---|
+| [volunteers@nobodies.team](mailto:volunteers@nobodies.team) | General volunteer queries, finding a role |
+| [tickets@nobodies.team](mailto:tickets@nobodies.team) | Ticket questions |
+| [inclusion@nobodies.team](mailto:inclusion@nobodies.team) | Accessibility and low-income ticket programme |
+| [humans@nobodies.team](mailto:humans@nobodies.team) | Technical issues with the app or your `@nobodies.team` account |
+| [#🤝-recruitment-relationships](https://discord.gg/pcq2DRH6) on Discord | Quick questions and connecting with the team |
+| [#🧘-humans-app](https://discord.gg/fq7gr29p) on Discord | Humans app feedback and bug reports |
+
+You can also use the feedback button (three dots in a speech bubble, bottom right of the app) for anything related to the app itself.
 
 ## Key terms
 
