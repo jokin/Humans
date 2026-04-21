@@ -7,13 +7,17 @@ using NodaTime.Testing;
 using NSubstitute;
 using Humans.Application.DTOs;
 using Humans.Application.Interfaces;
+using Humans.Application.Interfaces.Caching;
+using Humans.Application.Tests.Infrastructure;
 using Humans.Domain.Constants;
 using Humans.Domain.Entities;
 using Humans.Domain.Enums;
 using Humans.Infrastructure.Data;
+using Humans.Infrastructure.Repositories;
 using Humans.Infrastructure.Services;
 using Xunit;
 using MemberApplication = Humans.Domain.Entities.Application;
+using UsersUserService = Humans.Application.Services.Users.UserService;
 
 namespace Humans.Application.Tests.Services;
 
@@ -30,6 +34,7 @@ public class OnboardingServiceTests : IDisposable
     private readonly IMembershipCalculator _membershipCalculator = Substitute.For<IMembershipCalculator>();
     private readonly IHumansMetrics _metrics = Substitute.For<IHumansMetrics>();
     private readonly IMemoryCache _cache = new MemoryCache(new MemoryCacheOptions());
+    private readonly IFullProfileInvalidator _fullProfileInvalidator = Substitute.For<IFullProfileInvalidator>();
 
     public OnboardingServiceTests()
     {
@@ -42,11 +47,13 @@ public class OnboardingServiceTests : IDisposable
         // Real UserService backed by the same in-memory DbContext so
         // stitched user reads in OnboardingService's BoardVoting methods
         // resolve to the seeded users without extra mocking.
-        var userService = new UserService(_dbContext, _clock, NullLogger<UserService>.Instance);
+        var userRepo = new UserRepository(new TestDbContextFactory(options));
+        var userService = new UsersUserService(
+            userRepo, _fullProfileInvalidator, _clock, NullLogger<UsersUserService>.Instance);
         _service = new OnboardingService(
             _dbContext, userService, _auditLogService, _emailService, _notificationService,
             _notificationInboxService, _syncJob,
-            _membershipCalculator, _metrics, _clock, _cache,
+            _membershipCalculator, _metrics, _clock, _cache, _fullProfileInvalidator,
             NullLogger<OnboardingService>.Instance);
     }
 
@@ -290,6 +297,21 @@ public class OnboardingServiceTests : IDisposable
         result.Should().BeTrue();
         var profile = await _dbContext.Profiles.FirstAsync(p => p.UserId == userId);
         profile.ConsentCheckStatus.Should().Be(ConsentCheckStatus.Pending);
+        await _fullProfileInvalidator.Received(1).InvalidateAsync(userId, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task SetConsentCheckPendingIfEligibleAsync_MissingConsents_DoesNotInvalidate()
+    {
+        var userId = Guid.NewGuid();
+        await SeedProfileAsync(userId, isApproved: false, consentCheckStatus: null);
+        _membershipCalculator.HasAllRequiredConsentsForTeamAsync(userId, Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(false);
+
+        var result = await _service.SetConsentCheckPendingIfEligibleAsync(userId);
+
+        result.Should().BeFalse();
+        await _fullProfileInvalidator.DidNotReceive().InvalidateAsync(userId, Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -942,6 +964,32 @@ public class OnboardingServiceTests : IDisposable
 
         // Only the approved user is counted toward missing consents
         result.MissingConsents.Should().Be(1);
+    }
+
+    // --- Purge ---
+
+    [Fact]
+    public async Task PurgeHumanAsync_UserExists_InvalidatesFullProfile()
+    {
+        var userId = Guid.NewGuid();
+        await SeedUserWithProfileAsync(userId);
+
+        var result = await _service.PurgeHumanAsync(userId);
+
+        result.Success.Should().BeTrue();
+        await _fullProfileInvalidator.Received(1).InvalidateAsync(userId, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task PurgeHumanAsync_UserMissing_DoesNotInvalidate()
+    {
+        var userId = Guid.NewGuid();
+
+        var result = await _service.PurgeHumanAsync(userId);
+
+        result.Success.Should().BeFalse();
+        result.ErrorKey.Should().Be("NotFound");
+        await _fullProfileInvalidator.DidNotReceive().InvalidateAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>());
     }
 
     // --- Helpers ---

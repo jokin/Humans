@@ -21,11 +21,6 @@ public class Profile
     public Guid UserId { get; init; }
 
     /// <summary>
-    /// Navigation property to the user.
-    /// </summary>
-    public User User { get; set; } = null!;
-
-    /// <summary>
     /// The name the member goes by (e.g., burner name, nickname).
     /// This is the primary display name visible to everyone.
     /// </summary>

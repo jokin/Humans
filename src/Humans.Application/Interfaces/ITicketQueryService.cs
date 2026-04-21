@@ -119,6 +119,13 @@ public interface ITicketQueryService
     Task<List<UserTicketOrderSummary>> GetUserTicketOrderSummariesAsync(Guid userId);
 
     /// <summary>
+    /// Returns the post-event hold date (GateOpeningDate + StrikeEndOffset + 1 day, start of day
+    /// in the event's timezone) if there is an active event and the date is in the future.
+    /// Returns null if no active event or the hold date has already passed.
+    /// </summary>
+    Task<Instant?> GetPostEventHoldDateAsync(CancellationToken ct = default);
+
+    /// <summary>
     /// Returns whether a user holds a valid ticket for the current sync's vendor event.
     /// Checks paid orders matched to the user, then falls back to valid/checked-in attendees.
     /// Used by profile services to compute account-deletion / event-hold dates without
@@ -132,6 +139,24 @@ public interface ITicketQueryService
     /// so GDPR exports stay stable after the service-ownership refactor.
     /// </summary>
     Task<UserTicketExportData> GetUserTicketExportDataAsync(Guid userId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Returns the distinct set of matched user IDs across paid ticket orders.
+    /// Used by the shift coordinator dashboard to compute ticket-holder engagement
+    /// counters without reading the tickets table directly.
+    /// </summary>
+    Task<IReadOnlyCollection<Guid>> GetMatchedUserIdsForPaidOrdersAsync(CancellationToken ct = default);
+
+    /// <summary>
+    /// Returns the <c>PurchasedAt</c> timestamp of every paid ticket order that falls
+    /// within the half-open window <c>[fromInclusive, toExclusive)</c>. Used by the
+    /// shift coordinator dashboard to chart daily ticket sales without reading the
+    /// tickets table directly.
+    /// </summary>
+    Task<IReadOnlyList<Instant>> GetPaidOrderDatesInWindowAsync(
+        Instant fromInclusive,
+        Instant toExclusive,
+        CancellationToken ct = default);
 }
 
 /// <summary>

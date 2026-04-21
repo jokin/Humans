@@ -47,6 +47,7 @@
   <data name="Common_Submit" xml:space="preserve"><value>Submit</value></data>
   <data name="Common_NotProvided" xml:space="preserve"><value>Not provided</value></data>
   <data name="Common_Error" xml:space="preserve"><value>Something went wrong. Please try again later.</value></data>
+  <data name="Common_Unknown" xml:space="preserve"><value>Unknown</value></data>
 
   <!-- ======================== -->
   <!-- Navigation (_Layout)     -->
@@ -163,9 +164,39 @@
   <data name="Dashboard_LastLogin" xml:space="preserve"><value>Last Login</value></data>
   <data name="Dashboard_QuickLinks" xml:space="preserve"><value>Quick Links</value></data>
   <data name="Dashboard_ManageConsents" xml:space="preserve"><value>Review Agreements</value></data>
+  <data name="Dashboard_PendingAgreementsSingular" xml:space="preserve"><value>{0} agreement to review</value><comment>{0} = pending consent count (singular)</comment></data>
+  <data name="Dashboard_PendingAgreementsPlural" xml:space="preserve"><value>{0} agreements to review</value><comment>{0} = pending consent count (plural)</comment></data>
   <data name="Dashboard_RejectedTitle" xml:space="preserve"><value>Signup Rejected</value></data>
   <data name="Dashboard_RejectedMessage" xml:space="preserve"><value>Your signup has been reviewed and was not approved. If you have questions, please contact the admin team.</value></data>
   <data name="Dashboard_RejectionReason" xml:space="preserve"><value>Reason</value></data>
+  <data name="Dashboard_Subtitle" xml:space="preserve"><value>Here's what's happening.</value></data>
+  <data name="Dashboard_AgreementSingular" xml:space="preserve"><value>agreement to review</value></data>
+  <data name="Dashboard_AgreementPlural" xml:space="preserve"><value>agreements to review</value></data>
+  <data name="Dashboard_SlotsSingular" xml:space="preserve"><value>slot</value></data>
+  <data name="Dashboard_SlotsPlural" xml:space="preserve"><value>slots</value></data>
+  <data name="Dashboard_GetInvolved" xml:space="preserve"><value>Get involved</value></data>
+  <data name="Dashboard_GetInvolvedSubtitle" xml:space="preserve"><value>This thing doesn't build itself.</value></data>
+  <data name="Dashboard_ShiftsDescription" xml:space="preserve"><value>See what needs doing and sign up.</value></data>
+  <data name="Dashboard_TeamsDescription" xml:space="preserve"><value>Find your people. Or become someone else's people.</value></data>
+  <data name="Dashboard_CampsDescription" xml:space="preserve"><value>The neighbourhoods that make Elsewhere feel like home.</value></data>
+  <data name="Dashboard_YourStuff" xml:space="preserve"><value>Your stuff</value></data>
+  <data name="Dashboard_YourStuffSubtitle" xml:space="preserve"><value>Profile, agreements, and the bits that are just yours.</value></data>
+  <data name="Dashboard_ProfileCardDescription" xml:space="preserve"><value>Update your info, photo, and all that.</value></data>
+  <data name="Dashboard_ConsentsCardDescription" xml:space="preserve"><value>The paperwork side of being a human.</value></data>
+  <data name="Dashboard_PrivacyCard" xml:space="preserve"><value>Privacy</value></data>
+  <data name="Dashboard_PrivacyCardDescription" xml:space="preserve"><value>Control what others can see about you.</value></data>
+  <data name="Dashboard_GovernanceCardDescription" xml:space="preserve"><value>Assemblies, elections, and the serious stuff.</value></data>
+  <data name="Dashboard_TicketNotConfigured" xml:space="preserve"><value>Ticket info isn't available yet. Hang tight.</value></data>
+  <data name="Dashboard_TicketConfirmed" xml:space="preserve"><value>You're in. Ticket sorted.</value></data>
+  <data name="Dashboard_TicketCount" xml:space="preserve"><value>You have {0} tickets</value><comment>{0} = ticket count</comment></data>
+  <data name="Dashboard_NotAttending" xml:space="preserve"><value>Not coming this year.</value></data>
+  <data name="Dashboard_NotAttendingHint" xml:space="preserve"><value>Changed your mind? No judgment.</value></data>
+  <data name="Dashboard_UndoNotAttending" xml:space="preserve"><value>Actually, I might come</value></data>
+  <data name="Dashboard_TicketMissing" xml:space="preserve"><value>No ticket yet</value></data>
+  <data name="Dashboard_TicketMissingHint" xml:space="preserve"><value>We don't see one linked to your account.</value></data>
+  <data name="Dashboard_BuyTicket" xml:space="preserve"><value>Get your ticket</value></data>
+  <data name="Dashboard_DifferentEmail" xml:space="preserve"><value>Bought on a different email?</value></data>
+  <data name="Dashboard_DeclareNotAttending" xml:space="preserve"><value>Not coming this year</value></data>
 
   <!-- Guest Dashboard -->
   <data name="Guest_Greeting" xml:space="preserve"><value>Hey, {0}.</value></data>
@@ -1708,5 +1739,59 @@
   <data name="Privacy_ContactBody" xml:space="preserve"><value>For questions or concerns about this policy, contact our Data Protection Officer at {0}.</value><comment>{0} = DPO email</comment></data>
   <data name="Privacy_ComplaintBody" xml:space="preserve"><value>If you are not satisfied with our response, you have the right to lodge a complaint with the Spanish Data Protection Agency (AEPD) at {0}.</value><comment>{0} = AEPD URL</comment></data>
 
+
+  <data name="ShiftDash_Overview_ShiftsFilled" xml:space="preserve"><value>Shifts filled</value></data>
+  <data name="ShiftDash_Overview_TicketHolders" xml:space="preserve"><value>Ticket holders</value></data>
+  <data name="ShiftDash_Overview_TicketHoldersSubline" xml:space="preserve"><value>humans who have paid</value></data>
+  <data name="ShiftDash_Overview_TicketHoldersEngaged" xml:space="preserve"><value>Ticket holding humans</value></data>
+  <data name="ShiftDash_Overview_EngagedSubline" xml:space="preserve"><value>{0} humans haven't signed up</value><comment>{0} = count</comment></data>
+  <data name="ShiftDash_Overview_NonTicketSignups" xml:space="preserve"><value>Non-ticket signups</value></data>
+  <data name="ShiftDash_Overview_NonTicketSubline" xml:space="preserve"><value>signed up without a ticket (yet)</value></data>
+  <data name="ShiftDash_Overview_StalePending" xml:space="preserve"><value>Stale pending</value></data>
+  <data name="ShiftDash_Overview_StaleSubline" xml:space="preserve"><value>pending &gt; 3 days</value></data>
+  <data name="Common_NotAvailable" xml:space="preserve"><value>N/A</value></data>
+  <data name="ShiftDash_Overview_TicketData_Hidden" xml:space="preserve"><value>ticket data not yet shared</value></data>
+
+  <data name="ShiftDash_PeriodFilter_Label" xml:space="preserve"><value>Showing:</value></data>
+  <data name="ShiftDash_PeriodFilter_All" xml:space="preserve"><value>All</value></data>
+  <data name="ShiftDash_PeriodFilter_BuildDays" xml:space="preserve"><value>Build days</value></data>
+  <data name="ShiftDash_PeriodFilter_EventShifts" xml:space="preserve"><value>Event-time shifts</value></data>
+  <data name="ShiftDash_PeriodFilter_Strike" xml:space="preserve"><value>Strike</value></data>
+
+  <data name="ShiftDash_Departments_Title" xml:space="preserve"><value>Departments</value></data>
+  <data name="ShiftDash_Departments_SortNote" xml:space="preserve"><value>sorted by lowest fill % first</value></data>
+  <data name="ShiftDash_Departments_Col_Department" xml:space="preserve"><value>Department</value></data>
+  <data name="ShiftDash_Departments_Col_Total" xml:space="preserve"><value>Total</value></data>
+  <data name="ShiftDash_Departments_Col_Filled" xml:space="preserve"><value>Filled</value></data>
+  <data name="ShiftDash_Departments_Col_Pct" xml:space="preserve"><value>%</value></data>
+  <data name="ShiftDash_Departments_Col_SlotsRemaining" xml:space="preserve"><value>Slots remaining</value></data>
+  <data name="ShiftDash_Departments_Col_Period" xml:space="preserve"><value>Period</value></data>
+  <data name="ShiftDash_Departments_Direct" xml:space="preserve"><value>Direct</value></data>
+
+  <data name="ShiftDash_Coordinators_Title" xml:space="preserve"><value>Coordinator activity</value></data>
+  <data name="ShiftDash_Coordinators_Subtitle" xml:space="preserve"><value>teams with pending signups, oldest login first</value></data>
+  <data name="ShiftDash_Coordinators_Col_Team" xml:space="preserve"><value>Team</value></data>
+  <data name="ShiftDash_Coordinators_Col_Coordinators" xml:space="preserve"><value>Coordinators</value></data>
+  <data name="ShiftDash_Coordinators_Col_Pending" xml:space="preserve"><value>Pending</value></data>
+  <data name="ShiftDash_Coordinators_NoCoordinators" xml:space="preserve"><value>no coordinators</value></data>
+  <data name="ShiftDash_Coordinators_Never" xml:space="preserve"><value>never</value></data>
+  <data name="ShiftDash_Coordinators_MinutesAgo" xml:space="preserve"><value>{0} min ago</value><comment>{0} = minutes</comment></data>
+  <data name="ShiftDash_Coordinators_HoursAgo" xml:space="preserve"><value>{0} h ago</value><comment>{0} = hours</comment></data>
+  <data name="ShiftDash_Coordinators_DaysAgo" xml:space="preserve"><value>{0} d ago</value><comment>{0} = days</comment></data>
+  <data name="ShiftDash_Coordinators_DirectPending" xml:space="preserve"><value>{0} direct</value><comment>{0} = pending count at this team level only</comment></data>
+
+  <data name="ShiftDash_Trends_Title" xml:space="preserve"><value>Trends</value></data>
+  <data name="ShiftDash_Trends_Window_7d" xml:space="preserve"><value>7d</value></data>
+  <data name="ShiftDash_Trends_Window_30d" xml:space="preserve"><value>30d</value></data>
+  <data name="ShiftDash_Trends_Window_90d" xml:space="preserve"><value>90d</value></data>
+  <data name="ShiftDash_Trends_Window_All" xml:space="preserve"><value>All</value></data>
+  <data name="ShiftDash_Trends_NewSignups" xml:space="preserve"><value>New signups</value></data>
+  <data name="ShiftDash_Trends_NewTicketSales" xml:space="preserve"><value>New ticket sales</value></data>
+  <data name="ShiftDash_Trends_DAU" xml:space="preserve"><value>Distinct logins (DAU)</value></data>
+  <data name="ShiftDash_Trends_DAUNote" xml:space="preserve"><value>Only last login per human is stored — older buckets undercount.</value></data>
+  <data name="ShiftDash_Status_OnTrack" xml:space="preserve"><value>On track</value></data>
+  <data name="ShiftDash_Status_AtRisk" xml:space="preserve"><value>At risk</value></data>
+  <data name="ShiftDash_Status_BelowTarget" xml:space="preserve"><value>Below target</value></data>
+  <data name="ShiftDash_Coordinators_StaleLabel" xml:space="preserve"><value>Inactive over 7 days</value></data>
 
 </root>

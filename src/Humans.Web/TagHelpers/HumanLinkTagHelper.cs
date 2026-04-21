@@ -16,12 +16,12 @@ namespace Humans.Web.TagHelpers;
 public class HumanLinkTagHelper : TagHelper
 {
     private readonly IUrlHelperFactory _urlHelperFactory;
-    private readonly IProfileService _profileService;
+    private readonly IUserService _userService;
 
-    public HumanLinkTagHelper(IUrlHelperFactory urlHelperFactory, IProfileService profileService)
+    public HumanLinkTagHelper(IUrlHelperFactory urlHelperFactory, IUserService userService)
     {
         _urlHelperFactory = urlHelperFactory;
-        _profileService = profileService;
+        _userService = userService;
     }
 
     [HtmlAttributeNotBound]
@@ -75,11 +75,11 @@ public class HumanLinkTagHelper : TagHelper
         // Resolve display name and profile picture from cache when not explicitly provided
         if (string.IsNullOrEmpty(DisplayName) && UserId != Guid.Empty)
         {
-            var cached = await _profileService.GetCachedProfileAsync(UserId);
-            if (cached is not null)
+            var user = await _userService.GetByIdAsync(UserId);
+            if (user is not null)
             {
-                DisplayName = cached.DisplayName;
-                ProfilePictureUrl ??= cached.ProfilePictureUrl;
+                DisplayName = user.DisplayName;
+                ProfilePictureUrl ??= user.ProfilePictureUrl;
             }
             else
             {

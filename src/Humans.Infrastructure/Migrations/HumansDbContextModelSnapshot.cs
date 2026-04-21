@@ -543,6 +543,127 @@ namespace Humans.Infrastructure.Migrations
                     b.ToTable("budget_years", (string)null);
                 });
 
+            modelBuilder.Entity("Humans.Domain.Entities.CalendarEvent", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Instant>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("CreatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Instant?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)");
+
+                    b.Property<Instant?>("EndUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsAllDay")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Location")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("LocationUrl")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<Guid>("OwningTeamId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("RecurrenceRule")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("RecurrenceTimezone")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<Instant?>("RecurrenceUntilUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Instant>("StartUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<Instant>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OwningTeamId", "StartUtc");
+
+                    b.HasIndex("StartUtc", "RecurrenceUntilUtc");
+
+                    b.ToTable("calendar_events", (string)null);
+                });
+
+            modelBuilder.Entity("Humans.Domain.Entities.CalendarEventException", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Instant>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("CreatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("EventId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("IsCancelled")
+                        .HasColumnType("boolean");
+
+                    b.Property<Instant>("OriginalOccurrenceStartUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("OverrideDescription")
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)");
+
+                    b.Property<Instant?>("OverrideEndUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("OverrideLocation")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("OverrideLocationUrl")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<Instant?>("OverrideStartUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("OverrideTitle")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<Instant>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EventId", "OriginalOccurrenceStartUtc")
+                        .IsUnique();
+
+                    b.ToTable("calendar_event_exceptions", (string)null);
+                });
+
             modelBuilder.Entity("Humans.Domain.Entities.Camp", b =>
                 {
                     b.Property<Guid>("Id")
@@ -3694,6 +3815,28 @@ namespace Humans.Infrastructure.Migrations
                     b.Navigation("ResponsibleTeam");
                 });
 
+            modelBuilder.Entity("Humans.Domain.Entities.CalendarEvent", b =>
+                {
+                    b.HasOne("Humans.Domain.Entities.Team", "OwningTeam")
+                        .WithMany()
+                        .HasForeignKey("OwningTeamId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("OwningTeam");
+                });
+
+            modelBuilder.Entity("Humans.Domain.Entities.CalendarEventException", b =>
+                {
+                    b.HasOne("Humans.Domain.Entities.CalendarEvent", "Event")
+                        .WithMany("Exceptions")
+                        .HasForeignKey("EventId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Event");
+                });
+
             modelBuilder.Entity("Humans.Domain.Entities.Camp", b =>
                 {
                     b.HasOne("Humans.Domain.Entities.User", "CreatedByUser")
@@ -4480,6 +4623,11 @@ namespace Humans.Infrastructure.Migrations
                     b.Navigation("AuditLogs");
 
                     b.Navigation("Groups");
+                });
+
+            modelBuilder.Entity("Humans.Domain.Entities.CalendarEvent", b =>
+                {
+                    b.Navigation("Exceptions");
                 });
 
             modelBuilder.Entity("Humans.Domain.Entities.Camp", b =>

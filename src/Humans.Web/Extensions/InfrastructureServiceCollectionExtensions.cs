@@ -4,7 +4,6 @@ using Humans.Application.Interfaces.Caching;
 using Humans.Application.Interfaces.Gdpr;
 using Humans.Application.Interfaces.Governance;
 using Humans.Application.Interfaces.Repositories;
-using Humans.Application.Interfaces.Stores;
 using Humans.Application.Services.Gdpr;
 using Humans.Infrastructure.Caching;
 using Humans.Infrastructure.Configuration;
@@ -12,10 +11,15 @@ using Humans.Infrastructure.HostedServices;
 using Humans.Infrastructure.Jobs;
 using Humans.Infrastructure.Repositories;
 using Humans.Infrastructure.Services;
-using Humans.Infrastructure.Services.Governance;
-using Humans.Infrastructure.Stores;
+using Humans.Infrastructure.Services.Profiles;
 using Humans.Web.Filters;
 using GovernanceApplicationDecisionService = Humans.Application.Services.Governance.ApplicationDecisionService;
+using ProfilesProfileService = Humans.Application.Services.Profile.ProfileService;
+using ProfilesContactFieldService = Humans.Application.Services.Profile.ContactFieldService;
+using ProfilesUserEmailService = Humans.Application.Services.Profile.UserEmailService;
+using ProfilesCommunicationPreferenceService = Humans.Application.Services.Profile.CommunicationPreferenceService;
+using ProfilesContactService = Humans.Application.Services.Profile.ContactService;
+using UsersUserService = Humans.Application.Services.Users.UserService;
 
 namespace Humans.Web.Extensions;
 
@@ -113,17 +117,26 @@ public static class InfrastructureServiceCollectionExtensions
 
         services.AddScoped<ICityPlanningService, CityPlanningService>();
         services.AddScoped<ICampContactService, CampContactService>();
-        services.AddScoped<ICommunicationPreferenceService, CommunicationPreferenceService>();
+        // Profile section — repository/store/decorator pattern (§15 Step 0, PR #504)
+        // Repositories use IDbContextFactory and are registered as Singleton so the
+        // CachingProfileService Singleton can inject them directly without scope-factory indirection.
+        services.AddSingleton<IProfileRepository, ProfileRepository>();
+        services.AddSingleton<IContactFieldRepository, ContactFieldRepository>();
+        services.AddSingleton<IUserEmailRepository, UserEmailRepository>();
+        services.AddSingleton<ICommunicationPreferenceRepository, CommunicationPreferenceRepository>();
+
+        services.AddScoped<IUnsubscribeTokenProvider, UnsubscribeTokenProvider>();
+
+        services.AddScoped<ICommunicationPreferenceService, ProfilesCommunicationPreferenceService>();
         services.AddScoped<IUnsubscribeService, UnsubscribeService>();
 
         services.AddScoped<CampaignService>();
         services.AddScoped<ICampaignService>(sp => sp.GetRequiredService<CampaignService>());
         services.AddScoped<IUserDataContributor>(sp => sp.GetRequiredService<CampaignService>());
 
-        services.AddScoped<IContactFieldService, ContactFieldService>();
-        services.AddScoped<IUserEmailService, UserEmailService>();
+        services.AddScoped<IContactFieldService, ProfilesContactFieldService>();
+        services.AddScoped<IUserEmailService, ProfilesUserEmailService>();
         services.AddScoped<IEmailProvisioningService, EmailProvisioningService>();
-        services.AddScoped<IVolunteerHistoryService, VolunteerHistoryService>();
         services.AddScoped<ILegalDocumentSyncService, LegalDocumentSyncService>();
         services.AddScoped<IAdminLegalDocumentService, AdminLegalDocumentService>();
         services.AddScoped<ILegalDocumentService, LegalDocumentService>();
@@ -188,7 +201,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddScoped<IUserDataContributor>(sp => sp.GetRequiredService<AccountMergeService>());
 
         services.AddScoped<IDuplicateAccountService, DuplicateAccountService>();
-        services.AddScoped<IContactService, ContactService>();
+        services.AddScoped<IContactService, ProfilesContactService>();
         services.AddScoped<IAccountProvisioningService, AccountProvisioningService>();
         services.AddScoped<IMagicLinkService, MagicLinkService>();
 
@@ -202,11 +215,11 @@ public static class InfrastructureServiceCollectionExtensions
 
         services.AddScoped<ITicketingBudgetService, TicketingBudgetService>();
 
-        // Governance — first full end-to-end implementation of the target
-        // repository/store/decorator pattern (see PR #503 /
-        // docs/superpowers/plans/2026-04-15-governance-migration.md).
+        // Governance — repository + service, no caching decorator.
+        // Governance is low-traffic enough that DB reads per request are fine;
+        // the service invalidates nav/notification/voting badge caches inline
+        // after successful writes.
         services.AddScoped<IApplicationRepository, ApplicationRepository>();
-        services.AddSingleton<IApplicationStore, ApplicationStore>();
 
         services.AddScoped<INavBadgeCacheInvalidator, NavBadgeCacheInvalidator>();
         services.AddScoped<INotificationMeterCacheInvalidator, NotificationMeterCacheInvalidator>();
@@ -216,28 +229,53 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddScoped<IApplicationDecisionService>(sp => sp.GetRequiredService<GovernanceApplicationDecisionService>());
         services.AddScoped<IUserDataContributor>(sp => sp.GetRequiredService<GovernanceApplicationDecisionService>());
 
-        // Wrap IApplicationDecisionService with the caching decorator via
-        // Scrutor. Callers still inject IApplicationDecisionService and get
-        // the cached version transparently.
-        services.Decorate<IApplicationDecisionService, CachingApplicationDecisionService>();
-
-        // Startup warmup: load the full Application set into the store
-        // before the host starts accepting HTTP requests.
-        services.AddHostedService<ApplicationStoreWarmupHostedService>();
-
         services.AddScoped<IOnboardingService, OnboardingService>();
 
         services.AddScoped<ConsentService>();
         services.AddScoped<IConsentService>(sp => sp.GetRequiredService<ConsentService>());
         services.AddScoped<IUserDataContributor>(sp => sp.GetRequiredService<ConsentService>());
 
-        services.AddScoped<ProfileService>();
-        services.AddScoped<IProfileService>(sp => sp.GetRequiredService<ProfileService>());
-        services.AddScoped<IUserDataContributor>(sp => sp.GetRequiredService<ProfileService>());
+        // ProfileService (inner): Scoped — has many Scoped cross-section deps.
+        // Registered under the keyed "profile-inner" key so CachingProfileService can
+        // resolve it from a scope without triggering self-resolution on the unkeyed
+        // IProfileService registration (which maps to the Singleton decorator).
+        services.AddKeyedScoped<IProfileService, ProfilesProfileService>(CachingProfileService.InnerServiceKey);
+        services.AddScoped<ProfilesProfileService>(sp =>
+            (ProfilesProfileService)sp.GetRequiredKeyedService<IProfileService>(CachingProfileService.InnerServiceKey));
+        services.AddScoped<IUserDataContributor>(sp => sp.GetRequiredService<ProfilesProfileService>());
 
-        services.AddScoped<UserService>();
-        services.AddScoped<IUserService>(sp => sp.GetRequiredService<UserService>());
-        services.AddScoped<IUserDataContributor>(sp => sp.GetRequiredService<UserService>());
+        // CachingProfileService: Singleton so the _byUserId ConcurrentDictionary persists
+        // across requests. Resolves the Scoped inner IProfileService (keyed "profile-inner")
+        // and other Scoped deps (IUserService, INavBadgeCacheInvalidator,
+        // INotificationMeterCacheInvalidator) per-call via IServiceScopeFactory to avoid
+        // the captured-scoped-dep anti-pattern.
+        // IProfileRepository and IUserEmailRepository are injected directly because they
+        // are also Singleton (IDbContextFactory-based).
+        services.AddSingleton<CachingProfileService>();
+        services.AddSingleton<IProfileService>(sp => sp.GetRequiredService<CachingProfileService>());
+
+        // CRITICAL: IFullProfileInvalidator must resolve to the same Singleton decorator instance
+        // that backs IProfileService. Both interfaces share the single CachingProfileService
+        // instance, so the _byUserId dict is never split.
+        services.AddSingleton<IFullProfileInvalidator>(sp =>
+            sp.GetRequiredService<CachingProfileService>());
+
+        // Eagerly warm the FullProfile dict at startup so bulk reads
+        // (birthday widget, location directory, admin human list, profile search)
+        // return complete results immediately after deploy instead of filling
+        // in lazily per user. Failures are logged and swallowed; lazy population
+        // still works.
+        services.AddHostedService<FullProfileWarmupHostedService>();
+
+        // User section — §15 repository pattern (issue #511).
+        // No decorator / cache: User is ~500 rows with no stitched projection or
+        // hot bulk-read path; see docs/superpowers/specs/2026-04-21-issue-511-user-migration.md
+        // for the Option A rationale. IUserRepository is Singleton
+        // (IDbContextFactory-based) so the service can inject it directly.
+        services.AddSingleton<IUserRepository, UserRepository>();
+        services.AddScoped<UsersUserService>();
+        services.AddScoped<IUserService>(sp => sp.GetRequiredService<UsersUserService>());
+        services.AddScoped<IUserDataContributor>(sp => sp.GetRequiredService<UsersUserService>());
         services.AddScoped<IDashboardService, DashboardService>();
         services.AddScoped<ISystemTeamSync, SystemTeamSyncJob>();
         services.AddScoped<SyncLegalDocumentsJob>();
@@ -272,6 +310,8 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddScoped<IUserDataContributor>(sp => sp.GetRequiredService<ShiftSignupService>());
 
         services.AddScoped<IGeneralAvailabilityService, GeneralAvailabilityService>();
+
+        services.AddScoped<ICalendarService, CalendarService>();
 
         // Feedback API key
         services.Configure<FeedbackApiSettings>(opts =>
