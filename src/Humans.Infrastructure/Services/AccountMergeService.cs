@@ -20,7 +20,7 @@ public class AccountMergeService : IAccountMergeService, IUserDataContributor
 {
     private readonly HumansDbContext _dbContext;
     private readonly IAuditLogService _auditLogService;
-    private readonly IProfileService _profileService;
+    private readonly IFullProfileInvalidator _fullProfileInvalidator;
     private readonly ITeamService _teamService;
     private readonly ILogger<AccountMergeService> _logger;
     private readonly IClock _clock;
@@ -28,14 +28,14 @@ public class AccountMergeService : IAccountMergeService, IUserDataContributor
     public AccountMergeService(
         HumansDbContext dbContext,
         IAuditLogService auditLogService,
-        IProfileService profileService,
+        IFullProfileInvalidator fullProfileInvalidator,
         ITeamService teamService,
         ILogger<AccountMergeService> logger,
         IClock clock)
     {
         _dbContext = dbContext;
         _auditLogService = auditLogService;
-        _profileService = profileService;
+        _fullProfileInvalidator = fullProfileInvalidator;
         _teamService = teamService;
         _logger = logger;
         _clock = clock;
@@ -152,7 +152,7 @@ public class AccountMergeService : IAccountMergeService, IUserDataContributor
         await _dbContext.SaveChangesAsync(ct);
 
         // Invalidate caches
-        _profileService.UpdateProfileCache(sourceUser.Id, null);
+        await _fullProfileInvalidator.InvalidateAsync(sourceUser.Id, ct);
         _teamService.RemoveMemberFromAllTeamsCache(sourceUser.Id);
     }
 
@@ -285,5 +285,47 @@ public class AccountMergeService : IAccountMergeService, IUserDataContributor
         }).ToList();
 
         return [new UserDataSlice(GdprExportSections.AccountMergeRequests, shaped)];
+    }
+
+    // ---- Methods added for Profile-section migration (§15 Step 0) ----
+
+    public async Task<IReadOnlySet<Guid>> GetPendingEmailIdsAsync(
+        IReadOnlyList<Guid> emailIds, CancellationToken ct = default)
+    {
+        if (emailIds.Count == 0)
+            return new HashSet<Guid>();
+
+        var ids = await _dbContext.AccountMergeRequests
+            .Where(r => emailIds.Contains(r.PendingEmailId)
+                && r.Status == AccountMergeRequestStatus.Pending)
+            .Select(r => r.PendingEmailId)
+            .ToListAsync(ct);
+
+        return ids.ToHashSet();
+    }
+
+    public async Task<bool> HasPendingForUserAndEmailAsync(
+        Guid targetUserId, string normalizedEmail, string? alternateEmail,
+        CancellationToken ct = default) =>
+        alternateEmail is null
+            ? await _dbContext.AccountMergeRequests.AnyAsync(
+                r => r.TargetUserId == targetUserId
+                    && EF.Functions.ILike(r.Email, normalizedEmail)
+                    && r.Status == AccountMergeRequestStatus.Pending, ct)
+            : await _dbContext.AccountMergeRequests.AnyAsync(
+                r => r.TargetUserId == targetUserId
+                    && (EF.Functions.ILike(r.Email, normalizedEmail) ||
+                        EF.Functions.ILike(r.Email, alternateEmail))
+                    && r.Status == AccountMergeRequestStatus.Pending, ct);
+
+    public async Task<bool> HasPendingForEmailIdAsync(Guid pendingEmailId, CancellationToken ct = default) =>
+        await _dbContext.AccountMergeRequests
+            .AnyAsync(r => r.PendingEmailId == pendingEmailId
+                && r.Status == AccountMergeRequestStatus.Pending, ct);
+
+    public async Task CreateAsync(AccountMergeRequest request, CancellationToken ct = default)
+    {
+        _dbContext.AccountMergeRequests.Add(request);
+        await _dbContext.SaveChangesAsync(ct);
     }
 }

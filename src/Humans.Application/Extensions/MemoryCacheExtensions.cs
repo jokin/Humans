@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using System.Diagnostics.CodeAnalysis;
 using Humans.Application.Interfaces;
 using Microsoft.Extensions.Caching.Memory;
@@ -59,9 +58,6 @@ public static class MemoryCacheExtensions
     public static void InvalidateNotificationMeters(this IMemoryCache cache) =>
         cache.Remove(CacheKeys.NotificationMeters);
 
-    public static void InvalidateProfiles(this IMemoryCache cache) =>
-        cache.Remove(CacheKeys.Profiles);
-
     public static void InvalidateActiveTeams(this IMemoryCache cache) =>
         cache.Remove(CacheKeys.ActiveTeams);
 
@@ -92,9 +88,6 @@ public static class MemoryCacheExtensions
         cache.InvalidateUserIdsWithTickets();
     }
 
-    public static void InvalidateUserProfile(this IMemoryCache cache, Guid userId) =>
-        cache.Remove(CacheKeys.UserProfile(userId));
-
     public static void InvalidateNobodiesTeamEmails(this IMemoryCache cache) =>
         cache.Remove(CacheKeys.NobodiesTeamEmails);
 
@@ -117,22 +110,4 @@ public static class MemoryCacheExtensions
         cache.InvalidateShiftAuthorization(userId);
     }
 
-    public static void SetProfile(this IMemoryCache cache, Guid userId, CachedProfile profile) =>
-        cache.TryUpdateExistingValue<ConcurrentDictionary<Guid, CachedProfile>>(CacheKeys.Profiles, cached =>
-            cached[userId] = profile);
-
-    public static void RemoveProfile(this IMemoryCache cache, Guid userId) =>
-        cache.TryUpdateExistingValue<ConcurrentDictionary<Guid, CachedProfile>>(CacheKeys.Profiles, cached =>
-            cached.TryRemove(userId, out _));
-
-    public static void UpdateProfile(this IMemoryCache cache, Guid userId, CachedProfile? profile)
-    {
-        if (profile is not null)
-        {
-            cache.SetProfile(userId, profile);
-            return;
-        }
-
-        cache.RemoveProfile(userId);
-    }
 }

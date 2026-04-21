@@ -60,6 +60,31 @@ public class CampaignService : ICampaignService, IUserDataContributor
         return campaign;
     }
 
+    public async Task<IReadOnlyList<CampaignGrant>> GetActiveOrCompletedGrantsForUserAsync(
+        Guid userId, CancellationToken ct = default)
+    {
+        return await _dbContext.CampaignGrants
+            .AsNoTracking()
+            .Include(g => g.Campaign)
+            .Include(g => g.Code)
+            .Where(g => g.UserId == userId
+                && (g.Campaign.Status == CampaignStatus.Active || g.Campaign.Status == CampaignStatus.Completed))
+            .OrderByDescending(g => g.AssignedAt)
+            .ToListAsync(ct);
+    }
+
+    public async Task<IReadOnlyList<CampaignGrant>> GetAllGrantsForUserAsync(
+        Guid userId, CancellationToken ct = default)
+    {
+        return await _dbContext.CampaignGrants
+            .AsNoTracking()
+            .Include(g => g.Campaign)
+            .Include(g => g.Code)
+            .Where(g => g.UserId == userId)
+            .OrderByDescending(g => g.AssignedAt)
+            .ToListAsync(ct);
+    }
+
     public async Task<Campaign?> GetByIdAsync(Guid id, CancellationToken ct = default)
     {
         return await _dbContext.Campaigns

@@ -40,8 +40,4 @@ public class CommunicationPreference
     /// </summary>
     public string UpdateSource { get; set; } = string.Empty;
 
-    /// <summary>
-    /// Navigation to the user.
-    /// </summary>
-    public User User { get; init; } = null!;
 }

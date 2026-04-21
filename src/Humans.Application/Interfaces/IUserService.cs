@@ -1,5 +1,6 @@
 using Humans.Domain.Entities;
 using Humans.Domain.Enums;
+using NodaTime;
 
 namespace Humans.Application.Interfaces;
 
@@ -66,4 +67,53 @@ public interface IUserService
     /// Bulk import historical participation data (admin backfill).
     /// </summary>
     Task<int> BackfillParticipationsAsync(int year, List<(Guid UserId, ParticipationStatus Status)> entries, CancellationToken ct = default);
+
+    /// <summary>
+    /// Returns all users, read-only. At ~500 users this is cheap to load in full.
+    /// Used by admin list views that must include profileless users.
+    /// </summary>
+    Task<IReadOnlyList<User>> GetAllUsersAsync(CancellationToken ct = default);
+
+    // ---- Methods added for Profile-section migration (§15 Step 0) ----
+
+    /// <summary>
+    /// Sets <c>User.GoogleEmail</c> if it is currently null. No-op if the
+    /// user already has a GoogleEmail set or the user does not exist.
+    /// Returns true if the GoogleEmail was set.
+    /// </summary>
+    Task<bool> TrySetGoogleEmailAsync(Guid userId, string email, CancellationToken ct = default);
+
+    /// <summary>
+    /// Updates <c>User.DisplayName</c>. No-op if the user does not exist.
+    /// </summary>
+    Task UpdateDisplayNameAsync(Guid userId, string displayName, CancellationToken ct = default);
+
+    /// <summary>
+    /// Sets the deletion-pending fields on a user (<c>DeletionRequestedAt</c>,
+    /// <c>DeletionScheduledFor</c>). Returns false if the user does not exist.
+    /// </summary>
+    Task<bool> SetDeletionPendingAsync(Guid userId, Instant requestedAt, Instant scheduledFor, CancellationToken ct = default);
+
+    /// <summary>
+    /// Clears deletion-pending fields (<c>DeletionRequestedAt</c>,
+    /// <c>DeletionScheduledFor</c>, <c>DeletionEligibleAfter</c>).
+    /// Returns false if the user does not exist.
+    /// </summary>
+    Task<bool> ClearDeletionAsync(Guid userId, CancellationToken ct = default);
+
+    // ---- Methods added for ContactService migration ----
+
+    /// <summary>
+    /// Finds a user whose <c>Email</c> or <c>GoogleEmail</c> matches the given
+    /// address (case-insensitive). Also checks the gmail/googlemail alternate
+    /// when applicable. Returns null if no match.
+    /// </summary>
+    Task<User?> GetByEmailOrAlternateAsync(string email, CancellationToken ct = default);
+
+    /// <summary>
+    /// Returns all contact users (ContactSource != null, LastLoginAt == null),
+    /// optionally filtered by display name or email search term.
+    /// Ordered by CreatedAt descending.
+    /// </summary>
+    Task<IReadOnlyList<User>> GetContactUsersAsync(string? search, CancellationToken ct = default);
 }

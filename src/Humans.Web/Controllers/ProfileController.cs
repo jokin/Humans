@@ -10,13 +10,13 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Localization;
+using Humans.Application;
 using Humans.Application.DTOs;
 using Humans.Application.Interfaces;
 using Humans.Application.Interfaces.Gdpr;
 using Humans.Domain.Constants;
 using Humans.Domain.Entities;
 using Humans.Domain.Enums;
-using Humans.Infrastructure.Data;
 using Humans.Web.Authorization;
 using Humans.Web.Extensions;
 using Humans.Web.Models;
@@ -33,7 +33,6 @@ public class ProfileController : HumansControllerBase
     private readonly UserManager<User> _userManager;
     private readonly IProfileService _profileService;
     private readonly IContactFieldService _contactFieldService;
-    private readonly IVolunteerHistoryService _volunteerHistoryService;
     private readonly IEmailService _emailService;
     private readonly IUserEmailService _userEmailService;
     private readonly ICommunicationPreferenceService _commPrefService;
@@ -47,11 +46,14 @@ public class ProfileController : HumansControllerBase
     private readonly ConfigurationRegistry _configRegistry;
     private readonly ILogger<ProfileController> _logger;
     private readonly IStringLocalizer<SharedResource> _localizer;
-    private readonly HumansDbContext _dbContext;
     private readonly ITicketQueryService _ticketQueryService;
+    private readonly ITeamService _teamService;
+    private readonly ICampaignService _campaignService;
+    private readonly IEmailOutboxService _emailOutboxService;
     private readonly IMemoryCache _cache;
     private readonly IClock _clock;
     private readonly IAuthorizationService _authorizationService;
+    private readonly IUserService _userService;
 
     private const int MaxProfilePictureUploadBytes = 20 * 1024 * 1024; // 20MB upload limit
     private static readonly HashSet<string> AllowedImageContentTypes = new(StringComparer.OrdinalIgnoreCase)
@@ -80,7 +82,6 @@ public class ProfileController : HumansControllerBase
         UserManager<User> userManager,
         IProfileService profileService,
         IContactFieldService contactFieldService,
-        IVolunteerHistoryService volunteerHistoryService,
         IEmailService emailService,
         IUserEmailService userEmailService,
         ICommunicationPreferenceService commPrefService,
@@ -94,17 +95,19 @@ public class ProfileController : HumansControllerBase
         ConfigurationRegistry configRegistry,
         ILogger<ProfileController> logger,
         IStringLocalizer<SharedResource> localizer,
-        HumansDbContext dbContext,
         ITicketQueryService ticketQueryService,
+        ITeamService teamService,
+        ICampaignService campaignService,
+        IEmailOutboxService emailOutboxService,
         IMemoryCache cache,
         IClock clock,
-        IAuthorizationService authorizationService)
+        IAuthorizationService authorizationService,
+        IUserService userService)
         : base(userManager)
     {
         _userManager = userManager;
         _profileService = profileService;
         _contactFieldService = contactFieldService;
-        _volunteerHistoryService = volunteerHistoryService;
         _emailService = emailService;
         _userEmailService = userEmailService;
         _commPrefService = commPrefService;
@@ -118,11 +121,14 @@ public class ProfileController : HumansControllerBase
         _configRegistry = configRegistry;
         _logger = logger;
         _localizer = localizer;
-        _dbContext = dbContext;
         _ticketQueryService = ticketQueryService;
+        _teamService = teamService;
+        _campaignService = campaignService;
+        _emailOutboxService = emailOutboxService;
         _cache = cache;
         _clock = clock;
         _authorizationService = authorizationService;
+        _userService = userService;
     }
 
     // ─── Own Profile (Me) ────────────────────────────────────────────
@@ -179,10 +185,9 @@ public class ProfileController : HumansControllerBase
             ? await _contactFieldService.GetAllContactFieldsAsync(profile.Id, ct)
             : [];
 
-        // Get all volunteer history entries for editing
-        var volunteerHistory = profile is not null
-            ? await _volunteerHistoryService.GetAllAsync(profile.Id, ct)
-            : [];
+        // Get CV entries for editing from the FullProfile projection
+        var fullProfile = await _profileService.GetFullProfileAsync(user.Id, ct);
+        var cvEntries = fullProfile?.CVEntries ?? [];
 
         // Get profile languages for editing
         var languages = profile is not null
@@ -244,12 +249,12 @@ public class ProfileController : HumansControllerBase
                 Visibility = cf.Visibility,
                 DisplayOrder = cf.DisplayOrder
             }).ToList(),
-            EditableVolunteerHistory = volunteerHistory.Select(vh => new VolunteerHistoryEntryEditViewModel
+            EditableVolunteerHistory = cvEntries.Select(cv => new VolunteerHistoryEntryEditViewModel
             {
-                Id = vh.Id,
-                DateString = vh.Date.ToIsoDateString(),
-                EventName = vh.EventName,
-                Description = vh.Description
+                Id = cv.Id,
+                DateString = cv.Date.ToIsoDateString(),
+                EventName = cv.EventName,
+                Description = cv.Description
             }).ToList(),
             EditableLanguages = languages.Select(pl => new ProfileLanguageEditViewModel
             {
@@ -475,25 +480,22 @@ public class ProfileController : HumansControllerBase
             return View(model);
         }
 
-        // Save volunteer history entries
-        var volunteerHistoryDtos = model.EditableVolunteerHistory
+        // Save CV entries. Id round-trips for existing rows so the row keeps
+        // its identity and CreatedAt; new rows post Guid.Empty and get a
+        // fresh Id assigned on insert.
+        var cvEntries = model.EditableVolunteerHistory
             .Where(vh => !string.IsNullOrWhiteSpace(vh.EventName) && vh.ParsedDate.HasValue)
-            .Select(vh => new VolunteerHistoryEntryEditDto(
-                vh.Id,
+            .Select(vh => new CVEntry(
+                vh.Id ?? Guid.Empty,
                 vh.ParsedDate!.Value,
                 vh.EventName,
                 vh.Description
             ))
             .ToList();
 
-        await _volunteerHistoryService.SaveAsync(profileId, volunteerHistoryDtos);
+        await _profileService.SaveCVEntriesAsync(user.Id, cvEntries);
 
         // Save profile languages (remove-and-replace)
-        var existingLanguages = await _dbContext.ProfileLanguages
-            .Where(pl => pl.ProfileId == profileId)
-            .ToListAsync();
-        _dbContext.ProfileLanguages.RemoveRange(existingLanguages);
-
         var newLanguages = model.EditableLanguages
             .Where(l => !string.IsNullOrWhiteSpace(l.LanguageCode))
             .Select(l => new ProfileLanguage
@@ -505,11 +507,7 @@ public class ProfileController : HumansControllerBase
             })
             .ToList();
 
-        if (newLanguages.Count > 0)
-        {
-            _dbContext.ProfileLanguages.AddRange(newLanguages);
-        }
-        await _dbContext.SaveChangesAsync();
+        await _profileService.SaveProfileLanguagesAsync(profileId, newLanguages);
 
         SetSuccess(_localizer["Profile_Updated"].Value);
         return RedirectToAction(nameof(Me));
@@ -720,10 +718,9 @@ public class ProfileController : HumansControllerBase
 
         try
         {
-            var email = await _dbContext.UserEmails
-                .FirstOrDefaultAsync(ue => ue.Id == emailId && ue.UserId == user.Id && ue.IsVerified);
+            var emailAddress = await _userEmailService.GetVerifiedEmailAddressAsync(user.Id, emailId);
 
-            if (email is null)
+            if (emailAddress is null)
             {
                 SetError("Email not found or not verified.");
                 return RedirectToAction(nameof(Emails));
@@ -732,15 +729,16 @@ public class ProfileController : HumansControllerBase
             // If they have a @nobodies.team email, it must be used
             var hasNobodiesTeam = await _userEmailService.HasNobodiesTeamEmailAsync(user.Id);
 
-            if (hasNobodiesTeam && !email.Email.EndsWith("@nobodies.team", StringComparison.OrdinalIgnoreCase))
+            if (hasNobodiesTeam && !emailAddress.EndsWith("@nobodies.team", StringComparison.OrdinalIgnoreCase))
             {
                 SetError("Your @nobodies.team email must be used for Google services.");
                 return RedirectToAction(nameof(Emails));
             }
 
             // null = use OAuth email (default behavior)
+            var isOAuthEmail = string.Equals(emailAddress, user.Email, StringComparison.OrdinalIgnoreCase);
             var previousEmail = user.GoogleEmail;
-            user.GoogleEmail = email.IsOAuth ? null : email.Email;
+            user.GoogleEmail = isOAuthEmail ? null : emailAddress;
             user.GoogleEmailStatus = GoogleEmailStatus.Unknown;
             await _userManager.UpdateAsync(user);
 
@@ -748,7 +746,7 @@ public class ProfileController : HumansControllerBase
             var newEmail = user.GetGoogleServiceEmail();
             if (!string.Equals(previousEmail ?? user.Email, newEmail, StringComparison.OrdinalIgnoreCase))
             {
-                await EnqueueResyncForUserTeamsAsync(user.Id);
+                await _teamService.EnqueueGoogleResyncForUserTeamsAsync(user.Id);
             }
 
             SetSuccess("Google service email updated. Sync will be retried with the new email.");
@@ -769,10 +767,7 @@ public class ProfileController : HumansControllerBase
         if (user is null)
             return NotFound();
 
-        var messages = await _dbContext.EmailOutboxMessages
-            .Where(m => m.UserId == user.Id)
-            .OrderByDescending(m => m.CreatedAt)
-            .ToListAsync();
+        var messages = await _emailOutboxService.GetMessagesForUserAsync(user.Id);
 
         return View("Outbox", messages);
     }
@@ -847,7 +842,7 @@ public class ProfileController : HumansControllerBase
             if (user is null)
                 return NotFound();
 
-            var profile = await _profileService.GetShiftProfileAsync(user.Id, includeMedical: false);
+            var profile = await _shiftMgmt.GetShiftProfileAsync(user.Id, includeMedical: false);
 
             var quirks = profile?.Quirks ?? [];
             var skills = profile?.Skills ?? [];
@@ -887,7 +882,7 @@ public class ProfileController : HumansControllerBase
             if (user is null)
                 return NotFound();
 
-            var shiftProfile = await _profileService.GetOrCreateShiftProfileAsync(user.Id);
+            var shiftProfile = await _shiftMgmt.GetOrCreateShiftProfileAsync(user.Id);
 
             shiftProfile.Skills = ShiftInfoViewModel.MergeSkills(
                 model.SelectedSkills, model.SkillOtherText, shiftProfile.Skills);
@@ -896,7 +891,7 @@ public class ProfileController : HumansControllerBase
             shiftProfile.Languages = ShiftInfoViewModel.MergeLanguages(
                 model.SelectedLanguages, model.LanguageOtherText, shiftProfile.Languages);
 
-            await _profileService.UpdateShiftProfileAsync(shiftProfile);
+            await _shiftMgmt.UpdateShiftProfileAsync(shiftProfile);
 
             SetSuccess(_localizer["Profile_Updated"].Value);
             return RedirectToAction(nameof(ShiftInfo));
@@ -1062,11 +1057,12 @@ public class ProfileController : HumansControllerBase
         }
 
         // The ProfileCard ViewComponent handles all data fetching and permission checks.
+        var profileUser = await _userService.GetByIdAsync(id, ct);
         var viewModel = new ProfileViewModel
         {
             Id = profile.Id,
             UserId = id,
-            DisplayName = profile.User.DisplayName,
+            DisplayName = profileUser?.DisplayName ?? "Unknown",
             IsOwnProfile = isOwnProfile,
             IsApproved = profile.IsApproved,
             NoShowHistory = noShowHistory,
@@ -1082,23 +1078,19 @@ public class ProfileController : HumansControllerBase
         var profile = await _profileService.GetProfileAsync(id, ct);
         if (profile is null) return NotFound();
 
-        var teams = await _dbContext.TeamMembers
-            .Where(tm => tm.UserId == id && tm.LeftAt == null
-                && tm.Team.SystemTeamType != SystemTeamType.Volunteers)
-            .Select(tm => tm.Team.Name)
-            .OrderBy(n => n)
-            .ToListAsync(ct);
+        var popoverUser = await _userService.GetByIdAsync(id, ct);
+        var teams = await _teamService.GetActiveTeamNamesForUserAsync(id, ct);
 
         var effectivePictureUrl = profile.HasCustomProfilePicture
             ? Url.Action(nameof(Picture), "Profile",
                 new { id = profile.Id, v = profile.UpdatedAt.ToUnixTimeTicks() })
-            : profile.User.ProfilePictureUrl;
+            : popoverUser?.ProfilePictureUrl;
 
         var vm = new ProfileSummaryViewModel
         {
             UserId = id,
-            DisplayName = profile.User.DisplayName,
-            Email = profile.User.Email,
+            DisplayName = popoverUser?.DisplayName ?? "Unknown",
+            Email = popoverUser?.Email,
             ProfilePictureUrl = effectivePictureUrl,
             MembershipTier = profile.MembershipTier.ToString(),
             MembershipStatus = profile.IsSuspended ? "Suspended"
@@ -1106,7 +1098,7 @@ public class ProfileController : HumansControllerBase
             City = profile.City,
             CountryCode = profile.CountryCode,
             IsSuspended = profile.IsSuspended,
-            Teams = teams
+            Teams = teams.ToList()
         };
 
         return PartialView("_HumanPopover", vm);
@@ -1307,16 +1299,10 @@ public class ProfileController : HumansControllerBase
             return NotFound();
         }
 
-        var campaignGrants = await _dbContext.CampaignGrants
-            .Include(g => g.Campaign)
-            .Include(g => g.Code)
-            .Where(g => g.UserId == id)
-            .OrderByDescending(g => g.AssignedAt)
-            .ToListAsync(ct);
+        var campaignGrants = await _campaignService.GetAllGrantsForUserAsync(id, ct);
         ViewBag.CampaignGrants = campaignGrants;
 
-        var outboxCount = await _dbContext.EmailOutboxMessages
-            .CountAsync(m => m.UserId == id, ct);
+        var outboxCount = await _emailOutboxService.GetMessageCountForUserAsync(id, ct);
         ViewBag.OutboxCount = outboxCount;
 
         var profileLanguages = data.Profile is not null
@@ -1325,10 +1311,14 @@ public class ProfileController : HumansControllerBase
 
         var now = _clock.GetCurrentInstant();
 
+        var effectiveEmail = data.UserEmails
+            .FirstOrDefault(e => e.IsNotificationTarget && e.IsVerified)?.Email
+            ?? data.User.Email;
+
         var viewModel = new AdminHumanDetailViewModel
         {
             UserId = data.User.Id,
-            Email = data.User.GetEffectiveEmail() ?? string.Empty,
+            Email = effectiveEmail ?? string.Empty,
             DisplayName = data.User.DisplayName,
             ProfilePictureUrl = data.User.ProfilePictureUrl,
             CreatedAt = data.User.CreatedAt.ToDateTimeUtc(),
@@ -1375,7 +1365,7 @@ public class ProfileController : HumansControllerBase
             OAuthEmail = data.User.Email,
             GoogleServiceEmail = data.User.GetGoogleServiceEmail(),
             GoogleEmailStatus = data.User.GoogleEmailStatus,
-            UserEmails = data.User.UserEmails
+            UserEmails = data.UserEmails
                 .OrderBy(e => e.DisplayOrder)
                 .Select(e => new AdminUserEmailViewModel
                 {
@@ -1396,10 +1386,7 @@ public class ProfileController : HumansControllerBase
     [HttpGet("{id:guid}/Admin/Outbox")]
     public async Task<IActionResult> AdminOutbox(Guid id, CancellationToken ct)
     {
-        var messages = await _dbContext.EmailOutboxMessages
-            .Where(m => m.UserId == id)
-            .OrderByDescending(m => m.CreatedAt)
-            .ToListAsync(ct);
+        var messages = await _emailOutboxService.GetMessagesForUserAsync(id, ct);
 
         ViewBag.HumanId = id;
         return View("Outbox", messages);
@@ -1640,42 +1627,6 @@ public class ProfileController : HumansControllerBase
             HasNobodiesTeamEmail = hasNobodiesTeam,
             GoogleEmailStatus = user.GoogleEmailStatus
         };
-    }
-
-    /// <summary>
-    /// Enqueues fresh AddUserToTeamResources sync events for all teams the user is currently a member of.
-    /// Used when the Google service email changes to trigger re-sync with the updated email.
-    /// </summary>
-    private async Task EnqueueResyncForUserTeamsAsync(Guid userId)
-    {
-        var memberships = await _dbContext.TeamMembers
-            .Where(tm => tm.UserId == userId && tm.LeftAt == null)
-            .Select(tm => new { tm.Id, tm.TeamId })
-            .ToListAsync();
-
-        var now = _clock.GetCurrentInstant();
-        foreach (var membership in memberships)
-        {
-            var dedupeKey = $"{membership.Id}:{GoogleSyncOutboxEventTypes.AddUserToTeamResources}:resync:{now}";
-            _dbContext.GoogleSyncOutboxEvents.Add(new GoogleSyncOutboxEvent
-            {
-                Id = Guid.NewGuid(),
-                EventType = GoogleSyncOutboxEventTypes.AddUserToTeamResources,
-                TeamId = membership.TeamId,
-                UserId = userId,
-                OccurredAt = now,
-                DeduplicationKey = dedupeKey
-            });
-        }
-
-        await _dbContext.SaveChangesAsync();
-
-        if (memberships.Count > 0)
-        {
-            _logger.LogInformation(
-                "Enqueued {Count} re-sync events for user {UserId} after Google email change",
-                memberships.Count, userId);
-        }
     }
 
     private async Task<CommunicationPreferencesViewModel> BuildCommunicationPreferencesViewModelAsync(Guid userId)

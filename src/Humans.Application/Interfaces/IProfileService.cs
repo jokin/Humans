@@ -1,3 +1,4 @@
+using Humans.Application.DTOs;
 using Humans.Domain.Entities;
 using Humans.Domain.Enums;
 using NodaTime;
@@ -5,56 +6,17 @@ using MemberApplication = Humans.Domain.Entities.Application;
 
 namespace Humans.Application.Interfaces;
 
-public record ProfileSaveRequest(
-    string BurnerName, string FirstName, string LastName,
-    string? City, string? CountryCode, double? Latitude, double? Longitude, string? PlaceId,
-    string? Bio, string? Pronouns, string? ContributionInterests, string? BoardNotes,
-    int? BirthdayMonth, int? BirthdayDay,
-    string? EmergencyContactName, string? EmergencyContactPhone, string? EmergencyContactRelationship,
-    bool NoPriorBurnExperience,
-    byte[]? ProfilePictureData, string? ProfilePictureContentType, bool RemoveProfilePicture,
-    MembershipTier? SelectedTier, string? ApplicationMotivation, string? ApplicationAdditionalInfo,
-    string? ApplicationSignificantContribution, string? ApplicationRoleUnderstanding);
-
-public record CachedProfile(
-    Guid UserId, string DisplayName, string? ProfilePictureUrl,
-    bool HasCustomPicture, Guid ProfileId, long UpdatedAtTicks,
-    string? BurnerName, string? Bio, string? Pronouns,
-    string? ContributionInterests,
-    string? City, string? CountryCode, double? Latitude, double? Longitude,
-    int? BirthdayDay, int? BirthdayMonth,
-    bool IsApproved, bool IsSuspended,
-    IReadOnlyList<CachedVolunteerEntry> VolunteerHistory)
-{
-    public static CachedProfile Create(Profile profile, User user) => new(
-        UserId: user.Id,
-        DisplayName: user.DisplayName,
-        ProfilePictureUrl: user.ProfilePictureUrl,
-        HasCustomPicture: profile.ProfilePictureData is not null,
-        ProfileId: profile.Id,
-        UpdatedAtTicks: profile.UpdatedAt.ToUnixTimeTicks(),
-        BurnerName: profile.BurnerName,
-        Bio: profile.Bio,
-        Pronouns: profile.Pronouns,
-        ContributionInterests: profile.ContributionInterests,
-        City: profile.City,
-        CountryCode: profile.CountryCode,
-        Latitude: profile.Latitude,
-        Longitude: profile.Longitude,
-        BirthdayDay: profile.DateOfBirth?.Day,
-        BirthdayMonth: profile.DateOfBirth?.Month,
-        IsApproved: profile.IsApproved,
-        IsSuspended: profile.IsSuspended,
-        VolunteerHistory: profile.VolunteerHistory
-            .Select(v => new CachedVolunteerEntry(v.EventName, v.Description))
-            .ToList());
-}
-
-public record CachedVolunteerEntry(string EventName, string? Description);
-
 public interface IProfileService
 {
     Task<Profile?> GetProfileAsync(Guid userId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Returns the denormalized <see cref="FullProfile"/> projection for the
+    /// given user, stitched from Profile + User + CV entries. The caching
+    /// decorator serves dict hits synchronously; the base implementation loads
+    /// from repositories each call.
+    /// </summary>
+    ValueTask<FullProfile?> GetFullProfileAsync(Guid userId, CancellationToken ct = default);
 
     /// <summary>
     /// Batched profile fetch keyed by user id. Missing users are absent
@@ -119,23 +81,10 @@ public interface IProfileService
     Task<IReadOnlyList<HumanSearchResult>> SearchHumansAsync(string query, CancellationToken ct = default);
 
     /// <summary>
-    /// Gets a cached profile by user ID from the in-memory cache.
-    /// Returns null on cache miss (no DB query).
+    /// Reconciles the user's CV entries (volunteer history) with the provided set.
+    /// No-op if the user has no profile.
     /// </summary>
-    CachedProfile? GetCachedProfile(Guid userId);
-
-    /// <summary>
-    /// Gets a cached profile by user ID, warming the cache first if cold.
-    /// Returns null only if the user has no profile.
-    /// </summary>
-    Task<CachedProfile?> GetCachedProfileAsync(Guid userId, CancellationToken ct = default);
-
-    /// <summary>
-    /// Updates a single entry in the profiles cache.
-    /// Pass null to remove the entry (e.g., on account deletion).
-    /// For status changes like suspension, pass an updated <see cref="CachedProfile"/> instead.
-    /// </summary>
-    void UpdateProfileCache(Guid userId, CachedProfile? newValue);
+    Task SaveCVEntriesAsync(Guid userId, IReadOnlyList<CVEntry> entries, CancellationToken ct = default);
 
     /// <summary>
     /// Gets the languages associated with a profile, ordered by proficiency (descending) then language code.
@@ -144,33 +93,8 @@ public interface IProfileService
     Task<IReadOnlyList<ProfileLanguage>> GetProfileLanguagesAsync(Guid profileId, CancellationToken ct = default);
 
     /// <summary>
-    /// Gets or creates the user's shift profile (1:1 with User).
+    /// Replaces all languages for the given profile with the new set.
     /// </summary>
-    Task<VolunteerEventProfile> GetOrCreateShiftProfileAsync(Guid userId);
+    Task SaveProfileLanguagesAsync(Guid profileId, IReadOnlyList<ProfileLanguage> languages, CancellationToken ct = default);
 
-    /// <summary>
-    /// Updates a volunteer shift profile.
-    /// </summary>
-    Task UpdateShiftProfileAsync(VolunteerEventProfile profile);
-
-    /// <summary>
-    /// Gets a user's shift profile. Medical data included only when includeMedical=true.
-    /// </summary>
-    Task<VolunteerEventProfile?> GetShiftProfileAsync(Guid userId, bool includeMedical);
 }
-
-public record UserSearchResult(Guid UserId, string DisplayName, string Email);
-
-public record HumanSearchResult(
-    Guid UserId,
-    string DisplayName,
-    string? BurnerName,
-    string? City,
-    string? Bio,
-    string? ContributionInterests,
-    string? ProfilePictureUrl,
-    bool HasCustomPicture,
-    Guid ProfileId,
-    long UpdatedAtTicks,
-    string? MatchField,
-    string? MatchSnippet);

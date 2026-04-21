@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using Humans.Application;
 using Humans.Application.Interfaces;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Routing;
@@ -36,14 +37,12 @@ public class UserAvatarViewComponent : ViewComponent
 
         if (userId != Guid.Empty)
         {
-            // Warm the cache if cold — GetCachedProfile is a pure cache hit.
-            var cached = _profileService.GetCachedProfile(userId)
-                ?? await _profileService.GetCachedProfileAsync(userId);
+            var fullProfile = await _profileService.GetFullProfileAsync(userId);
 
-            if (cached is not null)
+            if (fullProfile is not null)
             {
-                displayName = cached.DisplayName;
-                profilePictureUrl = ResolveAvatarUrl(cached);
+                displayName = fullProfile.DisplayName;
+                profilePictureUrl = ResolveAvatarUrl(fullProfile);
             }
             else if (IsCurrentUser(userId))
             {
@@ -71,18 +70,18 @@ public class UserAvatarViewComponent : ViewComponent
         return View();
     }
 
-    private string? ResolveAvatarUrl(CachedProfile cached)
+    private string? ResolveAvatarUrl(FullProfile fullProfile)
     {
-        if (cached.HasCustomPicture && cached.ProfileId != Guid.Empty)
+        if (fullProfile.HasCustomPicture && fullProfile.ProfileId != Guid.Empty)
         {
             var urlHelper = _urlHelperFactory.GetUrlHelper(ViewContext);
             return urlHelper.Action(
                 action: "Picture",
                 controller: "Profile",
-                values: new { id = cached.ProfileId, v = cached.UpdatedAtTicks });
+                values: new { id = fullProfile.ProfileId, v = fullProfile.UpdatedAtTicks });
         }
 
-        return cached.ProfilePictureUrl;
+        return fullProfile.ProfilePictureUrl;
     }
 
     private bool IsCurrentUser(Guid userId)

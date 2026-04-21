@@ -245,3 +245,17 @@ A priority GitHub issue against `nobodies-collective/Humans` will be filed to br
 ## Commit strategy
 
 Amend PR #235 with additional commits on the existing branch. No rebase-squash, no new PR. Commit history during review shows the rework path (original migration → review fixes → cache collapse + volunteer-history fold). When the PR merges to `upstream/main`, it squash-merges to a single clean commit.
+
+## Implementation outcome (added 2026-04-20, post-Phase 11)
+
+This spec was the starting blueprint. The final implementation (Phases 1–11 of PR #235) arrived at the same destination on all major design decisions, with a few deviations from the exact DI wiring proposed here:
+
+- **No Scrutor `Decorate<>`** — the DI wiring registers `CachingProfileService` as a named Singleton and forwards `IProfileService` via a factory lambda, rather than using Scrutor's decorator helper. The keyed-inner pattern (`AddKeyedScoped` + `AddSingleton<IProfileService>(sp => sp.GetRequiredService<CachingProfileService>())`) was used instead, because `Decorate<>` does not interact cleanly with keyed registrations and the `IUserDataContributor` forwarding.
+- **`ProfileService` inner is Scoped, not Singleton.** The spec assumed the inner service could be a Singleton; in practice it has many Scoped cross-section dependencies (`UserManager`, `IRoleAssignmentService`, etc.) that cannot be made Singleton without a cascading refactor. The per-call `IServiceScopeFactory.CreateAsyncScope()` pattern was adopted instead.
+- **`_fullyWarm` flag not yet activated.** The flag was declared as reserved for future bulk-read triggers (§15g) and is not currently in the code.
+- **`NullFullProfileInvalidator`** exists at `src/Humans.Infrastructure/Services/Profiles/NullFullProfileInvalidator.cs` but is not registered in production DI; test contexts that need a no-op invalidator mock the interface directly.
+- **Cross-section ShiftAuthorization staleness (§15 NEW-B)** is a known regression documented in the code and in `design-rules.md §15g`.
+
+**The canonical, code-verified pattern is `docs/architecture/design-rules.md §15`.** That section is the authoritative reference for all future §15 section migrations. This document is a historical artifact — it reflects what was proposed before implementation, not what landed.
+
+Governance alignment (old-pattern `IApplicationStore` + warmup): tracked on `nobodies-collective/Humans` issue #533. Must complete before §15 Phase 4 (Google integration, issue #473) starts.
