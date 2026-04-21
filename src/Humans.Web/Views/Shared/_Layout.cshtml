@@ -55,14 +55,21 @@
                             </li>
                             @if (Configuration.GetValue<bool>("Features:EventGuide"))
                             {
-                                <li class="nav-item">
-                                    <a class="nav-link" asp-area="" asp-controller="EventGuide" asp-action="Browse">Browse Events</a>
-                                </li>
-                                <li class="nav-item">
-                                    <a class="nav-link" asp-area="" asp-controller="EventGuide" asp-action="MySubmissions">Event Guide</a>
-                                </li>
-                                <li class="nav-item">
-                                    <a class="nav-link" asp-area="" asp-controller="EventGuide" asp-action="Schedule">My Schedule</a>
+                                <li class="nav-item dropdown">
+                                    <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                        Events
+                                    </a>
+                                    <ul class="dropdown-menu">
+                                        <li><a class="dropdown-item" asp-area="" asp-controller="EventGuide" asp-action="Browse">Browse Events</a></li>
+                                        <li><a class="dropdown-item" asp-area="" asp-controller="EventGuide" asp-action="MySubmissions">My Submissions</a></li>
+                                        <li><a class="dropdown-item" asp-area="" asp-controller="EventGuide" asp-action="Schedule">My Schedule</a></li>
+                                        @if (User.IsInRole(Humans.Domain.Constants.RoleNames.GuideModerator) || User.IsInRole("Admin"))
+                                        {
+                                            <li><hr class="dropdown-divider" /></li>
+                                            <li><a class="dropdown-item" asp-area="" asp-controller="EventGuideDashboard" asp-action="Index">Guide Dashboard</a></li>
+                                            <li><a class="dropdown-item" asp-area="" asp-controller="Moderation" asp-action="Index">Moderate Events</a></li>
+                                        }
+                                    </ul>
                                 </li>
                             }
                             @if (isActiveMember || User.IsInRole(Humans.Domain.Constants.RoleNames.NoInfoAdmin) || User.IsInRole(Humans.Domain.Constants.RoleNames.VolunteerCoordinator))
@@ -94,15 +101,6 @@
                         {
                             <li class="nav-item">
                                 <a class="nav-link" asp-area="" asp-controller="Board" asp-action="Index">@Localizer["Nav_Board"]</a>
-                            </li>
-                        }
-                        @if (Configuration.GetValue<bool>("Features:EventGuide") && (User.IsInRole(Humans.Domain.Constants.RoleNames.GuideModerator) || User.IsInRole("Admin")))
-                        {
-                            <li class="nav-item">
-                                <a class="nav-link" asp-area="" asp-controller="EventGuideDashboard" asp-action="Index">Guide Dashboard</a>
-                            </li>
-                            <li class="nav-item">
-                                <a class="nav-link" asp-area="" asp-controller="Moderation" asp-action="Index">Moderate Events</a>
                             </li>
                         }
                         @if (User.IsInRole("Admin"))
