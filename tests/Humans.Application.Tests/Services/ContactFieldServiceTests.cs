@@ -5,11 +5,13 @@ using NodaTime.Testing;
 using NSubstitute;
 using Humans.Application.DTOs;
 using Humans.Application.Interfaces;
+using Humans.Application.Interfaces.Repositories;
 using Humans.Domain.Entities;
 using Humans.Domain.Enums;
 using Humans.Infrastructure.Data;
-using Humans.Infrastructure.Services;
+using Humans.Infrastructure.Repositories;
 using Xunit;
+using ContactFieldService = Humans.Application.Services.Profile.ContactFieldService;
 
 namespace Humans.Application.Tests.Services;
 
@@ -18,6 +20,7 @@ public class ContactFieldServiceTests : IDisposable
     private readonly HumansDbContext _dbContext;
     private readonly ITeamService _teamService;
     private readonly IRoleAssignmentService _roleAssignmentService;
+    private readonly IProfileRepository _profileRepository;
     private readonly FakeClock _clock;
     private readonly ContactFieldService _service;
 
@@ -31,7 +34,13 @@ public class ContactFieldServiceTests : IDisposable
         _teamService = Substitute.For<ITeamService>();
         _roleAssignmentService = Substitute.For<IRoleAssignmentService>();
         _clock = new FakeClock(Instant.FromUtc(2024, 1, 15, 12, 0, 0));
-        _service = new ContactFieldService(_dbContext, _teamService, _roleAssignmentService, _clock);
+
+        var factory = new Humans.Application.Tests.Infrastructure.TestDbContextFactory(options);
+        var repository = new ContactFieldRepository(factory);
+        _profileRepository = new ProfileRepository(factory, _clock);
+
+        _service = new ContactFieldService(
+            repository, _profileRepository, _teamService, _roleAssignmentService, _clock);
     }
 
     public void Dispose()
@@ -293,7 +302,8 @@ public class ContactFieldServiceTests : IDisposable
         await _service.SaveContactFieldsAsync(profile.Id, fields);
 
         // Assert
-        var savedField = await _dbContext.ContactFields.FindAsync(existingField.Id);
+        var savedField = await _dbContext.ContactFields.AsNoTracking()
+            .FirstOrDefaultAsync(cf => cf.Id == existingField.Id);
         savedField!.Value.Should().Be("+34 698765432");
         savedField.Visibility.Should().Be(ContactFieldVisibility.BoardOnly);
     }
@@ -384,6 +394,10 @@ public class ContactFieldServiceTests : IDisposable
         };
         _dbContext.Profiles.Add(profile);
         await _dbContext.SaveChangesAsync();
+
+        // No store to populate — GetVisibleContactFieldsAsync now resolves profileId → userId
+        // via IProfileRepository.GetOwnerUserIdAsync (scalar DB query).
+
         return profile;
     }
 

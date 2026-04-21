@@ -40,6 +40,21 @@ public interface ICampaignService
     Task RetryAllFailedAsync(Guid campaignId, CancellationToken ct = default);
 
     /// <summary>
+    /// Returns campaign grants for a user where the campaign is Active or Completed,
+    /// ordered by AssignedAt descending. Includes Campaign and Code navigations.
+    /// </summary>
+    Task<IReadOnlyList<CampaignGrant>> GetActiveOrCompletedGrantsForUserAsync(
+        Guid userId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Returns all campaign grants for a user (any campaign status),
+    /// ordered by AssignedAt descending. Includes Campaign and Code navigations.
+    /// Used for admin detail views.
+    /// </summary>
+    Task<IReadOnlyList<CampaignGrant>> GetAllGrantsForUserAsync(
+        Guid userId, CancellationToken ct = default);
+
+    /// <summary>
     /// Marks campaign grants as redeemed based on discovered discount-code redemptions.
     /// Matches codes case-insensitively against active/completed campaigns' unredeemed grants.
     /// When a code matches grants in multiple campaigns, the most recently created campaign wins.

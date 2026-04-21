@@ -1,19 +1,19 @@
-using Microsoft.EntityFrameworkCore;
 using NodaTime;
 using Humans.Application.DTOs;
 using Humans.Application.Interfaces;
+using Humans.Application.Interfaces.Repositories;
 using Humans.Domain.Entities;
 using Humans.Domain.Enums;
-using Humans.Infrastructure.Data;
 
-namespace Humans.Infrastructure.Services;
+namespace Humans.Application.Services.Profile;
 
 /// <summary>
 /// Service for managing contact fields with visibility controls.
 /// </summary>
-public class ContactFieldService : IContactFieldService
+public sealed class ContactFieldService : IContactFieldService
 {
-    private readonly HumansDbContext _dbContext;
+    private readonly IContactFieldRepository _repository;
+    private readonly IProfileRepository _profileRepository;
     private readonly ITeamService _teamService;
     private readonly IRoleAssignmentService _roleAssignmentService;
     private readonly IClock _clock;
@@ -24,12 +24,14 @@ public class ContactFieldService : IContactFieldService
     private HashSet<Guid>? _cachedViewerTeamIds;
 
     public ContactFieldService(
-        HumansDbContext dbContext,
+        IContactFieldRepository repository,
+        IProfileRepository profileRepository,
         ITeamService teamService,
         IRoleAssignmentService roleAssignmentService,
         IClock clock)
     {
-        _dbContext = dbContext;
+        _repository = repository;
+        _profileRepository = profileRepository;
         _teamService = teamService;
         _roleAssignmentService = roleAssignmentService;
         _clock = clock;
@@ -40,25 +42,17 @@ public class ContactFieldService : IContactFieldService
         Guid viewerUserId,
         CancellationToken cancellationToken = default)
     {
-        // Get the profile owner's user ID
-        var profile = await _dbContext.Profiles
-            .AsNoTracking()
-            .FirstOrDefaultAsync(p => p.Id == profileId, cancellationToken);
-
-        if (profile is null)
-        {
+        // Resolve profileId → ownerUserId via a scalar repo query
+        var ownerUserId = await _profileRepository.GetOwnerUserIdAsync(profileId, cancellationToken);
+        if (ownerUserId is null)
             return [];
-        }
 
-        var accessLevel = await GetViewerAccessLevelAsync(profile.UserId, viewerUserId, cancellationToken);
+        var accessLevel = await GetViewerAccessLevelAsync(
+            ownerUserId.Value, viewerUserId, cancellationToken);
         var allowedVisibilities = GetAllowedVisibilities(accessLevel);
 
-        var fields = await _dbContext.ContactFields
-            .AsNoTracking()
-            .Where(cf => cf.ProfileId == profileId && allowedVisibilities.Contains(cf.Visibility))
-            .OrderBy(cf => cf.DisplayOrder)
-            .ThenBy(cf => cf.CreatedAt)
-            .ToListAsync(cancellationToken);
+        var fields = await _repository.GetVisibleByProfileIdAsync(
+            profileId, allowedVisibilities, cancellationToken);
 
         return fields.Select(cf => new ContactFieldDto(
             cf.Id,
@@ -73,12 +67,7 @@ public class ContactFieldService : IContactFieldService
         Guid profileId,
         CancellationToken cancellationToken = default)
     {
-        var fields = await _dbContext.ContactFields
-            .AsNoTracking()
-            .Where(cf => cf.ProfileId == profileId)
-            .OrderBy(cf => cf.DisplayOrder)
-            .ThenBy(cf => cf.CreatedAt)
-            .ToListAsync(cancellationToken);
+        var fields = await _repository.GetByProfileIdReadOnlyAsync(profileId, cancellationToken);
 
         return fields.Select(cf => new ContactFieldEditDto(
             cf.Id,
@@ -97,35 +86,37 @@ public class ContactFieldService : IContactFieldService
     {
         var now = _clock.GetCurrentInstant();
 
-        // Get existing fields
-        var existingFields = await _dbContext.ContactFields
-            .Where(cf => cf.ProfileId == profileId)
-            .ToListAsync(cancellationToken);
+        // Load existing fields. With IDbContextFactory the repo context is
+        // short-lived, so entities are detached after the call — mutations must
+        // be passed explicitly to BatchSaveAsync rather than relying on tracking.
+        var existingFields = await _repository.GetByProfileIdForMutationAsync(profileId, cancellationToken);
 
         var existingById = existingFields.ToDictionary(cf => cf.Id);
         var incomingIds = fields.Where(f => f.Id.HasValue).Select(f => f.Id!.Value).ToHashSet();
 
-        // Delete fields that are no longer present
+        // Delete fields no longer present
         var toDelete = existingFields.Where(cf => !incomingIds.Contains(cf.Id)).ToList();
-        _dbContext.ContactFields.RemoveRange(toDelete);
 
-        // Update or create fields
+        // Add new fields; collect mutated existing fields as toUpdate
+        var toAdd = new List<ContactField>();
+        var toUpdate = new List<ContactField>();
+
         foreach (var dto in fields)
         {
             if (dto.Id.HasValue && existingById.TryGetValue(dto.Id.Value, out var existing))
             {
-                // Update existing
+                // Mutate the detached entity and add to toUpdate
                 existing.FieldType = dto.FieldType;
                 existing.CustomLabel = dto.CustomLabel;
                 existing.Value = dto.Value;
                 existing.Visibility = dto.Visibility;
                 existing.DisplayOrder = dto.DisplayOrder;
                 existing.UpdatedAt = now;
+                toUpdate.Add(existing);
             }
             else
             {
-                // Create new
-                var newField = new ContactField
+                toAdd.Add(new ContactField
                 {
                     Id = Guid.NewGuid(),
                     ProfileId = profileId,
@@ -136,46 +127,28 @@ public class ContactFieldService : IContactFieldService
                     DisplayOrder = dto.DisplayOrder,
                     CreatedAt = now,
                     UpdatedAt = now
-                };
-                _dbContext.ContactFields.Add(newField);
+                });
             }
         }
 
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        await _repository.BatchSaveAsync(toAdd, toUpdate, toDelete, cancellationToken);
     }
-
-    /// <summary>
-    /// Returns the set of visibility levels a viewer with the given access level can see.
-    /// Visibility is stored as string in DB, so >= comparison doesn't work correctly.
-    /// </summary>
-    private static List<ContactFieldVisibility> GetAllowedVisibilities(ContactFieldVisibility accessLevel) =>
-        accessLevel switch
-        {
-            ContactFieldVisibility.BoardOnly => [ContactFieldVisibility.BoardOnly, ContactFieldVisibility.CoordinatorsAndBoard, ContactFieldVisibility.MyTeams, ContactFieldVisibility.AllActiveProfiles],
-            ContactFieldVisibility.CoordinatorsAndBoard => [ContactFieldVisibility.CoordinatorsAndBoard, ContactFieldVisibility.MyTeams, ContactFieldVisibility.AllActiveProfiles],
-            ContactFieldVisibility.MyTeams => [ContactFieldVisibility.MyTeams, ContactFieldVisibility.AllActiveProfiles],
-            _ => [ContactFieldVisibility.AllActiveProfiles]
-        };
 
     public async Task<ContactFieldVisibility> GetViewerAccessLevelAsync(
         Guid ownerUserId,
         Guid viewerUserId,
         CancellationToken cancellationToken = default)
     {
-        // Self viewing - can see everything (return most permissive access level)
+        // Self viewing - can see everything
         if (ownerUserId == viewerUserId)
-        {
             return ContactFieldVisibility.BoardOnly;
-        }
 
         // Board member - can see everything
         _cachedIsBoardMember ??= await _roleAssignmentService.IsUserBoardMemberAsync(viewerUserId, cancellationToken);
         if (_cachedIsBoardMember.Value)
-        {
             return ContactFieldVisibility.BoardOnly;
-        }
 
-        // Check if viewer is a lead of any team
+        // Check if viewer is a coordinator of any team
         if (_cachedViewerTeamIds is null)
         {
             var viewerTeams = await _teamService.GetUserTeamsAsync(viewerUserId, cancellationToken);
@@ -187,24 +160,42 @@ public class ContactFieldService : IContactFieldService
         }
 
         if (_cachedIsAnyCoordinator!.Value)
-        {
             return ContactFieldVisibility.CoordinatorsAndBoard;
-        }
 
-        // Check if viewer shares any team with owner (excluding Volunteers since everyone is in it)
+        // Check if viewer shares any team with owner (excluding Volunteers)
         var ownerTeams = await _teamService.GetUserTeamsAsync(ownerUserId, cancellationToken);
         var ownerTeamIds = ownerTeams
             .Where(tm => tm.Team.SystemTeamType != SystemTeamType.Volunteers)
             .Select(tm => tm.TeamId)
             .ToHashSet();
 
-        var sharesTeam = _cachedViewerTeamIds.Intersect(ownerTeamIds).Any();
-        if (sharesTeam)
-        {
+        if (_cachedViewerTeamIds.Intersect(ownerTeamIds).Any())
             return ContactFieldVisibility.MyTeams;
-        }
 
-        // Default: can only see AllActiveProfiles visibility
         return ContactFieldVisibility.AllActiveProfiles;
     }
+
+    private static List<ContactFieldVisibility> GetAllowedVisibilities(ContactFieldVisibility accessLevel) =>
+        accessLevel switch
+        {
+            ContactFieldVisibility.BoardOnly =>
+            [
+                ContactFieldVisibility.BoardOnly,
+                ContactFieldVisibility.CoordinatorsAndBoard,
+                ContactFieldVisibility.MyTeams,
+                ContactFieldVisibility.AllActiveProfiles
+            ],
+            ContactFieldVisibility.CoordinatorsAndBoard =>
+            [
+                ContactFieldVisibility.CoordinatorsAndBoard,
+                ContactFieldVisibility.MyTeams,
+                ContactFieldVisibility.AllActiveProfiles
+            ],
+            ContactFieldVisibility.MyTeams =>
+            [
+                ContactFieldVisibility.MyTeams,
+                ContactFieldVisibility.AllActiveProfiles
+            ],
+            _ => [ContactFieldVisibility.AllActiveProfiles]
+        };
 }
