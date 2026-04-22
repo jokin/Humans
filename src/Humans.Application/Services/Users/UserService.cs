@@ -71,6 +71,10 @@ public sealed class UserService : IUserService, IUserDataContributor
         Instant fromInclusive, Instant toExclusive, CancellationToken ct = default) =>
         _repo.GetLoginTimestampsInWindowAsync(fromInclusive, toExclusive, ct);
 
+    public Task<Guid?> GetOtherUserIdHavingGoogleEmailAsync(
+        string email, Guid excludeUserId, CancellationToken ct = default) =>
+        _repo.GetOtherUserIdHavingGoogleEmailAsync(email, excludeUserId, ct);
+
     // ==========================================================================
     // User writes
     // ==========================================================================
@@ -78,6 +82,14 @@ public sealed class UserService : IUserService, IUserDataContributor
     public async Task<bool> TrySetGoogleEmailAsync(Guid userId, string email, CancellationToken ct = default)
     {
         var set = await _repo.TrySetGoogleEmailAsync(userId, email, ct);
+        if (set)
+            await _fullProfileInvalidator.InvalidateAsync(userId, ct);
+        return set;
+    }
+
+    public async Task<bool> SetGoogleEmailAsync(Guid userId, string email, CancellationToken ct = default)
+    {
+        var set = await _repo.SetGoogleEmailAsync(userId, email, ct);
         if (set)
             await _fullProfileInvalidator.InvalidateAsync(userId, ct);
         return set;

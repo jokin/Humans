@@ -145,6 +145,19 @@ public sealed class UserRepository : IUserRepository
             .ToListAsync(ct);
     }
 
+    public async Task<Guid?> GetOtherUserIdHavingGoogleEmailAsync(
+        string email, Guid excludeUserId, CancellationToken ct = default)
+    {
+        await using var ctx = await _factory.CreateDbContextAsync(ct);
+        return await ctx.Users
+            .AsNoTracking()
+            .Where(u => u.GoogleEmail != null
+                        && EF.Functions.ILike(u.GoogleEmail, email)
+                        && u.Id != excludeUserId)
+            .Select(u => (Guid?)u.Id)
+            .FirstOrDefaultAsync(ct);
+    }
+
     // ==========================================================================
     // Writes — User (atomic field updates)
     // ==========================================================================
@@ -168,6 +181,19 @@ public sealed class UserRepository : IUserRepository
         await using var ctx = await _factory.CreateDbContextAsync(ct);
         var user = await ctx.Users.FindAsync([userId], ct);
         if (user is null || user.GoogleEmail is not null)
+            return false;
+
+        user.GoogleEmail = email;
+        await ctx.SaveChangesAsync(ct);
+        return true;
+    }
+
+    public async Task<bool> SetGoogleEmailAsync(
+        Guid userId, string email, CancellationToken ct = default)
+    {
+        await using var ctx = await _factory.CreateDbContextAsync(ct);
+        var user = await ctx.Users.FindAsync([userId], ct);
+        if (user is null)
             return false;
 
         user.GoogleEmail = email;
