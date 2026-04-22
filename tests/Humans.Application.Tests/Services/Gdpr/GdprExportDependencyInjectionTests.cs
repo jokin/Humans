@@ -13,6 +13,7 @@ using CampaignService = Humans.Application.Services.Campaigns.CampaignService;
 using ProfilesProfileService = Humans.Application.Services.Profile.ProfileService;
 using UsersUserService = Humans.Application.Services.Users.UserService;
 using AuditLogService = Humans.Application.Services.AuditLog.AuditLogService;
+using CampService = Humans.Application.Services.Camps.CampService;
 
 namespace Humans.Application.Tests.Services.Gdpr;
 

@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging;
 using NodaTime;
 using Humans.Application;
 using Humans.Application.Extensions;
+using Humans.Application.Helpers;
 using Humans.Application.Interfaces;
 using Humans.Application.Interfaces.Gdpr;
 using Humans.Domain.Constants;
@@ -73,7 +74,7 @@ public class TeamService : ITeamService, IUserDataContributor
         bool isHidden = false,
         CancellationToken cancellationToken = default)
     {
-        var baseSlug = Helpers.SlugHelper.GenerateSlug(name);
+        var baseSlug = SlugHelper.GenerateSlug(name);
         var now = _clock.GetCurrentInstant();
 
         // Block reserved slugs (static routes in TeamController)
@@ -568,7 +569,7 @@ public class TeamService : ITeamService, IUserDataContributor
         // Validate custom slug if provided
         if (!string.IsNullOrWhiteSpace(customSlug))
         {
-            var normalized = Helpers.SlugHelper.GenerateSlug(customSlug);
+            var normalized = SlugHelper.GenerateSlug(customSlug);
             if (string.IsNullOrEmpty(normalized))
                 throw new InvalidOperationException("Custom slug is not valid. Use lowercase letters, numbers, and hyphens.");
 
@@ -599,7 +600,7 @@ public class TeamService : ITeamService, IUserDataContributor
         // Regenerate slug if name changed
         if (!string.Equals(team.Name, name, StringComparison.Ordinal))
         {
-            var newSlug = Helpers.SlugHelper.GenerateSlug(name);
+            var newSlug = SlugHelper.GenerateSlug(name);
             // Check slug isn't taken by another team (also check custom slugs)
             var slugTaken = await _dbContext.Teams.AnyAsync(
                 t => t.Id != teamId && (t.Slug == newSlug || t.CustomSlug == newSlug), cancellationToken);
@@ -687,12 +688,13 @@ public class TeamService : ITeamService, IUserDataContributor
         team.PageContentUpdatedByUserId = updatedByUserId;
         team.UpdatedAt = now;
 
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
         await _auditLogService.LogAsync(
             AuditAction.TeamPageContentUpdated, nameof(Team), teamId,
             $"Team page content updated. Public: {isPublicPage}",
             updatedByUserId);
 
-        await _dbContext.SaveChangesAsync(cancellationToken);
         TryUpdateCachedTeam(teamId, cachedTeam => cachedTeam with { IsPublicPage = isPublicPage });
     }
 
@@ -846,11 +848,6 @@ public class TeamService : ITeamService, IUserDataContributor
 
         _dbContext.TeamMembers.Add(member);
 
-        await _auditLogService.LogAsync(
-            AuditAction.TeamJoinedDirectly, nameof(Team), teamId,
-            $"Joined {team.Name} directly",
-            userId,
-            relatedEntityId: userId, relatedEntityType: nameof(User));
         EnqueueGoogleSyncOutboxEvent(
             member.Id,
             teamId,
@@ -872,6 +869,12 @@ public class TeamService : ITeamService, IUserDataContributor
 
             throw;
         }
+
+        await _auditLogService.LogAsync(
+            AuditAction.TeamJoinedDirectly, nameof(Team), teamId,
+            $"Joined {team.Name} directly",
+            userId,
+            relatedEntityId: userId, relatedEntityType: nameof(User));
 
         // Update cache
         var joinedUser = await _dbContext.Users.FindAsync([userId], cancellationToken);
@@ -923,11 +926,6 @@ public class TeamService : ITeamService, IUserDataContributor
 
         member.LeftAt = _clock.GetCurrentInstant();
 
-        await _auditLogService.LogAsync(
-            AuditAction.TeamLeft, nameof(Team), teamId,
-            $"Left {team.Name}",
-            userId,
-            relatedEntityId: userId, relatedEntityType: nameof(User));
         EnqueueGoogleSyncOutboxEvent(
             member.Id,
             teamId,
@@ -935,6 +933,13 @@ public class TeamService : ITeamService, IUserDataContributor
             GoogleSyncOutboxEventTypes.RemoveUserFromTeamResources);
 
         await _dbContext.SaveChangesAsync(cancellationToken);
+
+        await _auditLogService.LogAsync(
+            AuditAction.TeamLeft, nameof(Team), teamId,
+            $"Left {team.Name}",
+            userId,
+            relatedEntityId: userId, relatedEntityType: nameof(User));
+
         RemoveMemberFromTeamCache(teamId, userId);
         InvalidateShiftAuthorizationIfNeeded(userId, roleAssignments);
 
@@ -990,11 +995,6 @@ public class TeamService : ITeamService, IUserDataContributor
 
         _dbContext.TeamMembers.Add(member);
 
-        await _auditLogService.LogAsync(
-            AuditAction.TeamJoinRequestApproved, nameof(Team), request.TeamId,
-            $"Join request for {request.Team.Name} approved",
-            approverUserId,
-            relatedEntityId: request.UserId, relatedEntityType: nameof(User));
         EnqueueGoogleSyncOutboxEvent(
             member.Id,
             request.TeamId,
@@ -1017,6 +1017,12 @@ public class TeamService : ITeamService, IUserDataContributor
 
             throw;
         }
+
+        await _auditLogService.LogAsync(
+            AuditAction.TeamJoinRequestApproved, nameof(Team), request.TeamId,
+            $"Join request for {request.Team.Name} approved",
+            approverUserId,
+            relatedEntityId: request.UserId, relatedEntityType: nameof(User));
 
         // Update cache
         _cache.InvalidateNotificationMeters();
@@ -1052,13 +1058,14 @@ public class TeamService : ITeamService, IUserDataContributor
 
         request.Reject(approverUserId, reason, _clock);
 
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
         await _auditLogService.LogAsync(
             AuditAction.TeamJoinRequestRejected, nameof(Team), request.TeamId,
             $"Join request for team rejected: {reason}",
             approverUserId,
             relatedEntityId: request.UserId, relatedEntityType: nameof(User));
 
-        await _dbContext.SaveChangesAsync(cancellationToken);
         _cache.InvalidateNotificationMeters();
     }
 
@@ -1262,11 +1269,6 @@ public class TeamService : ITeamService, IUserDataContributor
 
         member.LeftAt = _clock.GetCurrentInstant();
 
-        await _auditLogService.LogAsync(
-            AuditAction.TeamMemberRemoved, nameof(Team), teamId,
-            $"Member removed from {team.Name}",
-            actorUserId,
-            relatedEntityId: userId, relatedEntityType: nameof(User));
         EnqueueGoogleSyncOutboxEvent(
             member.Id,
             teamId,
@@ -1274,6 +1276,13 @@ public class TeamService : ITeamService, IUserDataContributor
             GoogleSyncOutboxEventTypes.RemoveUserFromTeamResources);
 
         await _dbContext.SaveChangesAsync(cancellationToken);
+
+        await _auditLogService.LogAsync(
+            AuditAction.TeamMemberRemoved, nameof(Team), teamId,
+            $"Member removed from {team.Name}",
+            actorUserId,
+            relatedEntityId: userId, relatedEntityType: nameof(User));
+
         RemoveMemberFromTeamCache(teamId, userId);
         InvalidateShiftAuthorizationIfNeeded(userId, roleAssignments);
 
@@ -1341,11 +1350,6 @@ public class TeamService : ITeamService, IUserDataContributor
 
         _dbContext.TeamMembers.Add(member);
 
-        await _auditLogService.LogAsync(
-            AuditAction.TeamMemberAdded, nameof(Team), teamId,
-            $"Member added to {team.Name}",
-            actorUserId,
-            relatedEntityId: targetUserId, relatedEntityType: nameof(User));
         EnqueueGoogleSyncOutboxEvent(
             member.Id,
             teamId,
@@ -1367,6 +1371,12 @@ public class TeamService : ITeamService, IUserDataContributor
 
             throw;
         }
+
+        await _auditLogService.LogAsync(
+            AuditAction.TeamMemberAdded, nameof(Team), teamId,
+            $"Member added to {team.Name}",
+            actorUserId,
+            relatedEntityId: targetUserId, relatedEntityType: nameof(User));
 
         // Update cache
         var addedUser = await _dbContext.Users.FindAsync([targetUserId], cancellationToken);
@@ -1461,13 +1471,13 @@ public class TeamService : ITeamService, IUserDataContributor
 
         _dbContext.Set<TeamRoleDefinition>().Add(definition);
 
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
         await _auditLogService.LogAsync(
             AuditAction.TeamRoleDefinitionCreated, nameof(TeamRoleDefinition), definition.Id,
             $"Role definition '{name}' created for team {team.Name}",
             actorUserId,
             relatedEntityId: teamId, relatedEntityType: nameof(Team));
-
-        await _dbContext.SaveChangesAsync(cancellationToken);
 
         return definition;
     }
@@ -1584,13 +1594,13 @@ public class TeamService : ITeamService, IUserDataContributor
         definition.Period = period;
         definition.UpdatedAt = _clock.GetCurrentInstant();
 
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
         await _auditLogService.LogAsync(
             AuditAction.TeamRoleDefinitionUpdated, nameof(TeamRoleDefinition), definition.Id,
             $"Role definition '{name}' updated for team {definition.Team.Name}",
             actorUserId,
             relatedEntityId: definition.TeamId, relatedEntityType: nameof(Team));
-
-        await _dbContext.SaveChangesAsync(cancellationToken);
 
         if (invalidatedActiveTeams)
         {
@@ -1624,15 +1634,15 @@ public class TeamService : ITeamService, IUserDataContributor
             throw new InvalidOperationException("User does not have permission to manage role definitions for this team");
         }
 
+        _dbContext.Set<TeamRoleDefinition>().Remove(definition);
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
         await _auditLogService.LogAsync(
             AuditAction.TeamRoleDefinitionDeleted, nameof(TeamRoleDefinition), definition.Id,
             $"Role definition '{definition.Name}' deleted from team {definition.Team.Name}",
             actorUserId,
             relatedEntityId: definition.TeamId, relatedEntityType: nameof(Team));
-
-        _dbContext.Set<TeamRoleDefinition>().Remove(definition);
-
-        await _dbContext.SaveChangesAsync(cancellationToken);
     }
 
     public async Task SetRoleIsManagementAsync(
@@ -1704,13 +1714,13 @@ public class TeamService : ITeamService, IUserDataContributor
         definition.IsManagement = isManagement;
         definition.UpdatedAt = _clock.GetCurrentInstant();
 
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
         await _auditLogService.LogAsync(
             AuditAction.TeamRoleDefinitionUpdated, nameof(TeamRoleDefinition), definition.Id,
             $"IsManagement set to {isManagement} on role '{definition.Name}' in {definition.Team.Name}",
             actorUserId,
             relatedEntityId: definition.TeamId, relatedEntityType: nameof(Team));
-
-        await _dbContext.SaveChangesAsync(cancellationToken);
 
         if (demotedMembers)
         {
@@ -1842,6 +1852,7 @@ public class TeamService : ITeamService, IUserDataContributor
         var teamMember = await _dbContext.TeamMembers
             .FirstOrDefaultAsync(tm => tm.TeamId == definition.TeamId && tm.UserId == targetUserId && tm.LeftAt == null, cancellationToken);
 
+        var autoAddedToTeam = false;
         if (teamMember is null)
         {
             // Auto-add to team (inlined to keep everything in one SaveChangesAsync)
@@ -1854,6 +1865,7 @@ public class TeamService : ITeamService, IUserDataContributor
                 JoinedAt = _clock.GetCurrentInstant()
             };
             _dbContext.TeamMembers.Add(teamMember);
+            autoAddedToTeam = true;
 
             // Resolve any pending join request
             var pendingRequest = await _dbContext.TeamJoinRequests
@@ -1868,12 +1880,6 @@ public class TeamService : ITeamService, IUserDataContributor
             EnqueueGoogleSyncOutboxEvent(
                 teamMember.Id, definition.TeamId, targetUserId,
                 GoogleSyncOutboxEventTypes.AddUserToTeamResources);
-
-            await _auditLogService.LogAsync(
-                AuditAction.TeamMemberAdded, nameof(Team), definition.TeamId,
-                $"Auto-added to {definition.Team.Name} via role assignment",
-                actorUserId,
-                relatedEntityId: targetUserId, relatedEntityType: nameof(User));
         }
 
         // Check if already assigned to this role
@@ -1911,13 +1917,23 @@ public class TeamService : ITeamService, IUserDataContributor
             teamMember.Role = TeamMemberRole.Coordinator;
         }
 
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        if (autoAddedToTeam)
+        {
+            await _auditLogService.LogAsync(
+                AuditAction.TeamMemberAdded, nameof(Team), definition.TeamId,
+                $"Auto-added to {definition.Team.Name} via role assignment",
+                actorUserId,
+                relatedEntityId: targetUserId, relatedEntityType: nameof(User));
+        }
+
         await _auditLogService.LogAsync(
             AuditAction.TeamRoleAssigned, nameof(TeamRoleDefinition), roleDefinitionId,
             $"Assigned to role '{definition.Name}' in {definition.Team.Name}",
             actorUserId,
             relatedEntityId: targetUserId, relatedEntityType: nameof(User));
 
-        await _dbContext.SaveChangesAsync(cancellationToken);
         InvalidateShiftAuthorizationIfNeeded(definition, targetUserId);
 
         // Update cache: if auto-added to team, add member; if promoted to Lead, update role
@@ -1962,12 +1978,6 @@ public class TeamService : ITeamService, IUserDataContributor
             throw new InvalidOperationException("User does not have permission to manage role assignments for this team");
         }
 
-        await _auditLogService.LogAsync(
-            AuditAction.TeamRoleUnassigned, nameof(TeamRoleDefinition), roleDefinitionId,
-            $"Unassigned from role '{definition.Name}' in {definition.Team.Name}",
-            actorUserId,
-            relatedEntityId: assignment.TeamMember.UserId, relatedEntityType: nameof(User));
-
         _dbContext.Set<TeamRoleAssignment>().Remove(assignment);
 
         // If this is a management role, check if member has remaining management assignments
@@ -1986,6 +1996,13 @@ public class TeamService : ITeamService, IUserDataContributor
         }
 
         await _dbContext.SaveChangesAsync(cancellationToken);
+
+        await _auditLogService.LogAsync(
+            AuditAction.TeamRoleUnassigned, nameof(TeamRoleDefinition), roleDefinitionId,
+            $"Unassigned from role '{definition.Name}' in {definition.Team.Name}",
+            actorUserId,
+            relatedEntityId: assignment.TeamMember.UserId, relatedEntityType: nameof(User));
+
         InvalidateShiftAuthorizationIfNeeded(definition, assignment.TeamMember.UserId);
 
         // Update cache if role changed (Coordinator → Member demotion)

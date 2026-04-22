@@ -195,12 +195,13 @@ public class GoogleAdminService : IGoogleAdminService
             await _workspaceUserService.ProvisionAccountAsync(
                 fullEmail, firstName.Trim(), lastName.Trim(), tempPassword, ct: ct);
 
+            await _dbContext.SaveChangesAsync(ct);
+
             await _auditLogService.LogAsync(
                 AuditAction.WorkspaceAccountProvisioned,
                 "WorkspaceAccount", Guid.Empty,
                 $"Provisioned @{NobodiesTeamDomain} account: {fullEmail}",
                 actorUserId);
-            await _dbContext.SaveChangesAsync(ct);
 
             return new WorkspaceAccountActionResult(true,
                 Message: $"Account {fullEmail} provisioned. Temporary password: {tempPassword}",
@@ -222,12 +223,13 @@ public class GoogleAdminService : IGoogleAdminService
         {
             await _workspaceUserService.SuspendAccountAsync(email, ct);
 
+            await _dbContext.SaveChangesAsync(ct);
+
             await _auditLogService.LogAsync(
                 AuditAction.WorkspaceAccountSuspended,
                 "WorkspaceAccount", Guid.Empty,
                 $"Suspended @{NobodiesTeamDomain} account: {email}",
                 actorUserId);
-            await _dbContext.SaveChangesAsync(ct);
 
             return new WorkspaceAccountActionResult(true,
                 Message: $"Account {email} suspended.");
@@ -248,12 +250,13 @@ public class GoogleAdminService : IGoogleAdminService
         {
             await _workspaceUserService.ReactivateAccountAsync(email, ct);
 
+            await _dbContext.SaveChangesAsync(ct);
+
             await _auditLogService.LogAsync(
                 AuditAction.WorkspaceAccountReactivated,
                 "WorkspaceAccount", Guid.Empty,
                 $"Reactivated @{NobodiesTeamDomain} account: {email}",
                 actorUserId);
-            await _dbContext.SaveChangesAsync(ct);
 
             return new WorkspaceAccountActionResult(true,
                 Message: $"Account {email} reactivated.");
@@ -275,12 +278,13 @@ public class GoogleAdminService : IGoogleAdminService
             var newPassword = PasswordGenerator.GenerateTemporary();
             await _workspaceUserService.ResetPasswordAsync(email, newPassword, ct);
 
+            await _dbContext.SaveChangesAsync(ct);
+
             await _auditLogService.LogAsync(
                 AuditAction.WorkspaceAccountPasswordReset,
                 "WorkspaceAccount", Guid.Empty,
                 $"Reset password for @{NobodiesTeamDomain} account: {email}",
                 actorUserId);
-            await _dbContext.SaveChangesAsync(ct);
 
             return new WorkspaceAccountActionResult(true,
                 Message: $"Password reset for {email}. New temporary password: {newPassword}",
@@ -354,13 +358,15 @@ public class GoogleAdminService : IGoogleAdminService
                     memberships.Count, userId);
             }
 
-            // Audit
+            await _dbContext.SaveChangesAsync(ct);
+
+            // Audit AFTER every SaveChangesAsync in this method — a failing trailing
+            // save would otherwise leave a phantom "linked" audit row.
             await _auditLogService.LogAsync(
                 AuditAction.WorkspaceAccountLinked,
                 "WorkspaceAccount", userId,
                 $"Linked @{NobodiesTeamDomain} account {email}",
                 actorUserId);
-            await _dbContext.SaveChangesAsync(ct);
 
             return new WorkspaceAccountActionResult(true,
                 Message: $"Linked {email} to {user.DisplayName}.");
@@ -612,13 +618,13 @@ public class GoogleAdminService : IGoogleAdminService
                 "Admin {AdminId} fixing email rename for user {UserId}: '{OldEmail}' -> '{NewEmail}'",
                 actorUserId, userId, oldEmail, newEmail);
 
+            await _dbContext.SaveChangesAsync(ct);
+
             await _auditLogService.LogAsync(
                 AuditAction.GoogleEmailRenamed,
                 "User", userId,
                 $"Fixed email rename: {oldEmail} -> {newEmail}",
                 actorUserId);
-
-            await _dbContext.SaveChangesAsync(ct);
 
             return new EmailRenameFixResult(true,
                 Message: $"Updated email for {user.DisplayName}: {oldEmail} -> {newEmail}");

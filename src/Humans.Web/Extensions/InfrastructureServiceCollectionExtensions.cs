@@ -24,6 +24,7 @@ using ProfilesContactService = Humans.Application.Services.Profile.ContactServic
 using UsersUserService = Humans.Application.Services.Users.UserService;
 using CityPlanningCityPlanningService = Humans.Application.Services.CityPlanning.CityPlanningService;
 using AuditLogAuditLogService = Humans.Application.Services.AuditLog.AuditLogService;
+using CampsCampService = Humans.Application.Services.Camps.CampService;
 
 namespace Humans.Web.Extensions;
 
@@ -115,9 +116,12 @@ public static class InfrastructureServiceCollectionExtensions
 
         services.AddScoped<ITeamPageService, TeamPageService>();
 
-        services.AddScoped<CampService>();
-        services.AddScoped<ICampService>(sp => sp.GetRequiredService<CampService>());
-        services.AddScoped<IUserDataContributor>(sp => sp.GetRequiredService<CampService>());
+        // Camps section — §15 repository pattern (issue #542).
+        services.AddSingleton<ICampRepository, CampRepository>();
+        services.AddSingleton<ICampImageStorage, CampImageStorage>();
+        services.AddScoped<CampsCampService>();
+        services.AddScoped<ICampService>(sp => sp.GetRequiredService<CampsCampService>());
+        services.AddScoped<IUserDataContributor>(sp => sp.GetRequiredService<CampsCampService>());
 
         // City Planning section — repository + Application-layer service (§15 migration, PR #543).
         // Small admin-facing section, no caching decorator warranted. Cross-section reads

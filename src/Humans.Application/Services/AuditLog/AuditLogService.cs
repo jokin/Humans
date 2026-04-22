@@ -26,6 +26,13 @@ namespace Humans.Application.Services.AuditLog;
 /// (Profile, User, Governance, Budget, City Planning) write.
 /// </para>
 /// <para>
+/// Audit is <b>best-effort</b> per design-rules §7a: repository save failures
+/// are logged at error level and swallowed so an audit hiccup never breaks
+/// the business operation that invoked it. Callers are still required to
+/// invoke audit <em>after</em> the business save has succeeded so a business
+/// rollback never leaves a ghost audit row.
+/// </para>
+/// <para>
 /// Implements <see cref="IUserDataContributor"/> so the GDPR export
 /// orchestrator can assemble per-user audit slices without crossing the
 /// section boundary.
@@ -69,7 +76,7 @@ public sealed class AuditLogService : IAuditLogService, IUserDataContributor
             RelatedEntityType = relatedEntityType
         };
 
-        await _repo.AddAsync(entry);
+        await PersistAsync(entry);
 
         _logger.LogInformation("Audit: {Action} on {EntityType} {EntityId} by {Actor} — {Description}",
             action, entityType, entityId, jobName, description);
@@ -93,7 +100,7 @@ public sealed class AuditLogService : IAuditLogService, IUserDataContributor
             RelatedEntityType = relatedEntityType
         };
 
-        await _repo.AddAsync(entry);
+        await PersistAsync(entry);
 
         _logger.LogInformation("Audit: {Action} on {EntityType} {EntityId} by user {ActorUserId} — {Description}",
             action, entityType, entityId, actorUserId, description);
@@ -125,11 +132,27 @@ public sealed class AuditLogService : IAuditLogService, IUserDataContributor
             UserEmail = userEmail
         };
 
-        await _repo.AddAsync(entry);
+        await PersistAsync(entry);
 
         _logger.LogInformation(
             "Audit: {Action} {Role} for {Email} on resource {ResourceId} ({Source}, Success={Success})",
             action, role, userEmail, resourceId, source, success);
+    }
+
+    private async Task PersistAsync(AuditLogEntry entry)
+    {
+        try
+        {
+            await _repo.AddAsync(entry);
+        }
+        catch (Exception ex)
+        {
+            // Audit is best-effort. A save failure must not propagate into the
+            // business operation that invoked it — log loudly and move on.
+            _logger.LogError(ex,
+                "Failed to persist audit entry {EntryId} ({Action} on {EntityType} {EntityId})",
+                entry.Id, entry.Action, entry.EntityType, entry.EntityId);
+        }
     }
 
     // ==========================================================================

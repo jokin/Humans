@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using NodaTime;
 using Humans.Application.Extensions;
 using Humans.Application.Interfaces;
+using Humans.Application.Interfaces.Repositories;
 using Humans.Domain.Constants;
 using Humans.Domain.Entities;
 using Humans.Domain.Enums;
@@ -18,6 +19,7 @@ namespace Humans.Infrastructure.Jobs;
 public class SystemTeamSyncJob : ISystemTeamSync
 {
     private readonly HumansDbContext _dbContext;
+    private readonly ICampRepository _campRepository;
     private readonly IMembershipCalculator _membershipCalculator;
     private readonly IGoogleSyncService _googleSyncService;
     private readonly IAuditLogService _auditLogService;
@@ -29,6 +31,7 @@ public class SystemTeamSyncJob : ISystemTeamSync
 
     public SystemTeamSyncJob(
         HumansDbContext dbContext,
+        ICampRepository campRepository,
         IMembershipCalculator membershipCalculator,
         IGoogleSyncService googleSyncService,
         IAuditLogService auditLogService,
@@ -39,6 +42,7 @@ public class SystemTeamSyncJob : ISystemTeamSync
         IClock clock)
     {
         _dbContext = dbContext;
+        _campRepository = campRepository;
         _membershipCalculator = membershipCalculator;
         _googleSyncService = googleSyncService;
         _auditLogService = auditLogService;
@@ -340,6 +344,7 @@ public class SystemTeamSyncJob : ISystemTeamSync
                 .ToDictionaryAsync(u => u.Id, cancellationToken)
             : new Dictionary<Guid, User>();
 
+        var downgradeAudits = new List<(Guid UserId, MembershipTier NewTier, string DisplayName)>();
         foreach (var profile in toDowngrade)
         {
             var newTier = otherTierByUser.TryGetValue(profile.UserId, out var otherTier)
@@ -350,16 +355,21 @@ public class SystemTeamSyncJob : ISystemTeamSync
 
             var displayName = downgradeUsersById.TryGetValue(profile.UserId, out var u)
                 ? u.DisplayName : "Unknown";
-            await _auditLogService.LogAsync(
-                AuditAction.TierDowngraded, nameof(Profile), profile.UserId,
-                $"Membership tier changed to {newTier} for {displayName} due to {tier} term expiry",
-                nameof(SystemTeamSyncJob),
-                relatedEntityId: profile.UserId, relatedEntityType: nameof(User));
+            downgradeAudits.Add((profile.UserId, newTier, displayName));
         }
 
         if (toDowngrade.Count > 0)
         {
             await _dbContext.SaveChangesAsync(cancellationToken);
+
+            foreach (var (auditUserId, newTier, displayName) in downgradeAudits)
+            {
+                await _auditLogService.LogAsync(
+                    AuditAction.TierDowngraded, nameof(Profile), auditUserId,
+                    $"Membership tier changed to {newTier} for {displayName} due to {tier} term expiry",
+                    nameof(SystemTeamSyncJob),
+                    relatedEntityId: auditUserId, relatedEntityType: nameof(User));
+            }
         }
 
         await SyncTeamMembershipAsync(team, eligibleUserIds, cancellationToken, step: step);
@@ -482,12 +492,8 @@ public class SystemTeamSyncJob : ISystemTeamSync
             return;
         }
 
-        var eligibleUserIds = await _dbContext.CampLeads
-            .AsNoTracking()
-            .Where(l => l.LeftAt == null)
-            .Select(l => l.UserId)
-            .Distinct()
-            .ToListAsync(cancellationToken);
+        var activeLeadUserIds = await _campRepository.GetActiveLeadUserIdsAsync(cancellationToken);
+        var eligibleUserIds = activeLeadUserIds.ToList();
 
         await SyncTeamMembershipAsync(team, eligibleUserIds, cancellationToken, step: step);
         report?.Steps.Add(step);
@@ -506,9 +512,7 @@ public class SystemTeamSyncJob : ISystemTeamSync
             return;
         }
 
-        var isLeadAnywhere = await _dbContext.CampLeads
-            .AsNoTracking()
-            .AnyAsync(l => l.UserId == userId && l.LeftAt == null, cancellationToken);
+        var isLeadAnywhere = await _campRepository.IsLeadAnywhereAsync(userId, cancellationToken);
 
         // Idempotency guard: if the user should be a member and already has an active
         // team_members row, do nothing. This avoids unique-index violations
@@ -613,6 +617,7 @@ public class SystemTeamSyncJob : ISystemTeamSync
             : new Dictionary<Guid, string>();
 
         // Add new members
+        var addedAudits = new List<(Guid UserId, string UserName)>();
         foreach (var userId in toAdd)
         {
             var member = new TeamMember
@@ -627,16 +632,13 @@ public class SystemTeamSyncJob : ISystemTeamSync
 
             var userName = userNames.GetValueOrDefault(userId, userId.ToString());
             step?.Added(userId, userName);
-            await _auditLogService.LogAsync(
-                AuditAction.TeamMemberAdded, nameof(Team), team.Id,
-                $"{userName} added to {team.Name} by system sync",
-                nameof(SystemTeamSyncJob),
-                relatedEntityId: userId, relatedEntityType: nameof(User));
+            addedAudits.Add((userId, userName));
 
             await _googleSyncService.AddUserToTeamResourcesAsync(team.Id, userId, cancellationToken);
         }
 
         // Remove members who are no longer eligible
+        var removedAudits = new List<(Guid UserId, string UserName)>();
         foreach (var userId in toRemove)
         {
             var member = team.Members.FirstOrDefault(m => m.UserId == userId && m.LeftAt is null);
@@ -652,11 +654,7 @@ public class SystemTeamSyncJob : ISystemTeamSync
 
                 var userName = userNames.GetValueOrDefault(userId, userId.ToString());
                 step?.Removed(userId, userName);
-                await _auditLogService.LogAsync(
-                    AuditAction.TeamMemberRemoved, nameof(Team), team.Id,
-                    $"{userName} removed from {team.Name} by system sync",
-                    nameof(SystemTeamSyncJob),
-                    relatedEntityId: userId, relatedEntityType: nameof(User));
+                removedAudits.Add((userId, userName));
 
                 await _googleSyncService.RemoveUserFromTeamResourcesAsync(team.Id, userId, cancellationToken);
             }
@@ -666,6 +664,24 @@ public class SystemTeamSyncJob : ISystemTeamSync
         {
             team.UpdatedAt = now;
             await _dbContext.SaveChangesAsync(cancellationToken);
+
+            foreach (var (auditUserId, userName) in addedAudits)
+            {
+                await _auditLogService.LogAsync(
+                    AuditAction.TeamMemberAdded, nameof(Team), team.Id,
+                    $"{userName} added to {team.Name} by system sync",
+                    nameof(SystemTeamSyncJob),
+                    relatedEntityId: auditUserId, relatedEntityType: nameof(User));
+            }
+
+            foreach (var (auditUserId, userName) in removedAudits)
+            {
+                await _auditLogService.LogAsync(
+                    AuditAction.TeamMemberRemoved, nameof(Team), team.Id,
+                    $"{userName} removed from {team.Name} by system sync",
+                    nameof(SystemTeamSyncJob),
+                    relatedEntityId: auditUserId, relatedEntityType: nameof(User));
+            }
 
             // Invalidate team cache — sync job runs infrequently, cache rebuilds on next access
             _cache.InvalidateActiveTeams();
