@@ -175,4 +175,35 @@ public interface IUserEmailService
     Task<Guid?> GetUserIdByVerifiedEmailAsync(
         string email,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Returns every verified email address belonging to the user. Used by
+    /// cross-section callers (Tickets, matching) that need to compare incoming
+    /// addresses against a user's verified set without reading
+    /// <c>user_emails</c> directly.
+    /// </summary>
+    Task<IReadOnlyList<string>> GetVerifiedEmailsForUserAsync(
+        Guid userId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Returns the notification-target email for each of the given user ids
+    /// (batch query). Users with no notification target are absent from the
+    /// returned dictionary. Used by cross-section callers (Tickets "who
+    /// hasn't bought" admin list) that need to resolve display emails in
+    /// memory without reading <c>user_emails</c> directly.
+    /// </summary>
+    Task<IReadOnlyDictionary<Guid, string>> GetNotificationEmailsByUserIdsAsync(
+        IReadOnlyCollection<Guid> userIds,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Returns distinct user ids whose verified email set contains the given
+    /// case-insensitive substring. Used by admin search surfaces (Tickets
+    /// "who hasn't bought") so secondary verified addresses are discoverable
+    /// even when they differ from the notification-target email.
+    /// </summary>
+    Task<IReadOnlyList<Guid>> SearchUserIdsByVerifiedEmailAsync(
+        string searchTerm,
+        CancellationToken cancellationToken = default);
 }

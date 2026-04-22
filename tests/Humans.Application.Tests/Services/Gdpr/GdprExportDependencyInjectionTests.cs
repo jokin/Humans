@@ -19,6 +19,7 @@ using FeedbackService = Humans.Application.Services.Feedback.FeedbackService;
 using RoleAssignmentService = Humans.Application.Services.Auth.RoleAssignmentService;
 using ConsentService = Humans.Application.Services.Consent.ConsentService;
 using ShiftSignupService = Humans.Application.Services.Shifts.ShiftSignupService;
+using TicketsTicketQueryService = Humans.Application.Services.Tickets.TicketQueryService;
 
 namespace Humans.Application.Tests.Services.Gdpr;
 
@@ -78,7 +79,7 @@ public class GdprExportDependencyInjectionTests
         typeof(ShiftSignupService),
         typeof(FeedbackService),
         typeof(NotificationInboxService),
-        typeof(TicketQueryService),
+        typeof(TicketsTicketQueryService),
         typeof(CampaignService),
         typeof(CampService),
         typeof(AuditLogService),
@@ -103,7 +104,7 @@ public class GdprExportDependencyInjectionTests
         // still holds most of them, and Humans.Application is the new target
         // location per the repository/store/decorator migration — the first
         // such move is ApplicationDecisionService (Governance, PR #503).
-        var infrastructureAssembly = typeof(TicketQueryService).Assembly;
+        var infrastructureAssembly = typeof(CalendarService).Assembly;
         var applicationAssembly = typeof(ApplicationDecisionService).Assembly;
 
         var foundContributors = new[] { infrastructureAssembly, applicationAssembly }
