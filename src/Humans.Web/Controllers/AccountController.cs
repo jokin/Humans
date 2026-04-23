@@ -3,8 +3,8 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using NodaTime;
 using Humans.Domain.Entities;
-using Humans.Application.Interfaces.Users;
 using Humans.Application.Interfaces.Auth;
+using Humans.Application.Interfaces.Profiles;
 
 namespace Humans.Web.Controllers;
 

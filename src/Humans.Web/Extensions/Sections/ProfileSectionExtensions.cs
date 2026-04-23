@@ -19,7 +19,6 @@ using Humans.Application.Interfaces.GoogleIntegration;
 using Humans.Application.Interfaces.Users;
 using Humans.Application.Interfaces.Profiles;
 using Humans.Infrastructure.Repositories.Profiles;
-using Humans.Infrastructure.Repositories.Users;
 
 namespace Humans.Web.Extensions.Sections;
 

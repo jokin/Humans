@@ -13,7 +13,6 @@ using Humans.Application.Tests.Infrastructure;
 using Humans.Infrastructure.Data;
 using Xunit;
 using Humans.Application.Interfaces.Email;
-using Humans.Application.Interfaces.Users;
 using Humans.Application.Interfaces.Profiles;
 using Humans.Infrastructure.Repositories.Email;
 

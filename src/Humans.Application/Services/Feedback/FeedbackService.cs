@@ -14,6 +14,7 @@ using Humans.Application.Interfaces.Feedback;
 using Humans.Application.Interfaces.Teams;
 using Humans.Application.Interfaces.Users;
 using Humans.Application.Interfaces.Notifications;
+using Humans.Application.Interfaces.Profiles;
 
 namespace Humans.Application.Services.Feedback;
 

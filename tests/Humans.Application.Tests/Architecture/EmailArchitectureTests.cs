@@ -1,7 +1,7 @@
 using AwesomeAssertions;
 using Humans.Application.Interfaces.Email;
+using Humans.Application.Interfaces.Profiles;
 using Humans.Application.Interfaces.Repositories;
-using Humans.Application.Interfaces.Users;
 using Humans.Infrastructure.Repositories.Email;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
