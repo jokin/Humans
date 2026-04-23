@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.Extensions.DependencyInjection;
 using NodaTime;
 using Humans.Application.DTOs;
 using Humans.Application.Interfaces;
@@ -18,29 +19,33 @@ namespace Humans.Application.Services.Profile;
 public sealed class UserEmailService : IUserEmailService
 {
     private readonly IUserEmailRepository _repository;
-    private readonly IAccountMergeService _mergeService;
     private readonly IUserService _userService;
     private readonly UserManager<User> _userManager;
     private readonly IClock _clock;
     private readonly IFullProfileInvalidator _fullProfileInvalidator;
+    private readonly IServiceProvider _serviceProvider;
 
     private const string EmailVerificationTokenPurpose = "UserEmailVerification";
 
     public UserEmailService(
         IUserEmailRepository repository,
-        IAccountMergeService mergeService,
         IUserService userService,
         UserManager<User> userManager,
         IClock clock,
-        IFullProfileInvalidator fullProfileInvalidator)
+        IFullProfileInvalidator fullProfileInvalidator,
+        IServiceProvider serviceProvider)
     {
         _repository = repository;
-        _mergeService = mergeService;
         _userService = userService;
         _userManager = userManager;
         _clock = clock;
         _fullProfileInvalidator = fullProfileInvalidator;
+        _serviceProvider = serviceProvider;
     }
+
+    // Lazy to break the DI cycle:
+    // TeamService -> IEmailService -> IUserEmailService -> IAccountMergeService -> ITeamService.
+    private IAccountMergeService MergeService => _serviceProvider.GetRequiredService<IAccountMergeService>();
 
     public async Task<IReadOnlyList<UserEmailEditDto>> GetUserEmailsAsync(
         Guid userId, CancellationToken cancellationToken = default)
@@ -49,7 +54,7 @@ public sealed class UserEmailService : IUserEmailService
 
         // Check which emails have pending merge requests (cross-section → IAccountMergeService)
         var emailIds = emails.Select(e => e.Id).ToList();
-        var mergePendingSet = await _mergeService.GetPendingEmailIdsAsync(emailIds, cancellationToken);
+        var mergePendingSet = await MergeService.GetPendingEmailIdsAsync(emailIds, cancellationToken);
 
         return emails.Select(e => new UserEmailEditDto(
             e.Id,
@@ -100,7 +105,7 @@ public sealed class UserEmailService : IUserEmailService
             throw new ValidationException("This email address is already in your account.");
 
         // Check pending merge (cross-section → IAccountMergeService)
-        if (await _mergeService.HasPendingForUserAndEmailAsync(
+        if (await MergeService.HasPendingForUserAndEmailAsync(
                 userId, normalizedEmail, alternateEmail, cancellationToken))
             throw new ValidationException("A merge request is already pending for this email address.");
 
@@ -171,7 +176,7 @@ public sealed class UserEmailService : IUserEmailService
         if (conflictingEmail is not null)
         {
             // Check for existing pending merge (avoid duplicates from link prefetch/double-click)
-            if (!await _mergeService.HasPendingForEmailIdAsync(pendingEmail.Id, cancellationToken))
+            if (!await MergeService.HasPendingForEmailIdAsync(pendingEmail.Id, cancellationToken))
             {
                 var now = _clock.GetCurrentInstant();
                 var mergeRequest = new AccountMergeRequest
@@ -185,7 +190,7 @@ public sealed class UserEmailService : IUserEmailService
                     CreatedAt = now
                 };
 
-                await _mergeService.CreateAsync(mergeRequest, cancellationToken);
+                await MergeService.CreateAsync(mergeRequest, cancellationToken);
             }
 
             return new VerifyEmailResult(pendingEmail.Email, MergeRequestCreated: true);

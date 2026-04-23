@@ -1,4 +1,5 @@
 using AwesomeAssertions;
+using System;
 using Humans.Application.Interfaces;
 using Humans.Application.Interfaces.Repositories;
 using Humans.Application.Services.Profile;
@@ -19,6 +20,7 @@ public class UserEmailServiceTests
     private readonly UserManager<User> _userManager;
     private readonly FakeClock _clock = new(Instant.FromUtc(2026, 4, 21, 12, 0));
     private readonly IFullProfileInvalidator _fullProfileInvalidator = Substitute.For<IFullProfileInvalidator>();
+    private readonly IServiceProvider _serviceProvider = Substitute.For<IServiceProvider>();
     private readonly UserEmailService _service;
 
     public UserEmailServiceTests()
@@ -26,14 +28,15 @@ public class UserEmailServiceTests
         var store = Substitute.For<IUserStore<User>>();
         _userManager = Substitute.For<UserManager<User>>(
             store, null, null, null, null, null, null, null, null);
+        _serviceProvider.GetService(typeof(IAccountMergeService)).Returns(_mergeService);
 
         _service = new UserEmailService(
             _repository,
-            _mergeService,
             _userService,
             _userManager,
             _clock,
-            _fullProfileInvalidator);
+            _fullProfileInvalidator,
+            _serviceProvider);
     }
 
     [Fact]
