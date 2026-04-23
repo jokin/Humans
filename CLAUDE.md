@@ -93,6 +93,13 @@ Two-remote workflow:
 - **`origin`** = `peterdrier/Humans` (peter's fork — QA deploys from `main`)
 - **`upstream`** = `nobodies-collective/Humans` (production)
 
+**Critical: Always qualify issue and PR references with the repo.** The two remotes have overlapping issue numbers, so bare `#N` is ambiguous and has caused real chaos (wrong issues closed, commits linked to the wrong tracker). Every reference — in commit messages, PR bodies, issue comments, release notes, todos, chat — must include the owner prefix:
+
+- Fork: `peterdrier#292` (or `peterdrier/Humans#292`)
+- Upstream: `nobodies-collective#586` (or `nobodies-collective/Humans#586`)
+
+When invoking `gh` for issues/PRs, always pass `--repo peterdrier/Humans` or `--repo nobodies-collective/Humans` explicitly — never rely on the ambient default. If you don't know which repo a number belongs to, ask before writing it down.
+
 **Development flow:**
 
 - **Small changes:** commit directly to `main` on peter's fork. Coolify auto-deploys to QA.
