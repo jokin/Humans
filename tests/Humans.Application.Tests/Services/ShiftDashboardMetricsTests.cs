@@ -675,6 +675,13 @@ public class ShiftDashboardMetricsTests : IDisposable
             return users.ToDictionary(u => u.Id);
         }
 
+        public async Task<IReadOnlyDictionary<Guid, User>> GetByIdsWithEmailsAsync(IReadOnlyCollection<Guid> userIds, CancellationToken ct = default)
+        {
+            if (userIds.Count == 0) return new Dictionary<Guid, User>();
+            var users = await _db.Users.Include(u => u.UserEmails).Where(u => userIds.Contains(u.Id)).ToListAsync(ct);
+            return users.ToDictionary(u => u.Id);
+        }
+
         public async Task<IReadOnlyList<Instant>> GetLoginTimestampsInWindowAsync(Instant fromInclusive, Instant toExclusive, CancellationToken ct = default)
         {
             return await _db.Users
@@ -705,6 +712,10 @@ public class ShiftDashboardMetricsTests : IDisposable
         public Task<IReadOnlyList<(string Language, int Count)>> GetLanguageDistributionForUserIdsAsync(IReadOnlyCollection<Guid> userIds, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<(bool Purged, string? DisplayName)> PurgeAsync(Guid userId, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<int> GetPendingDeletionCountAsync(CancellationToken ct = default) => throw new NotSupportedException();
+        public Task SetLastConsentReminderSentAsync(Guid userId, Instant sentAt, CancellationToken ct = default) => throw new NotSupportedException();
+        public Task<int> GetRejectedGoogleEmailCountAsync(CancellationToken ct = default) => throw new NotSupportedException();
+        public Task<IReadOnlyList<Guid>> GetAccountsDueForAnonymizationAsync(Instant now, CancellationToken ct = default) => throw new NotSupportedException();
+        public Task<AnonymizedAccountSummary?> AnonymizeExpiredAccountAsync(Guid userId, Instant now, CancellationToken ct = default) => throw new NotSupportedException();
     }
 
     private sealed class FakeTeamService : ITeamService
@@ -801,5 +812,6 @@ public class ShiftDashboardMetricsTests : IDisposable
         public Task<IReadOnlyList<Guid>> GetActiveMemberUserIdsAsync(Guid teamId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<IReadOnlyDictionary<Guid, IReadOnlyList<string>>> GetActiveNonSystemTeamNamesByUserIdsAsync(IReadOnlyCollection<Guid> userIds, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<int> GetTotalPendingJoinRequestCountAsync(CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<IReadOnlyList<Guid>> GetActiveNonSystemTeamCoordinatorUserIdsAsync(CancellationToken cancellationToken = default) => throw new NotSupportedException();
     }
 }

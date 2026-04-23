@@ -28,6 +28,19 @@ public interface IUserService
         CancellationToken ct = default);
 
     /// <summary>
+    /// Same as <see cref="GetByIdsAsync"/> but also hydrates each user's
+    /// <see cref="User.UserEmails"/> collection so callers can resolve
+    /// <see cref="User.GetEffectiveEmail"/> (the verified notification-target
+    /// address) without a second round-trip. Used by notification-sending
+    /// jobs (digests, re-consent reminder, term renewal) so the correct
+    /// recipient is picked instead of silently falling back to
+    /// <see cref="User.Email"/>.
+    /// </summary>
+    Task<IReadOnlyDictionary<Guid, User>> GetByIdsWithEmailsAsync(
+        IReadOnlyCollection<Guid> userIds,
+        CancellationToken ct = default);
+
+    /// <summary>
     /// Get the participation record for a user in a given year. Returns null if no record exists.
     /// </summary>
     Task<EventParticipation?> GetParticipationAsync(Guid userId, int year, CancellationToken ct = default);
@@ -192,4 +205,78 @@ public interface IUserService
     /// table directly (design-rules §2c).
     /// </summary>
     Task<int> GetPendingDeletionCountAsync(CancellationToken ct = default);
+
+    /// <summary>
+    /// Sets <c>User.LastConsentReminderSentAt</c> to <paramref name="sentAt"/>.
+    /// No-op if the user does not exist. Used by the re-consent reminder job
+    /// so it does not write to the Users table directly (design-rules §2c).
+    /// </summary>
+    Task SetLastConsentReminderSentAsync(
+        Guid userId, Instant sentAt, CancellationToken ct = default);
+
+    /// <summary>
+    /// Returns the count of users whose <see cref="User.GoogleEmailStatus"/>
+    /// equals <see cref="Humans.Domain.Enums.GoogleEmailStatus.Rejected"/>.
+    /// Used by the admin daily digest so the job does not read the users
+    /// table directly (design-rules §2c).
+    /// </summary>
+    Task<int> GetRejectedGoogleEmailCountAsync(CancellationToken ct = default);
+
+    /// <summary>
+    /// Returns the user ids of every account with <c>DeletionScheduledFor</c>
+    /// in the past (or equal to <paramref name="now"/>) and with
+    /// <c>DeletionEligibleAfter</c> either null or already elapsed. Used by
+    /// the account deletion job to enumerate candidates without reading the
+    /// Users table directly (design-rules §2c).
+    /// </summary>
+    Task<IReadOnlyList<Guid>> GetAccountsDueForAnonymizationAsync(
+        Instant now, CancellationToken ct = default);
+
+    /// <summary>
+    /// Anonymizes the identity portion of a user whose 30-day deletion grace
+    /// period has expired: display name, username, email fields, profile
+    /// picture, phone number, deletion fields, security stamp, iCal token,
+    /// and lockout are all cleared or replaced with sentinels. Removes
+    /// <c>UserEmail</c> rows, ends active team memberships (via
+    /// <see cref="Teams.ITeamService.RevokeAllMembershipsAsync"/>) and active
+    /// governance role assignments, anonymizes the profile (via
+    /// <see cref="Profiles.IProfileService"/>), removes contact fields,
+    /// volunteer history, volunteer event profiles (via
+    /// <see cref="Shifts.IShiftManagementService"/>) and cancels active shift
+    /// signups (via <see cref="Shifts.IShiftSignupService"/>). Returns an
+    /// <see cref="AnonymizedAccountSummary"/> describing the prior identity,
+    /// the user's preferred language, and the ids of any shift signups that
+    /// were cancelled, or null if the user does not exist. Invalidates the
+    /// FullProfile cache, role-assignment claims, shift-authorization, and
+    /// the Teams member cache.
+    /// </summary>
+    Task<AnonymizedAccountSummary?> AnonymizeExpiredAccountAsync(
+        Guid userId, Instant now, CancellationToken ct = default);
 }
+
+/// <summary>
+/// Summary returned from <see cref="IUserService.AnonymizeExpiredAccountAsync"/>
+/// so the caller (account deletion job) can send a confirmation email and
+/// write the corresponding audit log entries without re-loading the
+/// anonymized row.
+/// </summary>
+/// <param name="OriginalEmail">
+/// The effective email on the account before anonymization. May be null
+/// when the account never had an email set.
+/// </param>
+/// <param name="OriginalDisplayName">
+/// The display name on the account before anonymization.
+/// </param>
+/// <param name="PreferredLanguage">
+/// The user's preferred language, used to render the confirmation email.
+/// </param>
+/// <param name="CancelledSignupIds">
+/// The id of each shift signup that was cancelled as part of the
+/// anonymization, paired with the shift it belonged to. Used by the caller
+/// to emit per-signup audit entries.
+/// </param>
+public record AnonymizedAccountSummary(
+    string? OriginalEmail,
+    string OriginalDisplayName,
+    string PreferredLanguage,
+    IReadOnlyList<(Guid SignupId, Guid ShiftId)> CancelledSignupIds);

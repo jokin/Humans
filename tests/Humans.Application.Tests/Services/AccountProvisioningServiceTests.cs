@@ -67,6 +67,10 @@ file sealed class StubAuditLog : IAuditLogService
 
     public Task<Dictionary<Guid, (string Name, string Slug)>> GetTeamNamesAsync(IReadOnlyList<Guid> teamIds, CancellationToken ct = default) =>
         Task.FromResult(new Dictionary<Guid, (string Name, string Slug)>());
+
+    public Task<IReadOnlyList<Guid>> GetEntityIdsForActionInWindowAsync(
+        Instant windowStart, Instant windowEnd, AuditAction action, CancellationToken ct = default) =>
+        Task.FromResult((IReadOnlyList<Guid>)Array.Empty<Guid>());
 }
 
 /// <summary>
@@ -132,6 +136,9 @@ public class AccountProvisioningServiceTests
         public Task<IReadOnlyDictionary<Guid, User>> GetByIdsAsync(
             IReadOnlyCollection<Guid> userIds, CancellationToken ct = default) =>
             throw new NotSupportedException();
+        public Task<IReadOnlyDictionary<Guid, User>> GetByIdsWithEmailsAsync(
+            IReadOnlyCollection<Guid> userIds, CancellationToken ct = default) =>
+            throw new NotSupportedException();
         public Task<IReadOnlyList<User>> GetAllAsync(CancellationToken ct = default) =>
             throw new NotSupportedException();
         public Task<User?> GetByNormalizedEmailAsync(string? normalizedEmail, CancellationToken ct = default) =>
@@ -190,6 +197,14 @@ public class AccountProvisioningServiceTests
         public Task<string?> PurgeAsync(Guid userId, CancellationToken ct = default) =>
             throw new NotSupportedException();
         public Task<int> GetPendingDeletionCountAsync(CancellationToken ct = default) =>
+            throw new NotSupportedException();
+        public Task SetLastConsentReminderSentAsync(Guid userId, Instant sentAt, CancellationToken ct = default) =>
+            throw new NotSupportedException();
+        public Task<int> GetRejectedGoogleEmailCountAsync(CancellationToken ct = default) =>
+            throw new NotSupportedException();
+        public Task<IReadOnlyList<Guid>> GetAccountsDueForAnonymizationAsync(Instant now, CancellationToken ct = default) =>
+            throw new NotSupportedException();
+        public Task<ExpiredDeletionAnonymizationResult?> ApplyExpiredDeletionAnonymizationAsync(Guid userId, CancellationToken ct = default) =>
             throw new NotSupportedException();
     }
 
