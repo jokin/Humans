@@ -46,6 +46,7 @@ public class TeamRoleServiceTests : IDisposable
             NullLogger<RoleAssignmentService>.Instance);
         var serviceProvider = Substitute.For<IServiceProvider>();
         serviceProvider.GetService(typeof(ITeamService)).Returns(Substitute.For<ITeamService>());
+        serviceProvider.GetService(typeof(IRoleAssignmentService)).Returns(roleAssignmentService);
         var teamResourceService = Substitute.For<ITeamResourceService>();
         teamResourceService
             .GetTeamResourceSummariesAsync(Arg.Any<IReadOnlyCollection<Guid>>(), Arg.Any<CancellationToken>())
@@ -65,7 +66,6 @@ public class TeamRoleServiceTests : IDisposable
             Substitute.For<IAuditLogService>(),
             Substitute.For<IEmailService>(),
             Substitute.For<INotificationEmitter>(),
-            roleAssignmentService,
             shiftManagementService,
             Substitute.For<ISystemTeamSync>(),
             serviceProvider,

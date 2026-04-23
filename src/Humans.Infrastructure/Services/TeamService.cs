@@ -26,7 +26,6 @@ public class TeamService : ITeamService, IUserDataContributor
     private readonly IAuditLogService _auditLogService;
     private readonly IEmailService _emailService;
     private readonly INotificationEmitter _notificationService;
-    private readonly IRoleAssignmentService _roleAssignmentService;
     private readonly IShiftManagementService _shiftManagementService;
     private readonly ISystemTeamSync _systemTeamSync;
     private readonly IServiceProvider _serviceProvider;
@@ -39,12 +38,16 @@ public class TeamService : ITeamService, IUserDataContributor
     private ITeamResourceService TeamResourceService
         => _serviceProvider.GetRequiredService<ITeamResourceService>();
 
+    // Lazy to break the constructor-time DI cycle with IUserService:
+    // IUserService -> TeamService -> RoleAssignmentService -> IUserService.
+    private IRoleAssignmentService RoleAssignmentService
+        => _serviceProvider.GetRequiredService<IRoleAssignmentService>();
+
     public TeamService(
         HumansDbContext dbContext,
         IAuditLogService auditLogService,
         IEmailService emailService,
         INotificationEmitter notificationService,
-        IRoleAssignmentService roleAssignmentService,
         IShiftManagementService shiftManagementService,
         ISystemTeamSync systemTeamSync,
         IServiceProvider serviceProvider,
@@ -56,7 +59,6 @@ public class TeamService : ITeamService, IUserDataContributor
         _auditLogService = auditLogService;
         _emailService = emailService;
         _notificationService = notificationService;
-        _roleAssignmentService = roleAssignmentService;
         _shiftManagementService = shiftManagementService;
         _systemTeamSync = systemTeamSync;
         _serviceProvider = serviceProvider;
@@ -347,9 +349,9 @@ public class TeamService : ITeamService, IUserDataContributor
                 SystemTeams: []);
         }
 
-        var isBoardMember = await _roleAssignmentService.IsUserBoardMemberAsync(userId.Value, cancellationToken);
-        var isAdmin = await _roleAssignmentService.IsUserAdminAsync(userId.Value, cancellationToken);
-        var isTeamsAdmin = await _roleAssignmentService.IsUserTeamsAdminAsync(userId.Value, cancellationToken);
+        var isBoardMember = await RoleAssignmentService.IsUserBoardMemberAsync(userId.Value, cancellationToken);
+        var isAdmin = await RoleAssignmentService.IsUserAdminAsync(userId.Value, cancellationToken);
+        var isTeamsAdmin = await RoleAssignmentService.IsUserTeamsAdminAsync(userId.Value, cancellationToken);
         var canCreateTeam = isBoardMember || isAdmin || isTeamsAdmin;
         var canSeeHiddenTeams = canCreateTeam; // Admin, Board, and TeamsAdmin can see hidden teams
 
@@ -445,9 +447,9 @@ public class TeamService : ITeamService, IUserDataContributor
         var currentUserId = userId.Value;
         var isCurrentUserMember = activeMembers.Any(m => m.UserId == currentUserId);
         var isCurrentUserCoordinator = await IsUserCoordinatorOfTeamAsync(team.Id, currentUserId, cancellationToken);
-        var isBoardMember = await _roleAssignmentService.IsUserBoardMemberAsync(currentUserId, cancellationToken);
-        var isAdmin = await _roleAssignmentService.IsUserAdminAsync(currentUserId, cancellationToken);
-        var isTeamsAdmin = await _roleAssignmentService.IsUserTeamsAdminAsync(currentUserId, cancellationToken);
+        var isBoardMember = await RoleAssignmentService.IsUserBoardMemberAsync(currentUserId, cancellationToken);
+        var isAdmin = await RoleAssignmentService.IsUserAdminAsync(currentUserId, cancellationToken);
+        var isTeamsAdmin = await RoleAssignmentService.IsUserTeamsAdminAsync(currentUserId, cancellationToken);
         var canManage = isCurrentUserCoordinator || isBoardMember || isAdmin || isTeamsAdmin;
 
         // Hidden teams are only visible to Admin, Board, and TeamsAdmin
@@ -504,7 +506,7 @@ public class TeamService : ITeamService, IUserDataContributor
         // This is the current user's own My Teams page — show all their memberships including hidden teams
         var allMemberships = await GetUserTeamsAsync(userId, cancellationToken);
         var memberships = allMemberships;
-        var isBoardMember = await _roleAssignmentService.IsUserBoardMemberAsync(userId, cancellationToken);
+        var isBoardMember = await RoleAssignmentService.IsUserBoardMemberAsync(userId, cancellationToken);
 
         var coordinatorTeamIds = memberships
             .Where(m => (m.Role == TeamMemberRole.Coordinator || isBoardMember) && !m.Team.IsSystemTeam)
@@ -1111,8 +1113,8 @@ public class TeamService : ITeamService, IUserDataContributor
         Guid approverUserId,
         CancellationToken cancellationToken = default)
     {
-        var isBoardMember = await _roleAssignmentService.IsUserBoardMemberAsync(approverUserId, cancellationToken);
-        var isTeamsAdmin = !isBoardMember && await _roleAssignmentService.IsUserTeamsAdminAsync(approverUserId, cancellationToken);
+        var isBoardMember = await RoleAssignmentService.IsUserBoardMemberAsync(approverUserId, cancellationToken);
+        var isTeamsAdmin = !isBoardMember && await RoleAssignmentService.IsUserTeamsAdminAsync(approverUserId, cancellationToken);
 
         // Get teams where user is coordinator (direct teams + child teams of coordinator departments)
         var directLeadTeamIds = await _dbContext.TeamMembers
@@ -1184,21 +1186,21 @@ public class TeamService : ITeamService, IUserDataContributor
         CancellationToken cancellationToken = default)
     {
         // Admins can approve any team
-        var isAdmin = await _roleAssignmentService.IsUserAdminAsync(userId, cancellationToken);
+        var isAdmin = await RoleAssignmentService.IsUserAdminAsync(userId, cancellationToken);
         if (isAdmin)
         {
             return true;
         }
 
         // Board members can approve any team
-        var isBoardMember = await _roleAssignmentService.IsUserBoardMemberAsync(userId, cancellationToken);
+        var isBoardMember = await RoleAssignmentService.IsUserBoardMemberAsync(userId, cancellationToken);
         if (isBoardMember)
         {
             return true;
         }
 
         // TeamsAdmin can approve for any team
-        var isTeamsAdmin = await _roleAssignmentService.IsUserTeamsAdminAsync(userId, cancellationToken);
+        var isTeamsAdmin = await RoleAssignmentService.IsUserTeamsAdminAsync(userId, cancellationToken);
         if (isTeamsAdmin)
         {
             return true;
