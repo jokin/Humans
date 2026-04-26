@@ -108,39 +108,44 @@ public class CampController : HumansCampControllerBase
 
     [AllowAnonymous]
     [HttpGet("{slug}")]
-    public async Task<IActionResult> Details(string slug)
+    public async Task<IActionResult> Details(string slug, CancellationToken cancellationToken)
     {
-        var campDetail = await _campService.GetCampDetailAsync(slug);
+        var campDetail = await _campService.GetCampDetailAsync(slug, cancellationToken: cancellationToken);
         if (campDetail is null)
             return NotFound();
 
-        var camp = await GetCampBySlugAsync(slug);
+        var camp = await GetCampBySlugAsync(slug, cancellationToken);
         if (camp is null)
             return NotFound();
 
-        var (isLead, isCampAdmin) = await ResolveCampViewerStateAsync(camp);
+        var currentUser = User.Identity?.IsAuthenticated == true ? await GetCurrentUserAsync() : null;
+        var (isLead, isCampAdmin) = await ResolveCampViewerStateAsync(camp, currentUser, cancellationToken);
         var membership = await ResolveCurrentUserMembershipStateAsync(camp.Id);
+        await PopulateCityPlanningViewBagAsync(currentUser, cancellationToken);
 
         return View(MapCampDetailViewModel(campDetail, isLead, isCampAdmin, membership));
     }
 
     [AllowAnonymous]
     [HttpGet("{slug}/Season/{year:int}")]
-    public async Task<IActionResult> SeasonDetails(string slug, int year)
+    public async Task<IActionResult> SeasonDetails(string slug, int year, CancellationToken cancellationToken)
     {
         var campDetail = await _campService.GetCampDetailAsync(
             slug,
             preferredYear: year,
-            fallbackToLatestSeason: false);
+            fallbackToLatestSeason: false,
+            cancellationToken: cancellationToken);
         if (campDetail is null)
             return NotFound();
 
-        var camp = await GetCampBySlugAsync(slug);
+        var camp = await GetCampBySlugAsync(slug, cancellationToken);
         if (camp is null)
             return NotFound();
 
-        var (isLead, isCampAdmin) = await ResolveCampViewerStateAsync(camp);
+        var currentUser = User.Identity?.IsAuthenticated == true ? await GetCurrentUserAsync() : null;
+        var (isLead, isCampAdmin) = await ResolveCampViewerStateAsync(camp, currentUser, cancellationToken);
         var membership = await ResolveCurrentUserMembershipStateAsync(camp.Id);
+        await PopulateCityPlanningViewBagAsync(currentUser, cancellationToken);
 
         return View(nameof(Details), MapCampDetailViewModel(campDetail, isLead, isCampAdmin, membership));
     }
@@ -934,6 +939,22 @@ public class CampController : HumansCampControllerBase
     // ======================================================================
     // Helper methods
     // ======================================================================
+
+    private async Task PopulateCityPlanningViewBagAsync(User? currentUser, CancellationToken cancellationToken)
+    {
+        if (currentUser is null)
+        {
+            return;
+        }
+
+        ViewBag.IsCityPlanningTeamMember =
+            await _cityPlanningService.IsCityPlanningTeamMemberAsync(currentUser.Id, cancellationToken);
+
+        var settings = await _cityPlanningService.GetSettingsAsync(cancellationToken);
+        ViewBag.PlacementIsOpen = settings.IsPlacementOpen;
+        ViewBag.PlacementOpensAt = settings.PlacementOpensAt;
+        ViewBag.PlacementClosesAt = settings.PlacementClosesAt;
+    }
 
     private static CampSeasonData MapToSeasonData(CampRegisterViewModel model)
     {
