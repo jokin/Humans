@@ -1,3 +1,7 @@
+<!-- freshness:flag-on-change
+  Layer responsibilities, service/repository/store ownership, caching decorator pattern, and authorization handler doctrine. Flag if any architectural pattern shift in src/** alters the layering or ownership rules.
+-->
+
 # Design Rules
 
 Architectural rules governing how Web, Application, Infrastructure, and Domain interact. **These are target-state rules.** New code must follow them; existing code is migrated incrementally per [Migration Strategy](#15-migration-strategy).
@@ -248,6 +252,7 @@ Each section's service owns these tables. Cross-service access goes through the 
 | **Shifts** | `ShiftManagementService`, `ShiftSignupService`, `GeneralAvailabilityService` | `rotas`, `shifts`, `shift_signups`, `event_settings`, `general_availabilities`, `volunteer_event_profiles`, `shift_tags`, `volunteer_tag_preferences` |
 | **Budget** | `BudgetService` | `budget_years`, `budget_groups`, `budget_categories`, `budget_line_items`, `budget_audit_logs`, `ticketing_projections` |
 | **Tickets** | `TicketQueryService`, `TicketSyncService`, `TicketingBudgetService` | `ticket_orders`, `ticket_attendees`, `ticket_sync_states` |
+| **Scanner** | none (phase 1 is presentational) | none |
 | **Campaigns** | `CampaignService` | `campaigns`, `campaign_codes`, `campaign_grants` |
 | **Google Integration** | `GoogleSyncService`, `GoogleAdminService`, `GoogleWorkspaceSyncService`, `GoogleWorkspaceUserService`, `DriveActivityMonitorService`, `SyncSettingsService`, `EmailProvisioningService` | `sync_service_settings`, `google_sync_outbox_events` |
 | **Email** | `EmailOutboxService`, `OutboxEmailService`, `EmailService` | `email_outbox_messages`; owns `system_settings` key `email_outbox_paused` |
@@ -568,7 +573,7 @@ Old names that no longer exist: `CachedProfile`, `IProfileStore`, `ProfileStore`
 
 **§15 NEW-B — Cross-section ShiftAuthorization cache staleness.** ~~`RequestDeletionAsync` on Profile no longer invalidates the `ShiftAuthorization` cache (`shift-auth:{userId}`, 60s TTL) that the old `InvalidateUserCaches(userId)` bundle covered. This is tolerable at ~500-user scale given the short TTL and the context (the user is being deleted). Resolution: when Shifts migrates to the §15 pattern, it should subscribe to `IFullProfileInvalidator` (or an equivalent `IShiftAuthorizationInvalidator`) to clear its own cache on profile changes.~~ **Resolved 2026-04-24** — `ShiftManagementService` now implements `IShiftAuthorizationInvalidator`, exposed so Profile / User / Team writes call `Invalidate(userId)` directly. `UserService.AnonymizeExpiredAccountAsync` invalidates on account anonymization, and `TeamService` invalidates on role-assignment changes that toggle shift-coordinator privilege. Cross-section dependency direction is Shifts → (nothing); callers push the signal, the cache owner stays decoupled.
 
-**`OnboardingService.SetConsentCheckPendingIfEligibleAsync` / `PurgeHumanAsync`** do not invalidate the `FullProfile` dict. Pre-existing behavior (they did not invalidate the old cache either). To be addressed after the §15 migration settles.
+**`OnboardingService.SetConsentCheckPendingIfEligibleAsync`** does not invalidate the `FullProfile` dict. Pre-existing behavior (it did not invalidate the old cache either). To be addressed after the §15 migration settles. (`OnboardingService.PurgeHumanAsync` was removed in issue nobodies-collective/Humans#582 and replaced by `IAccountDeletionService.PurgeAsync`, which invokes `IUserService.PurgeOwnDataAsync` — that in turn invalidates `FullProfile`.)
 
 ### 15h. Migration Rules During the Transition
 
@@ -668,4 +673,6 @@ Old names that no longer exist: `CachedProfile`, `IProfileStore`, `ProfileStore`
 - **Ticket vendor** (PR #277): `ITicketVendorService` (Application), concrete `TicketTailorService` / `StubTicketVendorService` (Infrastructure). `TicketVendorSettings` lives in `Humans.Application.Configuration` so the Application-layer `TicketSyncService` can read non-sensitive fields without reaching into Infrastructure.
 
 Controllers with direct `DbContext` access (violation of §2a, tracked separately):
-- `AdminController`, `ProfileController`, `GoogleController`, `DevLoginController` (dev-only, low priority).
+- `AdminController` — admin audience-segmentation / migrations-metadata / Hangfire-lock queries still read `HumansDbContext` directly.
+- `DevLoginController` — dev-only seeding path; low priority.
+- (`ProfileController` and `GoogleController` were cleaned in earlier §15 work — no direct DbContext usage remains.)
