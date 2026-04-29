@@ -56,21 +56,6 @@ public sealed class CampRepository : ICampRepository
             .FirstOrDefaultAsync(b => b.Id == campId, ct);
     }
 
-    public async Task<IReadOnlyList<Camp>> GetPublicCampsForYearAsync(
-        int year, CancellationToken ct = default)
-    {
-        await using var ctx = await _factory.CreateDbContextAsync(ct);
-        return await ctx.Camps
-            .AsNoTracking()
-            .Include(b => b.Seasons.Where(s => s.Year == year &&
-                (s.Status == CampSeasonStatus.Active || s.Status == CampSeasonStatus.Full)))
-            .Include(b => b.Images.OrderBy(i => i.SortOrder))
-            .Include(b => b.HistoricalNames)
-            .Where(b => b.Seasons.Any(s => s.Year == year &&
-                (s.Status == CampSeasonStatus.Active || s.Status == CampSeasonStatus.Full)))
-            .ToListAsync(ct);
-    }
-
     public async Task<IReadOnlyList<Camp>> GetAllCampsForYearAsync(
         int year, CancellationToken ct = default)
     {
@@ -363,39 +348,13 @@ public sealed class CampRepository : ICampRepository
     // Cross-service queries
     // ==========================================================================
 
-    public async Task<SoundZone?> GetSeasonSoundZoneAsync(
+    public async Task<CampSeason?> GetSeasonByIdAsync(
         Guid campSeasonId, CancellationToken ct = default)
     {
         await using var ctx = await _factory.CreateDbContextAsync(ct);
         return await ctx.CampSeasons
             .AsNoTracking()
-            .Where(s => s.Id == campSeasonId)
-            .Select(s => s.SoundZone)
-            .FirstOrDefaultAsync(ct);
-    }
-
-    public async Task<string?> GetSeasonNameAsync(
-        Guid campSeasonId, CancellationToken ct = default)
-    {
-        await using var ctx = await _factory.CreateDbContextAsync(ct);
-        return await ctx.CampSeasons
-            .AsNoTracking()
-            .Where(s => s.Id == campSeasonId)
-            .Select(s => s.Name)
-            .FirstOrDefaultAsync(ct);
-    }
-
-    public async Task<(Guid CampSeasonId, Guid CampId, int Year)?> GetSeasonInfoAsync(
-        Guid campSeasonId, CancellationToken ct = default)
-    {
-        await using var ctx = await _factory.CreateDbContextAsync(ct);
-        var row = await ctx.CampSeasons
-            .AsNoTracking()
-            .Where(s => s.Id == campSeasonId)
-            .Select(s => new { s.Id, s.CampId, s.Year })
-            .FirstOrDefaultAsync(ct);
-
-        return row is null ? null : (row.Id, row.CampId, row.Year);
+            .FirstOrDefaultAsync(s => s.Id == campSeasonId, ct);
     }
 
     public async Task<IReadOnlyDictionary<Guid, (string Name, string CampSlug, SoundZone? SoundZone, SpaceSize? SpaceRequirement)>>

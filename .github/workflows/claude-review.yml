@@ -1,40 +1,56 @@
 name: Claude PR Review
 
-# Auto-review every same-repo PR using the official Anthropic
-# claude-code-action. Uses CLAUDE_CODE_OAUTH_TOKEN (generated via
-# `claude setup-token` against a Claude Pro/Max subscription) so review
-# runs bill against the subscription rather than the API.
+# Auto-review PRs using the official Anthropic claude-code-action.
+# CLAUDE_CODE_OAUTH_TOKEN (from `claude setup-token` against a Pro/Max
+# subscription) bills review runs against the subscription rather than
+# the API. Posts inline comments + a top-level summary, like Codex.
 #
-# Mirrors the role Codex plays today: posts inline comments + a top-level
-# summary on every opened PR and on each new push.
+# This file is identical in peterdrier/Humans and nobodies-collective/Humans;
+# behavior diverges via the `if:` guard below so the file promotes cleanly
+# between the two repos:
 #
-# Trusted heads only: same-repo PRs and peterdrier/Humans (which promotes
-# QA-soaked work into nobodies-collective/Humans). Random fork PRs are
-# skipped — `pull_request_target` with a checkout of the PR head would
-# otherwise let an external contributor execute arbitrary code with the
-# repo secret. For external PRs, run a manual review locally
-# (`/pr-review <num>`) or via a comment-triggered workflow.
+#   peterdrier/Humans
+#     Trigger: pull_request (same-repo PRs only).
+#     Auth:    OIDC → claude[bot] App token (default).
+#     Fork PRs to peterdrier/Humans are deliberately not reviewed; run
+#     `/pr-review <num>` locally instead.
 #
-# `pull_request_target` (rather than `pull_request`) is required so the
-# job can access CLAUDE_CODE_OAUTH_TOKEN when the PR head is a fork —
-# `pull_request` runs on fork PRs get a read-only token with no secrets.
+#   nobodies-collective/Humans
+#     Trigger: pull_request_target, only when the head is peterdrier/Humans
+#              (the QA-promotion path). Random external forks are skipped —
+#              pull_request_target with a checkout of attacker-controlled
+#              code would be a "pwn-request" hole.
+#     Auth:    Workflow GITHUB_TOKEN. Anthropic's OIDC → App-token exchange
+#              currently 401s on pull_request_target events
+#              (anthropics/claude-code-action#713); passing github_token
+#              tells the action to skip OIDC and post as github-actions[bot].
+#     Checkout: base ref (default), per the action's docs/security.md —
+#               do NOT check out the PR head into the workspace root.
 #
 # Setup (one-time, per repo):
-#   1. Run `claude setup-token` locally → copy the OAuth token.
-#   2. Add it as a repo secret named CLAUDE_CODE_OAUTH_TOKEN
-#      (Settings → Secrets and variables → Actions → New repository secret).
+#   1. `claude setup-token` locally → copy the OAuth token.
+#   2. Add as repo secret CLAUDE_CODE_OAUTH_TOKEN
+#      (Settings → Secrets and variables → Actions).
 #   3. Token is valid ~1 year; rotate by re-running setup-token.
 
 on:
+  pull_request:
+    types: [opened, synchronize, ready_for_review]
   pull_request_target:
     types: [opened, synchronize, ready_for_review]
 
 jobs:
   review:
     if: |
-      github.event.pull_request.draft == false &&
-      (github.event.pull_request.head.repo.full_name == github.repository ||
-       github.event.pull_request.head.repo.full_name == 'peterdrier/Humans')
+      github.event.pull_request.draft == false && (
+        (github.event_name == 'pull_request'
+          && github.repository == 'peterdrier/Humans'
+          && github.event.pull_request.head.repo.full_name == github.repository)
+        ||
+        (github.event_name == 'pull_request_target'
+          && github.repository == 'nobodies-collective/Humans'
+          && github.event.pull_request.head.repo.full_name == 'peterdrier/Humans')
+      )
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -44,11 +60,14 @@ jobs:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
-          ref: ${{ github.event.pull_request.head.sha }}
 
       - uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # On pull_request_target, skip OIDC (see #713 above) by handing the
+          # action the workflow token directly. Empty on pull_request → action
+          # falls back to OIDC and posts as claude[bot].
+          github_token: ${{ github.event_name == 'pull_request_target' && secrets.GITHUB_TOKEN || '' }}
           prompt: |
             Review this pull request for the Nobodies Humans codebase.
 

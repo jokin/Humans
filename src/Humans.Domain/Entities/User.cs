@@ -69,16 +69,99 @@ public class User : IdentityUser<Guid>
     public ICollection<UserEmail> UserEmails { get; } = new List<UserEmail>();
 
     /// <summary>
-    /// Gets the effective email address for system notifications.
-    /// Returns the verified notification-target email if available, otherwise the OAuth email.
-    /// Requires UserEmails to be loaded (Include).
+    /// First verified <see cref="UserEmail"/>, ordered by
+    /// <see cref="UserEmail.IsNotificationTarget"/> desc; falls back to
+    /// <c>base.Email</c> when no UserEmails are loaded (test fixtures,
+    /// post-anonymization reads). Requires <see cref="UserEmails"/> to be
+    /// loaded for production reads.
     /// </summary>
-    public string? GetEffectiveEmail()
+    /// <remarks>
+    /// SILENT-FALLBACK FOOTGUN: when <see cref="UserEmails"/> is not loaded
+    /// (the navigation collection is empty), the getter returns
+    /// <c>base.Email</c> — the Identity column. After PR 2 of the
+    /// email-identity-decoupling spec, <c>base.Email</c> is <c>null</c> for
+    /// users created post-PR 1 (writes were stopped); for pre-PR 1 users it
+    /// still holds the legacy column value. Either result is wrong when the
+    /// caller wanted the canonical UserEmails-derived address. Always
+    /// <c>.Include(u =&gt; u.UserEmails)</c> when loading a User whose
+    /// <c>Email</c> will be read. Repository methods that intentionally skip
+    /// the include (e.g., projections that don't read Email) are responsible
+    /// for documenting that constraint locally — there is no runtime warning
+    /// when the include is missing.
+    /// </remarks>
+    public override string? Email
     {
-        var notificationEmail = UserEmails
-            .FirstOrDefault(e => e.IsNotificationTarget && e.IsVerified);
-        return notificationEmail?.Email ?? Email;
+        get
+        {
+            if (UserEmails.Count == 0)
+                return base.Email;
+
+            return UserEmails
+                .Where(e => e.IsVerified)
+                .OrderByDescending(e => e.IsNotificationTarget)
+                .Select(e => e.Email)
+                .FirstOrDefault() ?? base.Email;
+        }
+        set => base.Email = value;
     }
+
+    /// <inheritdoc />
+    public override string? NormalizedEmail
+    {
+        get => Email?.ToUpperInvariant();
+        set => base.NormalizedEmail = value;
+    }
+
+    /// <inheritdoc />
+    public override bool EmailConfirmed
+    {
+        get => UserEmails.Any(e => e.IsVerified) || base.EmailConfirmed;
+        set => base.EmailConfirmed = value;
+    }
+
+    /// <summary>
+    /// Anchored to <see cref="IdentityUser{TKey}.Id"/> so Identity's username
+    /// uniqueness validator always sees a non-empty unique value without
+    /// callers having to populate it.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// CALLER CONTRACT: <see cref="IdentityUser{TKey}.Id"/> MUST be assigned
+    /// <em>before</em> any code path reads <c>UserName</c>, including
+    /// <c>UserManager.CreateAsync</c>'s username-uniqueness validator. EF
+    /// assigns <c>Id</c> at <c>SaveChanges</c>, which is too late — the
+    /// validator runs first, sees <c>base.UserName == null</c>, and the getter
+    /// returns <c>Guid.Empty.ToString()</c>. Multiple users created in one
+    /// run will then collide on <c>"00000000-0000-0000-0000-000000000000"</c>
+    /// and <c>CreateAsync</c> fails on the second user.
+    /// </para>
+    /// <para>
+    /// Always set the Id explicitly:
+    /// <code>
+    /// var userId = Guid.NewGuid();
+    /// var user = new User { Id = userId, ... };
+    /// await _userManager.CreateAsync(user);
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public override string? UserName
+    {
+        get => base.UserName ?? Id.ToString();
+        set => base.UserName = value;
+    }
+
+    /// <inheritdoc />
+    public override string? NormalizedUserName
+    {
+        get => base.NormalizedUserName ?? Id.ToString().ToUpperInvariant();
+        set => base.NormalizedUserName = value;
+    }
+
+    /// <summary>
+    /// Effective email for system notifications. Requires
+    /// <see cref="UserEmails"/> to be loaded.
+    /// </summary>
+    public string? GetEffectiveEmail() => Email;
 
     /// <summary>
     /// When the last re-consent reminder email was sent (for rate limiting).

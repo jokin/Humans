@@ -11,27 +11,31 @@ using Xunit;
 namespace Humans.Application.Tests.Architecture;
 
 /// <summary>
-/// Method-count budget for major service interfaces. Each entry is a hard ceiling
-/// pinned at the count when the test was last updated. CI fails if any interface
-/// grows past its budget — adding a new method to a budgeted interface requires
-/// either deleting an existing one in the same PR (decrement-only ratchet) or
-/// raising the budget here with a one-line justification in the PR.
+/// Method-count budget for major service interfaces. This is a
+/// **consolidation ratchet** — the goal is for budgeted interfaces to get
+/// smaller over time, not stable, not redistributed.
 ///
-/// Why: the audit-surface skill keeps finding bloat that nobody noticed accruing
-/// because each PR only adds 1-2 methods. Without a tripwire, the only feedback
-/// loop is a periodic audit. This makes growth visible at the moment it happens.
+/// Agent rules (strict):
+/// - No raises. Adding a method requires removing one from the SAME
+///   interface in the SAME PR. Net delta is ≤ 0.
+/// - No splits as a workaround. Don't extract a sub-interface to put methods
+///   under a fresh budget — that defeats the consolidation goal.
+/// - No "replace 2 methods with 1 broader bag-of-flags method" tricks. The
+///   count drops but the surface grows.
+/// - When net delta is negative, lower the budget number to match the new
+///   count exactly. Budgets_are_tight_and_not_padded forbids headroom.
+/// - Hit a wall? STOP and ask the repo owner. Only the owner authorizes
+///   raises, and only out-of-band — never preemptively in a PR.
 ///
-/// What's in scope: interfaces with a meaningful surface (≥10 methods) where
+/// Why: the audit-surface skill kept finding bloat that accrued one
+/// "this addition is justified, +1" PR at a time. Every raise had a
+/// justification. A split-it escape hatch redistributes the same surface
+/// across two budgets with fresh growth runway in each. The mechanism only
+/// works when agents cannot reach for either lever on their own initiative.
+///
+/// In scope: interfaces with a meaningful surface (≥10 methods) where
 /// growth would matter. Smaller interfaces aren't budgeted — adding the 3rd
 /// method to a 2-method interface isn't a smell.
-///
-/// What to do when this fails:
-/// - If the new method is genuinely needed and you've already removed something:
-///   lower the budget here to match the new count.
-/// - If you can't remove anything but the addition is justified: raise the
-///   budget here, document why in the PR description, and consider whether the
-///   interface should be split (run /audit-surface).
-/// - Don't bypass the test. The point is to make growth deliberate.
 /// </summary>
 public class InterfaceMethodBudgetTests
 {
@@ -47,7 +51,11 @@ public class InterfaceMethodBudgetTests
         // AddCampMemberAsLeadAsync, GetSeasonMembersAsync, GetCampMemberStatusAsync,
         // GetCampSeasonsForComplianceAsync — all needed by ICampRoleService and the
         // Camp Edit page roles panel.
-        [typeof(ICampService)] = 57,
+        // 57→56: simplify pass — added BuildCampDetailDataAsync, replaced 3 scoped
+        // CampSeason getters (SoundZone/Name/Info) with single GetCampSeasonByIdAsync.
+        // 56→55: collapsed GetCampsForYearAsync + GetAllCampsForYearAsync into one
+        // method; callers filter via Camp.IsPublic predicate.
+        [typeof(ICampService)] = 55,
         // +1: GetOverallCoverageAsync for admin dashboard shift-coverage tile (peterdrier#349).
         [typeof(IShiftManagementService)] = 50,
         // +1 for SetProfilePictureAsync (nobodies-collective/Humans#532 — Google avatar import button needs a
@@ -55,7 +63,9 @@ public class InterfaceMethodBudgetTests
         // the FullProfile cache directly).
         // +1 for GetActiveApprovedCountAsync (admin dashboard active-humans tile, peterdrier#349).
         [typeof(IProfileService)] = 41,
-        [typeof(IUserService)] = 32,
+        // -1 for GetContactUsersAsync removal (/Contacts surface deleted in PR 2 of
+        // email-identity-decoupling — only ContactService called it).
+        [typeof(IUserService)] = 31,
     };
 
     [HumansTheory]
