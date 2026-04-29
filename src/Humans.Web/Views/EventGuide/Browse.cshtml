@@ -38,7 +38,7 @@
         <div class="row g-2 align-items-end">
             <div class="col-md-3">
                 <label class="form-label small mb-1">Category</label>
-                <select name="categoryId" class="form-select form-select-sm" onchange="this.form.submit()">
+                <select name="categoryId" class="form-select form-select-sm js-auto-submit">
                     <option value="">All categories</option>
                     @foreach (var c in Model.Categories)
                     {
@@ -48,7 +48,7 @@
             </div>
             <div class="col-md-3">
                 <label class="form-label small mb-1">Venue</label>
-                <select name="venueId" class="form-select form-select-sm" onchange="this.form.submit()">
+                <select name="venueId" class="form-select form-select-sm js-auto-submit">
                     <option value="">All venues</option>
                     @foreach (var v in Model.Venues)
                     {
@@ -63,8 +63,8 @@
             </div>
             <div class="col-md-2 d-flex align-items-end gap-2">
                 <div class="form-check">
-                    <input type="checkbox" name="favouritesOnly" value="true" class="form-check-input"
-                           id="favouritesOnly" checked="@Model.FavouritesOnly" onchange="this.form.submit()" />
+                    <input type="checkbox" name="favouritesOnly" value="true" class="form-check-input js-auto-submit"
+                           id="favouritesOnly" checked="@(Model.FavouritesOnly ? "checked" : null)" />
                     <label class="form-check-label small" for="favouritesOnly">
                         <i class="fa-solid fa-heart text-danger"></i> Only
                     </label>
