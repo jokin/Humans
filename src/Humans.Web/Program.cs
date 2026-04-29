@@ -177,7 +177,8 @@ builder.Services.AddIdentity<User, IdentityRole<Guid>>(options =>
         options.SignIn.RequireConfirmedEmail = false;
     })
     .AddEntityFrameworkStores<HumansDbContext>()
-    .AddDefaultTokenProviders();
+    .AddDefaultTokenProviders()
+    .AddClaimsPrincipalFactory<HumansUserClaimsPrincipalFactory>();
 
 // Magic link tokens use DataProtection with explicit 15-minute lifetime (not Identity token providers).
 
