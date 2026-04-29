@@ -107,9 +107,9 @@ else
                             }
                             @if (evt.CanWithdraw)
                             {
-                                <form method="post" asp-action="Withdraw" asp-route-eventId="@evt.Id" class="d-inline">
+                                <form method="post" asp-action="Withdraw" asp-route-eventId="@evt.Id" class="d-inline" data-confirm="Withdraw this event?">
                                     @Html.AntiForgeryToken()
-                                    <button type="submit" class="btn btn-sm btn-outline-danger" onclick="return confirm('Withdraw this event?')">
+                                    <button type="submit" class="btn btn-sm btn-outline-danger">
                                         <i class="fa-solid fa-xmark"></i>
                                     </button>
                                 </form>

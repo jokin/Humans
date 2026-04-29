@@ -101,6 +101,9 @@ public static class AuthorizationPolicyExtensions
 
             options.AddPolicy(PolicyNames.HumanAdminOnly, policy =>
                 policy.AddRequirements(new HumanAdminOnlyRequirement()));
+
+            options.AddPolicy(PolicyNames.IsGuideModerator, policy =>
+                policy.RequireRole(RoleNames.GuideModerator, RoleNames.Admin));
         });
 
         return services;

@@ -25,9 +25,9 @@ The published event guide is currently only consumable through the standalone PW
 **So that** I can quickly find events I'm interested in
 
 **Acceptance Criteria:**
-- Day filter: tabs or dropdown for each event day (derived from GuideSettings date range and timezone)
-- Category filter: dropdown or pill toggles listing active categories
-- Camp filter: dropdown listing camps that have approved events
+- Day filter: toggle buttons for each event day (multi-select, derived from GuideSettings date range and timezone)
+- Category filter: dropdown listing active categories
+- Venue filter: dropdown listing active GuideSharedVenues (replaces camp filter; individual events use shared venues)
 - Keyword search: matches against title and description (case-insensitive)
 - Filters are combinable (AND logic)
 - Filters update results without full page reload (use partial views or minimal JS)

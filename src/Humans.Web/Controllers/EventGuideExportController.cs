@@ -1,9 +1,11 @@
 using System.Globalization;
 using System.Text;
 using Humans.Domain.Constants;
+using Humans.Domain.Entities;
 using Humans.Domain.Enums;
 using Humans.Infrastructure.Data;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using NodaTime;
@@ -11,14 +13,15 @@ using Humans.Web.Filters;
 
 namespace Humans.Web.Controllers;
 
-[Authorize(Roles = $"{RoleNames.GuideModerator},{RoleNames.Admin}")]
+[Authorize(Roles = RoleGroups.GuideModeratorOrAdmin)]
 [Route("EventGuide/Export")]
 [ServiceFilter(typeof(EventGuideFeatureFilter))]
-public class EventGuideExportController : Controller
+public class EventGuideExportController : HumansControllerBase
 {
     private readonly HumansDbContext _dbContext;
 
-    public EventGuideExportController(HumansDbContext dbContext)
+    public EventGuideExportController(HumansDbContext dbContext, UserManager<User> userManager)
+        : base(userManager)
     {
         _dbContext = dbContext;
     }

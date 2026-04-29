@@ -76,9 +76,9 @@ else
                             <a asp-controller="GuideAdmin" asp-action="EditVenue" asp-route-id="@venue.Id" class="btn btn-sm btn-outline-primary me-1">
                                 <i class="fa-solid fa-pen me-1"></i>Edit
                             </a>
-                            <form method="post" asp-controller="GuideAdmin" asp-action="DeleteVenue" asp-route-id="@venue.Id" class="d-inline">
+                            <form method="post" asp-controller="GuideAdmin" asp-action="DeleteVenue" asp-route-id="@venue.Id" class="d-inline" data-confirm="Delete this venue?">
                                 @Html.AntiForgeryToken()
-                                <button type="submit" class="btn btn-sm btn-outline-danger" onclick="return confirm('Delete this venue?')">
+                                <button type="submit" class="btn btn-sm btn-outline-danger">
                                     <i class="fa-solid fa-trash me-1"></i>Delete
                                 </button>
                             </form>

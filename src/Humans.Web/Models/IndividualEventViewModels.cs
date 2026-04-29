@@ -50,7 +50,7 @@ public class IndividualEventFormViewModel
     public string Title { get; set; } = string.Empty;
 
     [Required]
-    [MaxLength(300)]
+    [MaxLength(450)]
     public string Description { get; set; } = string.Empty;
 
     [Required]
@@ -70,9 +70,12 @@ public class IndividualEventFormViewModel
     public TimeSpan StartTime { get; set; }
 
     [Required]
-    [Range(15, 480)]
+    [Range(15, 1440)]
     [Display(Name = "Duration (minutes)")]
     public int DurationMinutes { get; set; } = 60;
+
+    [Display(Name = "All day")]
+    public bool IsAllDay { get; set; }
 
     [MaxLength(120)]
     [Display(Name = "Location Note")]
@@ -126,21 +129,20 @@ public class VenueOptionViewModel
     public Guid Id { get; set; }
     public string Name { get; set; } = string.Empty;
 }
-<<<<<<< HEAD
 
 public class BrowseViewModel
 {
     public string? TimeZoneId { get; set; }
     public List<BrowseDayGroup> DayGroups { get; set; } = [];
     public List<CategoryOptionViewModel> Categories { get; set; } = [];
-    public List<BrowseCampOption> Camps { get; set; } = [];
+    public List<VenueOptionViewModel> Venues { get; set; } = [];
     public List<EventDayOptionViewModel> Days { get; set; } = [];
     public HashSet<Guid> FavouritedEventIds { get; set; } = [];
 
     // Active filters (round-tripped via query string)
-    public int? FilterDay { get; set; }
+    public HashSet<int> FilterDays { get; set; } = [];
     public Guid? FilterCategoryId { get; set; }
-    public Guid? FilterCampId { get; set; }
+    public Guid? FilterVenueId { get; set; }
     public string? SearchQuery { get; set; }
     public bool FavouritesOnly { get; set; }
 }

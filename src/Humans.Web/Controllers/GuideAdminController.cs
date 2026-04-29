@@ -1,4 +1,6 @@
+using Humans.Domain.Constants;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Humans.Infrastructure.Data;
@@ -9,10 +11,10 @@ using Humans.Web.Filters;
 
 namespace Humans.Web.Controllers;
 
-[Authorize(Roles = "Admin")]
+[Authorize(Roles = RoleNames.Admin)]
 [Route("Admin")]
 [ServiceFilter(typeof(EventGuideFeatureFilter))]
-public class GuideAdminController : Controller
+public class GuideAdminController : HumansControllerBase
 {
     private readonly HumansDbContext _dbContext;
     private readonly IClock _clock;
@@ -21,7 +23,9 @@ public class GuideAdminController : Controller
     public GuideAdminController(
         HumansDbContext dbContext,
         IClock clock,
-        ILogger<GuideAdminController> logger)
+        ILogger<GuideAdminController> logger,
+        UserManager<User> userManager)
+        : base(userManager)
     {
         _dbContext = dbContext;
         _clock = clock;
@@ -118,7 +122,7 @@ public class GuideAdminController : Controller
         }
 
         await _dbContext.SaveChangesAsync();
-        TempData["SuccessMessage"] = "Guide settings saved.";
+        SetSuccess("Guide settings saved.");
         return RedirectToAction(nameof(GuideSettings));
     }
 
@@ -185,7 +189,7 @@ public class GuideAdminController : Controller
         await _dbContext.SaveChangesAsync();
 
         _logger.LogInformation("Category '{Name}' created with slug '{Slug}'", model.Name, model.Slug);
-        TempData["SuccessMessage"] = $"Category \"{model.Name}\" created.";
+        SetSuccess($"Category \"{model.Name}\" created.");
         return RedirectToAction(nameof(GuideCategories));
     }
 
@@ -235,7 +239,7 @@ public class GuideAdminController : Controller
         await _dbContext.SaveChangesAsync();
 
         _logger.LogInformation("Category '{Name}' ({Id}) updated", model.Name, id);
-        TempData["SuccessMessage"] = $"Category \"{model.Name}\" updated.";
+        SetSuccess($"Category \"{model.Name}\" updated.");
         return RedirectToAction(nameof(GuideCategories));
     }
 
@@ -251,7 +255,7 @@ public class GuideAdminController : Controller
 
         if (category.GuideEvents.Count > 0)
         {
-            TempData["ErrorMessage"] = $"Cannot delete \"{category.Name}\" — it has {category.GuideEvents.Count} associated event(s).";
+            SetError($"Cannot delete \"{category.Name}\" — it has {category.GuideEvents.Count} associated event(s).");
             return RedirectToAction(nameof(GuideCategories));
         }
 
@@ -259,7 +263,7 @@ public class GuideAdminController : Controller
         await _dbContext.SaveChangesAsync();
 
         _logger.LogInformation("Category '{Name}' ({Id}) deleted", category.Name, id);
-        TempData["SuccessMessage"] = $"Category \"{category.Name}\" deleted.";
+        SetSuccess($"Category \"{category.Name}\" deleted.");
         return RedirectToAction(nameof(GuideCategories));
     }
 
@@ -335,7 +339,7 @@ public class GuideAdminController : Controller
         await _dbContext.SaveChangesAsync();
 
         _logger.LogInformation("Venue '{Name}' created", model.Name);
-        TempData["SuccessMessage"] = $"Venue \"{model.Name}\" created.";
+        SetSuccess($"Venue \"{model.Name}\" created.");
         return RedirectToAction(nameof(GuideVenues));
     }
 
@@ -378,7 +382,7 @@ public class GuideAdminController : Controller
         await _dbContext.SaveChangesAsync();
 
         _logger.LogInformation("Venue '{Name}' ({Id}) updated", model.Name, id);
-        TempData["SuccessMessage"] = $"Venue \"{model.Name}\" updated.";
+        SetSuccess($"Venue \"{model.Name}\" updated.");
         return RedirectToAction(nameof(GuideVenues));
     }
 
@@ -394,7 +398,7 @@ public class GuideAdminController : Controller
 
         if (venue.GuideEvents.Count > 0)
         {
-            TempData["ErrorMessage"] = $"Cannot delete \"{venue.Name}\" — it has {venue.GuideEvents.Count} associated event(s).";
+            SetError($"Cannot delete \"{venue.Name}\" — it has {venue.GuideEvents.Count} associated event(s).");
             return RedirectToAction(nameof(GuideVenues));
         }
 
@@ -402,7 +406,7 @@ public class GuideAdminController : Controller
         await _dbContext.SaveChangesAsync();
 
         _logger.LogInformation("Venue '{Name}' ({Id}) deleted", venue.Name, id);
-        TempData["SuccessMessage"] = $"Venue \"{venue.Name}\" deleted.";
+        SetSuccess($"Venue \"{venue.Name}\" deleted.");
         return RedirectToAction(nameof(GuideVenues));
     }
 

@@ -1,6 +1,8 @@
 @model Humans.Web.Models.BrowseViewModel
 @{
     ViewData["Title"] = "Browse Events";
+    var hasFilters = Model.FilterDays.Count > 0 || Model.FilterCategoryId.HasValue || Model.FilterVenueId.HasValue
+                     || !string.IsNullOrEmpty(Model.SearchQuery) || Model.FavouritesOnly;
 }
 
 <h2 class="mb-3">Browse Events</h2>
@@ -8,24 +10,33 @@
 @if (Model.TimeZoneId != null)
 {
     <p class="text-muted small">
-        <i class="fa-solid fa-clock me-1"></i>All times in <strong>@Model.TimeZoneId</strong>
+        <i class="fa-solid fa-clock me-1"></i>All times in <strong>@Model.TimeZoneId</strong>. Playa Time may apply!
     </p>
 }
 
 <form method="get" asp-action="Browse" class="card mb-4">
     <div class="card-body">
-        <div class="row g-2 align-items-end">
-            <div class="col-md-2">
-                <label class="form-label small mb-1">Day</label>
-                <select name="day" class="form-select form-select-sm" onchange="this.form.submit()">
-                    <option value="">All days</option>
+        @if (Model.Days.Count > 0)
+        {
+            <div class="mb-3">
+                <label class="form-label small mb-1 d-block">Day</label>
+                <div class="d-flex flex-wrap gap-1">
                     @foreach (var d in Model.Days)
                     {
-                        <option value="@d.DayOffset" selected="@(Model.FilterDay == d.DayOffset)">@d.Label</option>
+                        var isSelected = Model.FilterDays.Contains(d.DayOffset);
+                        <div>
+                            <input type="checkbox" class="btn-check" name="days" value="@d.DayOffset"
+                                   id="day-@d.DayOffset" autocomplete="off" @(isSelected ? "checked" : "") />
+                            <label class="btn btn-sm @(isSelected ? "btn-primary" : "btn-outline-secondary")" for="day-@d.DayOffset">
+                                @d.Label
+                            </label>
+                        </div>
                     }
-                </select>
+                </div>
             </div>
-            <div class="col-md-2">
+        }
+        <div class="row g-2 align-items-end">
+            <div class="col-md-3">
                 <label class="form-label small mb-1">Category</label>
                 <select name="categoryId" class="form-select form-select-sm" onchange="this.form.submit()">
                     <option value="">All categories</option>
@@ -35,13 +46,13 @@
                     }
                 </select>
             </div>
-            <div class="col-md-2">
-                <label class="form-label small mb-1">Camp</label>
-                <select name="campId" class="form-select form-select-sm" onchange="this.form.submit()">
-                    <option value="">All camps</option>
-                    @foreach (var c in Model.Camps)
+            <div class="col-md-3">
+                <label class="form-label small mb-1">Venue</label>
+                <select name="venueId" class="form-select form-select-sm" onchange="this.form.submit()">
+                    <option value="">All venues</option>
+                    @foreach (var v in Model.Venues)
                     {
-                        <option value="@c.Id" selected="@(Model.FilterCampId == c.Id)">@c.Name</option>
+                        <option value="@v.Id" selected="@(Model.FilterVenueId == v.Id)">@v.Name</option>
                     }
                 </select>
             </div>
@@ -62,8 +73,7 @@
                     <i class="fa-solid fa-search"></i>
                 </button>
             </div>
-            @if (Model.FilterDay.HasValue || Model.FilterCategoryId.HasValue || Model.FilterCampId.HasValue
-                 || !string.IsNullOrEmpty(Model.SearchQuery) || Model.FavouritesOnly)
+            @if (hasFilters)
             {
                 <div class="col-md-1 d-flex align-items-end">
                     <a asp-action="Browse" class="btn btn-sm btn-outline-secondary">Clear</a>
@@ -94,13 +104,17 @@ else
                             <span class="badge bg-secondary ms-1">@item.CategoryName</span>
                         </div>
                         <form method="post" asp-action="ToggleFavourite" asp-route-eventId="@item.EventId"
-                              asp-route-day="@Model.FilterDay" asp-route-categoryId="@Model.FilterCategoryId"
-                              asp-route-campId="@Model.FilterCampId" asp-route-q="@Model.SearchQuery"
+                              asp-route-categoryId="@Model.FilterCategoryId"
+                              asp-route-venueId="@Model.FilterVenueId" asp-route-q="@Model.SearchQuery"
                               asp-route-favouritesOnly="@Model.FavouritesOnly" class="d-inline">
                             @Html.AntiForgeryToken()
+                            @foreach (var d in Model.FilterDays)
+                            {
+                                <input type="hidden" name="days" value="@d" />
+                            }
                             <button type="submit" class="btn btn-sm @(item.IsFavourited ? "btn-danger" : "btn-outline-danger")"
                                     title="@(item.IsFavourited ? "Remove from favourites" : "Add to favourites")">
-                                <i class="fa-solid @(item.IsFavourited ? "fa-heart" : "fa-heart")"></i>
+                                <i class="fa-solid fa-heart"></i>
                             </button>
                         </form>
                     </div>

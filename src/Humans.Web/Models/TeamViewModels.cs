@@ -252,31 +252,6 @@ public class CallToActionViewModel
     public CallToActionStyle Style { get; set; } = CallToActionStyle.Secondary;
 }
 
-public class EditTeamPageViewModel
-{
-    public Guid TeamId { get; set; }
-    public string Slug { get; set; } = string.Empty;
-    public string TeamName { get; set; } = string.Empty;
-    public bool IsPublicPage { get; set; }
-    public bool CanBePublic { get; set; }
-
-    [StringLength(50000)]
-    public string? PageContent { get; set; }
-
-    public List<CallToActionViewModel> CallsToAction { get; set; } = [];
-}
-
-public class CallToActionViewModel
-{
-    [StringLength(100)]
-    public string? Text { get; set; }
-
-    [StringLength(512)]
-    public string? Url { get; set; }
-
-    public CallToActionStyle Style { get; set; } = CallToActionStyle.Secondary;
-}
-
 public class TeamMembersViewModel
     : PagedListViewModel
 {

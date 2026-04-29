@@ -13,13 +13,12 @@ using Humans.Web.Filters;
 
 namespace Humans.Web.Controllers;
 
-[Authorize(Roles = $"{RoleNames.GuideModerator},{RoleNames.Admin}")]
+[Authorize(Roles = RoleGroups.GuideModeratorOrAdmin)]
 [Route("EventGuide/Moderate")]
 [ServiceFilter(typeof(EventGuideFeatureFilter))]
-public class ModerationController : Controller
+public class ModerationController : HumansControllerBase
 {
     private readonly HumansDbContext _dbContext;
-    private readonly UserManager<User> _userManager;
     private readonly IClock _clock;
     private readonly IEmailService _emailService;
     private readonly ILogger<ModerationController> _logger;
@@ -30,9 +29,9 @@ public class ModerationController : Controller
         IClock clock,
         IEmailService emailService,
         ILogger<ModerationController> logger)
+        : base(userManager)
     {
         _dbContext = dbContext;
-        _userManager = userManager;
         _clock = clock;
         _emailService = emailService;
         _logger = logger;
@@ -140,7 +139,7 @@ public class ModerationController : Controller
     {
         if (string.IsNullOrWhiteSpace(model.Reason))
         {
-            TempData["ErrorMessage"] = "A reason is required when rejecting an event.";
+            SetError("A reason is required when rejecting an event.");
             return RedirectToAction(nameof(Index));
         }
 
@@ -153,7 +152,7 @@ public class ModerationController : Controller
     {
         if (string.IsNullOrWhiteSpace(model.Reason))
         {
-            TempData["ErrorMessage"] = "A reason is required when requesting edits.";
+            SetError("A reason is required when requesting edits.");
             return RedirectToAction(nameof(Index));
         }
 
@@ -164,7 +163,7 @@ public class ModerationController : Controller
 
     private async Task<IActionResult> ProcessActionAsync(Guid eventId, ModerationActionType actionType, string? reason)
     {
-        var user = await _userManager.GetUserAsync(User);
+        var user = await GetCurrentUserAsync();
         if (user == null) return Challenge();
 
         var guideEvent = await _dbContext.GuideEvents
@@ -174,13 +173,13 @@ public class ModerationController : Controller
 
         if (guideEvent == null)
         {
-            TempData["ErrorMessage"] = "Event not found.";
+            SetError("Event not found.");
             return RedirectToAction(nameof(Index));
         }
 
         if (guideEvent.Status != GuideEventStatus.Pending)
         {
-            TempData["ErrorMessage"] = "This event is not in a pending state.";
+            SetError("This event is not in a pending state.");
             return RedirectToAction(nameof(Index));
         }
 
@@ -234,7 +233,7 @@ public class ModerationController : Controller
             }
         }
 
-        TempData["SuccessMessage"] = $"Event \"{guideEvent.Title}\" {actionLabel}.";
+        SetSuccess($"Event \"{guideEvent.Title}\" {actionLabel}.");
         return RedirectToAction(nameof(Index));
     }
 

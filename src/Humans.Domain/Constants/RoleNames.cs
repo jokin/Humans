@@ -75,11 +75,6 @@ public static class RoleNames
     public const string FinanceAdmin = "FinanceAdmin";
 
     /// <summary>
-    /// Guide Moderator — can approve, reject, and request edits on event guide submissions.
-    /// </summary>
-    public const string GuideModerator = "GuideModerator";
-
-    /// <summary>
     /// Roles that Board and HumanAdmin are permitted to manage (assign/end).
     /// Used by both service-layer authorization and Web-layer role checks.
     /// </summary>

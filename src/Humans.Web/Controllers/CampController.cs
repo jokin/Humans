@@ -497,34 +497,6 @@ public class CampController : HumansCampControllerBase
         return RedirectToAction(nameof(Details), new { slug });
     }
 
-    [Authorize]
-    [HttpPost("{slug}/Rejoin/{seasonId:guid}")]
-    [ValidateAntiForgeryToken]
-    public async Task<IActionResult> Rejoin(string slug, Guid seasonId)
-    {
-        var camp = await _campService.GetCampBySlugAsync(slug);
-        if (camp is null) return NotFound();
-
-        var user = await _userManager.GetUserAsync(User);
-        if (user is null) return Unauthorized();
-
-        var isLead = await _campService.IsUserCampLeadAsync(user.Id, camp.Id);
-        var isCampAdmin = User.IsInRole(RoleNames.CampAdmin) || User.IsInRole(RoleNames.Admin);
-        if (!isLead && !isCampAdmin) return Forbid();
-
-        try
-        {
-            await _campService.ReactivateSeasonAsync(seasonId);
-            TempData["SuccessMessage"] = "Season reactivated. Welcome back!";
-        }
-        catch (InvalidOperationException ex)
-        {
-            TempData["ErrorMessage"] = ex.Message;
-        }
-
-        return RedirectToAction(nameof(Details), new { slug });
-    }
-
     // ======================================================================
     // Lead management
     // ======================================================================

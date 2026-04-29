@@ -49,4 +49,6 @@ public static class PolicyNames
     /// Board member (standalone). Used rarely — most Board gates also include Admin.
     /// </summary>
     public const string BoardOnly = nameof(BoardOnly);
+
+    public const string IsGuideModerator = nameof(IsGuideModerator);
 }

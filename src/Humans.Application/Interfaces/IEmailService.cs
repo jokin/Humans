@@ -295,51 +295,6 @@ public interface IEmailService
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Sends an event submission received notification.
-    /// </summary>
-    Task SendEventSubmittedAsync(
-        string userEmail,
-        string userName,
-        string eventTitle,
-        string viewUrl,
-        string? culture = null,
-        CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Sends an event approved notification.
-    /// </summary>
-    Task SendEventApprovedAsync(
-        string userEmail,
-        string userName,
-        string eventTitle,
-        string? culture = null,
-        CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Sends an event rejected notification.
-    /// </summary>
-    Task SendEventRejectedAsync(
-        string userEmail,
-        string userName,
-        string eventTitle,
-        string reason,
-        string editUrl,
-        string? culture = null,
-        CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Sends a resubmit-requested notification for an event.
-    /// </summary>
-    Task SendEventResubmitRequestedAsync(
-        string userEmail,
-        string userName,
-        string eventTitle,
-        string reason,
-        string editUrl,
-        string? culture = null,
-        CancellationToken cancellationToken = default);
-
-    /// <summary>
     /// Sends a facilitated message from one volunteer to another.
     /// </summary>
     Task SendFacilitatedMessageAsync(
