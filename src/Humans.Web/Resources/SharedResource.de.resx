@@ -531,10 +531,6 @@
   <data name="Teams_NoOtherTeams" xml:space="preserve"><value>Keine weiteren Teams verf&#xFC;gbar.</value></data>
   <data name="Teams_System" xml:space="preserve"><value>System</value></data>
 
-  <!-- Vol/Teams landing: Browse Shifts CTA (#534) -->
-  <data name="VolTeams_BrowseShiftsBanner" xml:space="preserve"><value>Suchst du Schichten? Sieh dir hier alle an, oder w&#xE4;hle unten ein Team.</value></data>
-  <data name="VolTeams_BrowseShiftsButton" xml:space="preserve"><value>Schichten ansehen</value></data>
-
   <!-- Team Detail View -->
   <data name="TeamDetail_NoDescription" xml:space="preserve"><value>Keine Beschreibung vorhanden.</value></data>
   <data name="TeamDetail_SystemTeamInfo" xml:space="preserve"><value>Dies ist ein systemverwaltetes Team. Die Mitgliedschaft wird automatisch anhand von {0}-Kriterien synchronisiert.</value><comment>{0} = system team type</comment></data>
@@ -1641,6 +1637,10 @@
   <data name="Shifts_SetPreferences" xml:space="preserve"><value>Präferenzen festlegen</value></data>
   <data name="Shifts_PreferencesHelp" xml:space="preserve"><value>Wähle Tags aus, die zur Art von Arbeit passen, die du magst. Passende Schichten werden mit einem Stern markiert.</value></data>
   <data name="Shifts_SavePreferences" xml:space="preserve"><value>Präferenzen speichern</value></data>
+  <data name="Shifts_HeroTitle" xml:space="preserve"><value>Finde deine perfekte Schicht</value></data>
+  <data name="Shifts_HeroSubtitle" xml:space="preserve"><value>Durchsuche die Freiwilligenoptionen, filtere nach Phase oder Abteilung und melde dich für Schichten an, die zu dir passen.</value></data>
+  <data name="Shifts_LearnMore" xml:space="preserve"><value>Mehr erfahren</value></data>
+  <data name="Shifts_EditPreferences" xml:space="preserve"><value>Einstellungen bearbeiten</value></data>
   <data name="Shifts_NotOpenYet" xml:space="preserve"><value>Schichten sind noch nicht geöffnet. Nur Koordinatoren und Admins können diese Seite sehen.</value></data>
   <data name="Shifts_NoShiftsAvailable" xml:space="preserve"><value>Noch keine Schichten verfügbar.</value></data>
   <data name="Shifts_AllShiftsFull" xml:space="preserve"><value>Alle {0}-Schichten sind voll.</value><comment>{0} = period name</comment></data>
@@ -1696,6 +1696,7 @@
   <data name="Shifts_GeneralAvailability" xml:space="preserve"><value>Allgemeine Verfügbarkeit</value></data>
   <data name="Shifts_AvailabilityHelp" xml:space="preserve"><value>Markiere, an welchen Tagen du helfen kannst. Koordinatoren können sehen, wer verfügbar ist.</value></data>
   <data name="Shifts_SaveAvailability" xml:space="preserve"><value>Verfügbarkeit speichern</value></data>
+  <data name="Shifts_DaysSelected" xml:space="preserve"><value>Tage ausgewählt</value></data>
   <data name="Shifts_SlotsFull" xml:space="preserve"><value>Einige Tage brauchen noch Hilfe, aber alle verfügbaren Plätze sind derzeit belegt. Schau später noch einmal vorbei, falls Plätze frei werden.</value></data>
 
   <data name="ShiftDash_Title" xml:space="preserve"><value>Schicht-Dashboard</value></data>

@@ -44,7 +44,8 @@ This file is the **index and cross-cutting rule sheet** for the data model. Per-
 | TicketOrder / TicketAttendee / TicketSyncState | [Tickets](../sections/Tickets.md) | |
 | EventSettings / Rota / Shift / ShiftSignup / GeneralAvailability / VolunteerEventProfile / ShiftTag / VolunteerTagPreference | [Shifts](../sections/Shifts.md) | |
 | FeedbackReport / FeedbackMessage | [Feedback](../sections/Feedback.md) | |
-| BudgetYear / BudgetGroup / BudgetCategory / BudgetLineItem / BudgetAuditLog / TicketingProjection | [Budget](../sections/Budget.md) | `BudgetAuditLog` append-only (§12). |
+| BudgetYear / BudgetGroup / BudgetCategory / BudgetLineItem / BudgetAuditLog / TicketingProjection | [Budget](../sections/Budget.md) | `BudgetAuditLog` append-only (§12). `BudgetGroup.Slug` and `BudgetCategory.Slug` are the Holded-tag-safe identifiers consumed by Finance. |
+| HoldedTransaction / HoldedSyncState | [Finance](../sections/Finance.md) | Holded purchase invoices and sync singleton. `HoldedTransaction.BudgetCategoryId` → `BudgetCategory` (Budget) — FK only, no nav. |
 | SyncServiceSettings / GoogleSyncOutboxEvent | [Google Integration](../sections/GoogleIntegration.md) | |
 | SystemSetting | per-key ownership | Each key belongs to its consuming section's repository. See [SystemSetting below](#systemsetting-per-key-ownership). |
 | AuditLogEntry | [Audit Log](../sections/AuditLog.md) | Append-only (§12). |
@@ -52,7 +53,9 @@ This file is the **index and cross-cutting rule sheet** for the data model. Per-
 
 <!-- /freshness:auto -->
 
-Every major section in the app now has a dedicated section doc. `/Admin/*` is a controller/nav holder, not a section — its services belong to the sections they act on (Email, Profiles, Google Integration, Auth, Legal & Consent).
+Every major section in the app now has a dedicated section doc.
+
+- **Admin Shell** — frame only, no entities. See [`docs/sections/admin-shell.md`](../sections/admin-shell.md).
 
 ## Cross-section FK graph
 
@@ -83,6 +86,9 @@ Team (Teams)
   ← CalendarEvent.OwningTeam (Calendar)
   ← LegalDocument.Team (Legal & Consent)
   ← FeedbackReport.AssignedToTeam (Feedback)
+
+BudgetCategory (Budget)
+  ← HoldedTransaction.BudgetCategory (Finance — FK only, no nav)
 
 CampSeason (Camps)
   ← CampPolygon, CampPolygonHistory (City Planning)

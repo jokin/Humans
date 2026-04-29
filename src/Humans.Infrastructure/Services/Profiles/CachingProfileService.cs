@@ -233,7 +233,7 @@ public sealed class CachingProfileService : IProfileService, IFullProfileInvalid
         return await inner.GetProfileEditDataAsync(userId, ct);
     }
 
-    public async Task<(byte[]? Data, string? ContentType)> GetProfilePictureAsync(
+    public async Task<(byte[] Data, string ContentType)?> GetProfilePictureAsync(
         Guid profileId, CancellationToken ct = default)
     {
         await using var scope = _scopeFactory.CreateAsyncScope();
@@ -261,6 +261,9 @@ public sealed class CachingProfileService : IProfileService, IFullProfileInvalid
         var inner = scope.ServiceProvider.GetRequiredKeyedService<IProfileService>(InnerServiceKey);
         return await inner.GetActiveApprovedUserIdsAsync(ct);
     }
+
+    public Task<int> GetActiveApprovedCountAsync(CancellationToken ct = default) =>
+        Task.FromResult(_byUserId.Values.Count(p => p.IsApproved && !p.IsSuspended));
 
     public async Task<int> GetConsentReviewPendingCountAsync(CancellationToken ct = default)
     {

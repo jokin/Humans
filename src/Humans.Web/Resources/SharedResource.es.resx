@@ -535,10 +535,6 @@
   <data name="Teams_NoOtherTeams" xml:space="preserve"><value>No hay otros equipos disponibles.</value></data>
   <data name="Teams_System" xml:space="preserve"><value>Sistema</value></data>
 
-  <!-- Vol/Teams landing: Browse Shifts CTA (#534) -->
-  <data name="VolTeams_BrowseShiftsBanner" xml:space="preserve"><value>&#xBF;Buscas turnos? M&#xED;ralos todos aqu&#xED;, o elige un equipo abajo.</value></data>
-  <data name="VolTeams_BrowseShiftsButton" xml:space="preserve"><value>Ver turnos</value></data>
-
   <!-- Team Detail View -->
   <data name="TeamDetail_NoDescription" xml:space="preserve"><value>Sin descripci&#xF3;n.</value></data>
   <data name="TeamDetail_SystemTeamInfo" xml:space="preserve"><value>Este es un equipo gestionado por el sistema. La membres&#xED;a se sincroniza autom&#xE1;ticamente seg&#xFA;n los criterios de {0}.</value><comment>{0} = system team type</comment></data>
@@ -1643,6 +1639,10 @@
   <data name="Shifts_SetPreferences" xml:space="preserve"><value>Configura tus preferencias</value></data>
   <data name="Shifts_PreferencesHelp" xml:space="preserve"><value>Selecciona etiquetas que coincidan con el trabajo que te gusta. Los turnos coincidentes se resaltarán con una estrella.</value></data>
   <data name="Shifts_SavePreferences" xml:space="preserve"><value>Guardar preferencias</value></data>
+  <data name="Shifts_HeroTitle" xml:space="preserve"><value>Encuentra tu turno perfecto</value></data>
+  <data name="Shifts_HeroSubtitle" xml:space="preserve"><value>Explora las opciones de voluntariado, filtra por fase o departamento, y apúntate a los turnos que mejor se adapten a ti.</value></data>
+  <data name="Shifts_LearnMore" xml:space="preserve"><value>Saber más</value></data>
+  <data name="Shifts_EditPreferences" xml:space="preserve"><value>Editar preferencias</value></data>
   <data name="Shifts_NotOpenYet" xml:space="preserve"><value>Los turnos aún no están abiertos. Solo coordinadores y administradores pueden ver esta página.</value></data>
   <data name="Shifts_NoShiftsAvailable" xml:space="preserve"><value>Aún no hay turnos disponibles.</value></data>
   <data name="Shifts_AllShiftsFull" xml:space="preserve"><value>Todos los turnos de {0} están completos.</value><comment>{0} = period name</comment></data>
@@ -1698,6 +1698,7 @@
   <data name="Shifts_GeneralAvailability" xml:space="preserve"><value>Disponibilidad general</value></data>
   <data name="Shifts_AvailabilityHelp" xml:space="preserve"><value>Marca los días que estás disponible para ayudar. Los coordinadores pueden ver quién está disponible al asignar turnos.</value></data>
   <data name="Shifts_SaveAvailability" xml:space="preserve"><value>Guardar disponibilidad</value></data>
+  <data name="Shifts_DaysSelected" xml:space="preserve"><value>días seleccionados</value></data>
   <data name="Shifts_SlotsFull" xml:space="preserve"><value>Algunos días aún necesitan ayuda, pero todos los turnos disponibles están completos. Vuelve más tarde por si se abren plazas.</value></data>
 
   <data name="ShiftDash_Title" xml:space="preserve"><value>Panel de turnos</value></data>

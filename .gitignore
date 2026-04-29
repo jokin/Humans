@@ -120,7 +120,7 @@ Thumbs.db
 # Docker
 docker-compose.override.yml
 
-# Uploads (bind-mounted volume)
+# Uploads (bind-mounted volume — wwwroot/uploads/ in production)
 uploads/
 
 .gemini/

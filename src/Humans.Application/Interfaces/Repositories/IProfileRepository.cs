@@ -61,6 +61,18 @@ public interface IProfileRepository
         Guid profileId, CancellationToken ct = default);
 
     /// <summary>
+    /// Returns just the <c>ProfilePictureContentType</c> column for a profile —
+    /// scalar projection that avoids loading the bytea picture data. Returns
+    /// <c>null</c> if the profile does not exist or has no picture (including
+    /// when the picture was cleared by an anonymization run). Used by
+    /// <c>ProfileService.GetProfilePictureAsync</c> as a lightweight gate
+    /// before consulting the filesystem store, so an anonymized profile cannot
+    /// be served a stale on-disk file. Read-only (AsNoTracking).
+    /// </summary>
+    Task<string?> GetProfilePictureContentTypeAsync(
+        Guid profileId, CancellationToken ct = default);
+
+    /// <summary>
     /// Batch query returning (ProfileId, UserId, UpdatedAtTicks) for users
     /// that have a custom profile picture. Read-only.
     /// </summary>
@@ -79,6 +91,12 @@ public interface IProfileRepository
     /// cross-section services (e.g. Legal document sync).
     /// </summary>
     Task<IReadOnlyList<Guid>> GetActiveApprovedUserIdsAsync(CancellationToken ct = default);
+
+    /// <summary>
+    /// Returns the count of profiles that are approved and not suspended.
+    /// Used by the admin dashboard "Active humans" stat tile.
+    /// </summary>
+    Task<int> CountActiveApprovedAsync(CancellationToken ct = default);
 
     /// <summary>
     /// Returns profiles that are in the onboarding review queue: not approved

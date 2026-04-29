@@ -101,7 +101,17 @@ Profile.HasCustomProfilePicture: bool (computed, not mapped)
 ```
 
 ### Storage Approach
-Profile pictures are stored as `bytea` in PostgreSQL. This is appropriate for the ~500 member scale of this organization. The dedicated `Picture` endpoint uses EF projection to load only the picture data columns, avoiding loading the full Profile entity.
+Profile pictures are stored on the application's filesystem via the shared `IFileStorage` abstraction (rooted at `wwwroot/`, the same Coolify-mounted volume that serves camp images and any future uploads). The key format is `uploads/profile-pictures/{profileId}{.ext}` where `.ext` is derived from the content type (`.jpg`, `.png`, `.webp`, or empty for unknown). The original `bytea` columns on `Profile` are retained as a phase-1 fallback so a rollback stays safe (issue [nobodies-collective#527](https://github.com/nobodies-collective/Humans/issues/527)). Writes go to a temporary sibling and rename into place so readers never see a partial file.
+
+Profile pictures live under `uploads/` but are NOT publicly served — `Program.cs` registers middleware that 404s `/uploads/profile-pictures/*` before `UseStaticFiles` sees it, so reads must go through the controller (and therefore through the GDPR gate below).
+
+The read path lives in `IProfileService.GetProfilePictureAsync` and is the only entry point the `Profile/Picture` endpoint calls — the controller does not touch `IFileStorage` directly. The service:
+
+1. Reads the DB `ProfilePictureContentType` column via a cheap scalar projection. If null (no picture, or the row was anonymized), it returns `null` and the endpoint responds with 404 — even if a stale file still exists on disk.
+2. Otherwise tries the filesystem store first. A hit is returned immediately, avoiding a `bytea` load.
+3. On a filesystem miss it falls back to `IProfileRepository.GetProfilePictureDataAsync` (DB) and best-effort writes the bytes back to the filesystem so subsequent reads use the fast path. Migration failures are logged but never break the current request.
+
+Saves and removals dual-write: `SaveProfileAsync` writes both DB and filesystem, `AnonymizeExpiredProfileAsync` clears the DB column AND best-effort deletes the filesystem file. If the filesystem delete fails during anonymization an `Error` is logged so an operator can clean up the stale file out-of-band, but the read-path content-type gate ensures a stale file is never served to clients (GDPR-compliant). Phase 2 of #527 will drop the DB columns once phase 1 has bedded in.
 
 ## Routes
 
@@ -126,16 +136,20 @@ Profile pictures are stored as `bytea` in PostgreSQL. This is appropriate for th
 │  - JPEG/PNG/WebP│
 └──────┬──────────┘
        │
-┌──────▼──────────┐
-│  Read into byte[]│
-│  Store in DB     │
-└──────┬──────────┘
+┌──────▼──────────────┐
+│  Read into byte[]   │
+│  Dual-write:        │
+│  - Filesystem store │
+│  - DB (phase-1)     │
+└──────┬──────────────┘
        │
-┌──────▼──────────┐
-│  Served via      │
-│  /Profile/Picture│
-│  with 1hr cache  │
-└──────────────────┘
+┌──────▼──────────────┐
+│  Served via         │
+│  /Profile/Picture   │
+│  (FS-first, DB      │
+│   fallback,         │
+│   1hr client cache) │
+└─────────────────────┘
 ```
 
 ## Picture Priority

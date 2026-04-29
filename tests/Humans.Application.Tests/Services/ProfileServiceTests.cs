@@ -20,6 +20,8 @@ using Humans.Application.Interfaces.Tickets;
 using Humans.Application.Interfaces.Users;
 using Humans.Application.Interfaces.Onboarding;
 using Humans.Application.Interfaces.Auth;
+using Humans.Application.Interfaces.Profiles;
+using Humans.Application.Tests.Infrastructure;
 using Humans.Infrastructure.Repositories.Profiles;
 using Humans.Infrastructure.Repositories.Users;
 
@@ -44,6 +46,12 @@ public class ProfileServiceTests : IDisposable
     private readonly ICampaignService _campaignService = Substitute.For<ICampaignService>();
     private readonly IRoleAssignmentService _roleAssignmentService = Substitute.For<IRoleAssignmentService>();
     private readonly IAccountDeletionService _accountDeletionService = Substitute.For<IAccountDeletionService>();
+    private readonly InMemoryFileStorage _fileStorage = new();
+
+    // Delegate to the production helper (made internal for test access)
+    // so the test can't drift from the real key construction.
+    private static string PicKey(Guid profileId, string contentType) =>
+        ProfileService.ProfilePictureKey(profileId, contentType);
 
     public ProfileServiceTests()
     {
@@ -68,6 +76,7 @@ public class ProfileServiceTests : IDisposable
             _membershipCalculator, _consentService, _ticketQueryService,
             _applicationDecisionService, _campaignService,
             _roleAssignmentService, _accountDeletionService,
+            _fileStorage,
             _clock,
             NullLogger<ProfileService>.Instance);
 
@@ -183,6 +192,47 @@ public class ProfileServiceTests : IDisposable
         var profile = await _dbContext.Profiles.AsNoTracking().FirstAsync(p => p.UserId == userId);
         profile.ProfilePictureData.Should().BeNull();
         profile.ProfilePictureContentType.Should().BeNull();
+    }
+
+    // --- Profile picture dual-write (phase 1 of issue nobodies-collective/Humans#527) ---
+
+    [HumansFact]
+    public async Task SaveProfileAsync_UploadsProfilePicture_DualWritesToDbAndFilesystem()
+    {
+        var userId = Guid.NewGuid();
+        await SeedUserWithProfileAsync(userId);
+        var payload = new byte[] { 0x10, 0x20, 0x30 };
+        var request = MakeRequest(pictureData: payload, pictureContentType: "image/jpeg");
+
+        await _service.SaveProfileAsync(userId, "Test", request, "en");
+
+        var profile = await _dbContext.Profiles.AsNoTracking().FirstAsync(p => p.UserId == userId);
+        // DB was written
+        profile.ProfilePictureData.Should().BeEquivalentTo(payload);
+        profile.ProfilePictureContentType.Should().Be("image/jpeg");
+        // Filesystem was written with the same bytes, keyed under uploads/profile-pictures/
+        var key = PicKey(profile.Id, "image/jpeg");
+        _fileStorage.Files.Should().ContainKey(key);
+        _fileStorage.Files[key].Should().BeEquivalentTo(payload);
+    }
+
+    [HumansFact]
+    public async Task SaveProfileAsync_RemoveProfilePicture_DeletesFromDbAndFilesystem()
+    {
+        var userId = Guid.NewGuid();
+        var profileId = await SeedUserWithProfileAsync(userId, withPicture: true);
+        // Pre-seed the filesystem side at the same content-type the seeded
+        // profile uses (image/png — see SeedUserWithProfileAsync) so we can
+        // assert deletion.
+        await _fileStorage.SaveAsync(PicKey(profileId, "image/png"), new byte[] { 1 });
+
+        var request = MakeRequest(removeProfilePicture: true);
+        await _service.SaveProfileAsync(userId, "Test", request, "en");
+
+        var profile = await _dbContext.Profiles.AsNoTracking().FirstAsync(p => p.UserId == userId);
+        profile.ProfilePictureData.Should().BeNull();
+        profile.ProfilePictureContentType.Should().BeNull();
+        _fileStorage.Files.Should().NotContainKey(PicKey(profile.Id, "image/png"));
     }
 
     [HumansFact]
@@ -378,33 +428,106 @@ public class ProfileServiceTests : IDisposable
         await SeedUserWithProfileAsync(userId, withPicture: true);
         var profile = await _dbContext.Profiles.FirstAsync(p => p.UserId == userId);
 
-        var (data, contentType) = await _service.GetProfilePictureAsync(profile.Id);
+        var result = await _service.GetProfilePictureAsync(profile.Id);
 
-        data.Should().NotBeNull();
-        data.Should().BeEquivalentTo(new byte[] { 1, 2, 3 });
-        contentType.Should().Be("image/png");
+        result.Should().NotBeNull();
+        result!.Value.Data.Should().BeEquivalentTo(new byte[] { 1, 2, 3 });
+        result.Value.ContentType.Should().Be("image/png");
     }
 
     [HumansFact]
-    public async Task GetProfilePictureAsync_NoPicture_ReturnsNulls()
+    public async Task GetProfilePictureAsync_NoPicture_ReturnsNull()
     {
         var userId = Guid.NewGuid();
         await SeedUserWithProfileAsync(userId, withPicture: false);
         var profile = await _dbContext.Profiles.FirstAsync(p => p.UserId == userId);
 
-        var (data, contentType) = await _service.GetProfilePictureAsync(profile.Id);
+        var result = await _service.GetProfilePictureAsync(profile.Id);
 
-        data.Should().BeNull();
-        contentType.Should().BeNull();
+        result.Should().BeNull();
     }
 
     [HumansFact]
-    public async Task GetProfilePictureAsync_NoProfile_ReturnsNulls()
+    public async Task GetProfilePictureAsync_NoProfile_ReturnsNull()
     {
-        var (data, contentType) = await _service.GetProfilePictureAsync(Guid.NewGuid());
+        var result = await _service.GetProfilePictureAsync(Guid.NewGuid());
 
-        data.Should().BeNull();
-        contentType.Should().BeNull();
+        result.Should().BeNull();
+    }
+
+    [HumansFact]
+    public async Task GetProfilePictureAsync_FilesystemHit_ServesFromStoreWithoutDbBytes()
+    {
+        // FS-first fast path: when the picture is already on disk we should
+        // serve those bytes directly even if they differ from the DB copy.
+        // This pins the read path to the store as the authoritative source
+        // when the DB content-type column says a picture exists.
+        var userId = Guid.NewGuid();
+        await SeedUserWithProfileAsync(userId, withPicture: true);
+        var profile = await _dbContext.Profiles.FirstAsync(p => p.UserId == userId);
+
+        var fsPayload = new byte[] { 9, 9, 9, 9 };
+        await _fileStorage.SaveAsync(PicKey(profile.Id, "image/png"), fsPayload);
+
+        var result = await _service.GetProfilePictureAsync(profile.Id);
+
+        result.Should().NotBeNull();
+        result!.Value.Data.Should().BeEquivalentTo(fsPayload);
+        result.Value.ContentType.Should().Be("image/png");
+    }
+
+    [HumansFact]
+    public async Task GetProfilePictureAsync_DbOnly_ReturnsAndMigratesToFilesystem()
+    {
+        // Migrate-on-read: the DB still has the bytes (legacy data, or a
+        // disk-restore scenario) but the filesystem store does not. The
+        // service must return the DB copy AND seed the store so the next
+        // read takes the fast path.
+        var userId = Guid.NewGuid();
+        await SeedUserWithProfileAsync(userId, withPicture: true);
+        var profile = await _dbContext.Profiles.FirstAsync(p => p.UserId == userId);
+
+        _fileStorage.Files.ContainsKey(PicKey(profile.Id, "image/png")).Should().BeFalse();
+
+        var result = await _service.GetProfilePictureAsync(profile.Id);
+
+        result.Should().NotBeNull();
+        result!.Value.Data.Should().BeEquivalentTo(new byte[] { 1, 2, 3 });
+        result.Value.ContentType.Should().Be("image/png");
+
+        // Migrate-on-read should have populated the store under the content-typed key.
+        _fileStorage.Files.TryGetValue(PicKey(profile.Id, "image/png"), out var stored).Should().BeTrue();
+        stored.Should().BeEquivalentTo(new byte[] { 1, 2, 3 });
+    }
+
+    [HumansFact]
+    public async Task GetProfilePictureAsync_AnonymizedProfile_ReturnsNullEvenWithStaleFile()
+    {
+        // GDPR / issue nobodies-collective/Humans#527 fix-pass: after
+        // anonymization the DB content-type is null. If the on-disk file
+        // wasn't successfully removed (best-effort delete failed) the read
+        // path MUST NOT serve it. The DB content-type column is the gate.
+        var userId = Guid.NewGuid();
+        await SeedUserWithProfileAsync(userId, withPicture: true);
+        var profile = await _dbContext.Profiles.FirstAsync(p => p.UserId == userId);
+
+        // Seed a stale on-disk file as if a prior anonymization left it behind.
+        await _fileStorage.SaveAsync(PicKey(profile.Id, "image/png"), new byte[] { 7, 7, 7 });
+
+        // Now anonymize via the service and force the FS delete to fail by
+        // pre-removing the entry, then re-add it AFTER the anonymize call.
+        // Easiest path: clear DB columns directly on the tracked profile.
+        var tracked = await _dbContext.Profiles.FirstAsync(p => p.UserId == userId);
+        tracked.ProfilePictureData = null;
+        tracked.ProfilePictureContentType = null;
+        await _dbContext.SaveChangesAsync();
+
+        // Confirm the stale file is still on disk to make the gate meaningful.
+        _fileStorage.Files.ContainsKey(PicKey(profile.Id, "image/png")).Should().BeTrue();
+
+        var result = await _service.GetProfilePictureAsync(profile.Id);
+
+        result.Should().BeNull("DB content-type is null after anonymization, so the stale on-disk file must not be served");
     }
 
     [HumansFact]
@@ -427,6 +550,33 @@ public class ProfileServiceTests : IDisposable
 
         colaboradorCount.Should().Be(1);
         asociadoCount.Should().Be(1);
+    }
+
+    [HumansFact]
+    public async Task GetActiveApprovedCountAsync_ReturnsOnlyApprovedAndNotSuspended()
+    {
+        // 3 approved-active, 1 approved-but-suspended, 1 unapproved
+        var u1 = Guid.NewGuid();
+        var u2 = Guid.NewGuid();
+        var u3 = Guid.NewGuid();
+        var u4 = Guid.NewGuid();
+        var u5 = Guid.NewGuid();
+        await SeedUserAsync(u1);
+        await SeedUserAsync(u2);
+        await SeedUserAsync(u3);
+        await SeedUserAsync(u4);
+        await SeedUserAsync(u5);
+        await _dbContext.Profiles.AddRangeAsync(
+            MakeProfile(u1, isApproved: true, isSuspended: false), // counted
+            MakeProfile(u2, isApproved: true, isSuspended: false), // counted
+            MakeProfile(u3, isApproved: true, isSuspended: false), // counted
+            MakeProfile(u4, isApproved: true, isSuspended: true),  // excluded: suspended
+            MakeProfile(u5, isApproved: false, isSuspended: false)); // excluded: unapproved
+        await _dbContext.SaveChangesAsync();
+
+        var count = await _service.GetActiveApprovedCountAsync();
+
+        count.Should().Be(3);
     }
 
     // --- Index/edit data ---
@@ -1407,6 +1557,7 @@ public class ProfileServiceTests : IDisposable
         _membershipCalculator, _consentService, _ticketQueryService,
         _applicationDecisionService, _campaignService,
         _roleAssignmentService, _accountDeletionService,
+        _fileStorage,
         _clock,
         NullLogger<ProfileService>.Instance);
 
@@ -1429,7 +1580,7 @@ public class ProfileServiceTests : IDisposable
         return user;
     }
 
-    private async Task SeedUserWithProfileAsync(Guid userId,
+    private async Task<Guid> SeedUserWithProfileAsync(Guid userId,
         bool isApproved = false, bool withPicture = false)
     {
         await SeedUserAsync(userId);
@@ -1451,6 +1602,7 @@ public class ProfileServiceTests : IDisposable
         }
         _dbContext.Profiles.Add(profile);
         await _dbContext.SaveChangesAsync();
+        return profile.Id;
     }
 
     private FullProfile MakeFullProfile(Profile profile, Guid userId, string? displayName = null)
@@ -1484,6 +1636,7 @@ public class ProfileServiceTests : IDisposable
         string burnerName = "TestBurner", string firstName = "Test", string lastName = "User",
         int? birthdayMonth = null, int? birthdayDay = null,
         bool removeProfilePicture = false,
+        byte[]? pictureData = null, string? pictureContentType = null,
         MembershipTier? selectedTier = null, string? applicationMotivation = null,
         string? city = null)
     {
@@ -1494,7 +1647,7 @@ public class ProfileServiceTests : IDisposable
             BirthdayMonth: birthdayMonth, BirthdayDay: birthdayDay,
             EmergencyContactName: null, EmergencyContactPhone: null, EmergencyContactRelationship: null,
             NoPriorBurnExperience: false,
-            ProfilePictureData: null, ProfilePictureContentType: null,
+            ProfilePictureData: pictureData, ProfilePictureContentType: pictureContentType,
             RemoveProfilePicture: removeProfilePicture,
             SelectedTier: selectedTier, ApplicationMotivation: applicationMotivation,
             ApplicationAdditionalInfo: null,

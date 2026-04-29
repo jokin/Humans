@@ -531,10 +531,6 @@
   <data name="Teams_NoOtherTeams" xml:space="preserve"><value>Aucune autre &#xE9;quipe disponible.</value></data>
   <data name="Teams_System" xml:space="preserve"><value>Syst&#xE8;me</value></data>
 
-  <!-- Vol/Teams landing: Browse Shifts CTA (#534) -->
-  <data name="VolTeams_BrowseShiftsBanner" xml:space="preserve"><value>Vous cherchez des cr&#xE9;neaux&#xA0;? Parcourez-les tous ici, ou choisissez une &#xE9;quipe ci-dessous.</value></data>
-  <data name="VolTeams_BrowseShiftsButton" xml:space="preserve"><value>Voir les cr&#xE9;neaux</value></data>
-
   <!-- Team Detail View -->
   <data name="TeamDetail_NoDescription" xml:space="preserve"><value>Aucune description fournie.</value></data>
   <data name="TeamDetail_SystemTeamInfo" xml:space="preserve"><value>Ceci est une &#xE9;quipe g&#xE9;r&#xE9;e par le syst&#xE8;me. L'adh&#xE9;sion est automatiquement synchronis&#xE9;e selon les crit&#xE8;res de {0}.</value><comment>{0} = system team type</comment></data>
@@ -1641,6 +1637,10 @@
   <data name="Shifts_SetPreferences" xml:space="preserve"><value>Définir vos préférences</value></data>
   <data name="Shifts_PreferencesHelp" xml:space="preserve"><value>Sélectionnez les tags correspondant au type de travail que vous aimez. Les quarts correspondants seront mis en valeur avec une étoile.</value></data>
   <data name="Shifts_SavePreferences" xml:space="preserve"><value>Enregistrer les préférences</value></data>
+  <data name="Shifts_HeroTitle" xml:space="preserve"><value>Trouve ton créneau idéal</value></data>
+  <data name="Shifts_HeroSubtitle" xml:space="preserve"><value>Explore les options de bénévolat, filtre par phase ou département, et inscris-toi aux créneaux qui te conviennent.</value></data>
+  <data name="Shifts_LearnMore" xml:space="preserve"><value>En savoir plus</value></data>
+  <data name="Shifts_EditPreferences" xml:space="preserve"><value>Modifier les préférences</value></data>
   <data name="Shifts_NotOpenYet" xml:space="preserve"><value>Les quarts ne sont pas encore ouverts. Seuls les coordinateurs et admins peuvent voir cette page.</value></data>
   <data name="Shifts_NoShiftsAvailable" xml:space="preserve"><value>Aucun quart disponible pour le moment.</value></data>
   <data name="Shifts_AllShiftsFull" xml:space="preserve"><value>Tous les quarts de {0} sont complets.</value><comment>{0} = period name</comment></data>
@@ -1696,6 +1696,7 @@
   <data name="Shifts_GeneralAvailability" xml:space="preserve"><value>Disponibilité générale</value></data>
   <data name="Shifts_AvailabilityHelp" xml:space="preserve"><value>Indiquez les jours où vous êtes disponible. Les coordinateurs peuvent voir qui est disponible lors de l'attribution des quarts.</value></data>
   <data name="Shifts_SaveAvailability" xml:space="preserve"><value>Enregistrer la disponibilité</value></data>
+  <data name="Shifts_DaysSelected" xml:space="preserve"><value>jours sélectionnés</value></data>
   <data name="Shifts_SlotsFull" xml:space="preserve"><value>Certains jours ont encore besoin d'aide, mais tous les créneaux disponibles sont complets. Reviens plus tard au cas où des places se libèrent.</value></data>
 
   <data name="ShiftDash_Title" xml:space="preserve"><value>Tableau de bord des quarts</value></data>
