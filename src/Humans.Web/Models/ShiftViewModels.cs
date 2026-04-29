@@ -543,6 +543,7 @@ public class BuildStrikeRotaTableViewModel
     public string? FilterPeriod { get; set; }
     public List<string> FilterPeriods { get; set; } = [];
     public List<Guid> FilterTagIds { get; set; } = [];
+    public string? Sort { get; set; }
 }
 
 public class EventRotaTableViewModel
@@ -558,6 +559,7 @@ public class EventRotaTableViewModel
     public string? FilterPeriod { get; set; }
     public List<string> FilterPeriods { get; set; } = [];
     public List<Guid> FilterTagIds { get; set; } = [];
+    public string? Sort { get; set; }
 }
 
 // === No-Show History ===

@@ -107,6 +107,7 @@
                                 @if (!string.IsNullOrEmpty(Model.FilterPeriod)) { <input type="hidden" name="period" value="@Model.FilterPeriod" /> }
                                 @foreach (var p in Model.FilterPeriods) { <input type="hidden" name="periods" value="@p" /> }
                                 @foreach (var tagId in Model.FilterTagIds) { <input type="hidden" name="tags" value="@tagId" /> }
+                                @if (!string.IsNullOrEmpty(Model.Sort)) { <input type="hidden" name="sort" value="@Model.Sort" /> }
                                 <button type="submit" class="btn btn-sm btn-success">@Localizer["Shifts_SignUpButton"]</button>
                             </form>
                         }

@@ -16,6 +16,7 @@
         @if (!string.IsNullOrEmpty(Model.FilterPeriod)) { <input type="hidden" name="period" value="@Model.FilterPeriod" /> }
         @foreach (var p in Model.FilterPeriods) { <input type="hidden" name="periods" value="@p" /> }
         @foreach (var tagId in Model.FilterTagIds) { <input type="hidden" name="tags" value="@tagId" /> }
+        @if (!string.IsNullOrEmpty(Model.Sort)) { <input type="hidden" name="sort" value="@Model.Sort" /> }
         <div class="col-auto">
             <label class="form-label form-label-sm">@Localizer["Shifts_Start"]</label>
             <select name="startDayOffset" class="form-select form-select-sm">
