@@ -23,17 +23,4 @@
         <div class="label">Open feedback</div>
         <div class="value">@Model.OpenFeedback</div>
     </div>
-    <div class="stat">
-        <div class="label">System health</div>
-        <div class="value @(Model.SystemAllNormal ? "" : "text-danger")">
-            @if (Model.SystemAllNormal)
-            {
-                <text>all systems normal</text>
-            }
-            else
-            {
-                @Model.ErrorsLast24h <em>err / @Model.FailedJobs jobs</em>
-            }
-        </div>
-    </div>
 </div>

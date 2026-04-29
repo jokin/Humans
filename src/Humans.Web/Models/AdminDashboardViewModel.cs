@@ -10,9 +10,6 @@ public sealed record AdminDashboardViewModel(
     int? ShiftFilledOf,
     int? ShiftTotalOf,
     int OpenFeedback,
-    int ErrorsLast24h,
-    int FailedJobs,
-    bool SystemAllNormal,
     IReadOnlyList<DepartmentCoverage> StaffingByDepartment,
     IReadOnlyList<DashboardActivityRow> RecentActivity);
 

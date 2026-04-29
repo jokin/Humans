@@ -4,7 +4,6 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Humans.Application.Configuration;
 using Humans.Application.Interfaces;
-using Humans.Application.Interfaces.Admin;
 using Humans.Application.Interfaces.AuditLog;
 using Humans.Application.Interfaces.Feedback;
 using Humans.Application.Interfaces.Onboarding;
@@ -65,14 +64,12 @@ public class AdminController : HumansControllerBase
         [FromServices] IShiftManagementService shifts,
         [FromServices] IFeedbackService feedback,
         [FromServices] IAuditLogService auditLog,
-        [FromServices] IAdminDashboardService adminDashboard,
         CancellationToken ct)
     {
         var firstName = User.Identity?.Name?.Split(' ').FirstOrDefault() ?? "";
         var activeHumans = await profileService.GetActiveApprovedCountAsync(ct);
         var (filled, total, ratio) = await shifts.GetOverallCoverageAsync(ct);
         var openFeedback = await feedback.GetActionableCountAsync(ct);
-        var health = await adminDashboard.GetSystemHealthAsync(ct);
         var recent = (await auditLog.GetRecentAsync(8, ct))
             .Select(e => new DashboardActivityRow(e.Action, e.Description, e.OccurredAt))
             .ToArray();
@@ -85,9 +82,6 @@ public class AdminController : HumansControllerBase
             ShiftFilledOf: total > 0 ? filled : null,
             ShiftTotalOf: total > 0 ? total : null,
             OpenFeedback: openFeedback,
-            ErrorsLast24h: health.ErrorsLast24h,
-            FailedJobs: health.FailedJobs,
-            SystemAllNormal: health.AllNormal,
             StaffingByDepartment: staffing,
             RecentActivity: recent);
         return View(vm);
