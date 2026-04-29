@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.IO.Compression;
+using System.Security.Claims;
 using System.Threading.RateLimiting;
 using Hangfire;
 using Hangfire.PostgreSql;
@@ -370,7 +371,7 @@ builder.Services.AddRateLimiter(options =>
             return RateLimitPartition.GetNoLimiter(string.Empty);
 
         return RateLimitPartition.GetFixedWindowLimiter(
-            partitionKey: context.User.Identity?.Name ?? context.Connection.RemoteIpAddress?.ToString() ?? "anonymous",
+            partitionKey: context.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? context.Connection.RemoteIpAddress?.ToString() ?? "anonymous",
             factory: _ => new FixedWindowRateLimiterOptions
             {
                 AutoReplenishment = true,
