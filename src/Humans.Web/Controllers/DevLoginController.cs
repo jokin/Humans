@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text;
 using Humans.Application.Configuration;
 using Humans.Application.Extensions;
+using Humans.Application.Interfaces.Profiles;
 using Humans.Infrastructure.Configuration;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
@@ -46,6 +47,7 @@ public class DevLoginController : Controller
     private readonly UserManager<User> _userManager;
     private readonly SignInManager<User> _signInManager;
     private readonly HumansDbContext _db;
+    private readonly IUserEmailService _userEmailService;
     private readonly IClock _clock;
     private readonly IWebHostEnvironment _env;
     private readonly IConfiguration _config;
@@ -58,6 +60,7 @@ public class DevLoginController : Controller
         UserManager<User> userManager,
         SignInManager<User> signInManager,
         HumansDbContext db,
+        IUserEmailService userEmailService,
         IClock clock,
         IWebHostEnvironment env,
         IConfiguration config,
@@ -69,6 +72,7 @@ public class DevLoginController : Controller
         _userManager = userManager;
         _signInManager = signInManager;
         _db = db;
+        _userEmailService = userEmailService;
         _clock = clock;
         _env = env;
         _config = config;
@@ -112,8 +116,13 @@ public class DevLoginController : Controller
         }
 
         var email = $"dev-{info.Slug}@localhost";
-        var user = await _userManager.FindByIdAsync(resolvedUserId.ToString())
-                   ?? await _userManager.FindByEmailAsync(email);
+        var user = await _userManager.FindByIdAsync(resolvedUserId.ToString());
+        if (user is null)
+        {
+            var byEmailUserId = await _userEmailService.GetUserIdByVerifiedEmailAsync(email);
+            if (byEmailUserId is not null)
+                user = await _userManager.FindByIdAsync(byEmailUserId.Value.ToString());
+        }
         if (user is null)
         {
             _logger.LogError("Dev persona {Slug} ({Id}) not found after seeding", info.Slug, resolvedUserId);
@@ -187,12 +196,12 @@ public class DevLoginController : Controller
 
         var email = $"dev-{info.Slug}@localhost";
 
-        // Legacy personas may exist with old hardcoded GUIDs — reuse them
-        var byEmail = await _userManager.FindByEmailAsync(email);
-        if (byEmail is not null)
+        // Legacy personas may exist with old hardcoded GUIDs — reuse them.
+        var byEmailUserId = await _userEmailService.GetUserIdByVerifiedEmailAsync(email);
+        if (byEmailUserId is not null)
         {
-            _logger.LogInformation("DEV: found legacy persona {Email} ({OldId}), reusing", email, byEmail.Id);
-            return byEmail.Id;
+            _logger.LogInformation("DEV: found legacy persona {Email} ({OldId}), reusing", email, byEmailUserId.Value);
+            return byEmailUserId.Value;
         }
 
         var now = _clock.GetCurrentInstant();
@@ -224,9 +233,6 @@ public class DevLoginController : Controller
         var user = new User
         {
             Id = id,
-            UserName = email,
-            Email = email,
-            EmailConfirmed = true,
             DisplayName = displayName,
             CreatedAt = now,
             LastLoginAt = now
@@ -579,9 +585,6 @@ public class DevLoginController : Controller
         var user = new User
         {
             Id = id,
-            UserName = email,
-            Email = email,
-            EmailConfirmed = true,
             DisplayName = displayName,
             CreatedAt = now,
             LastLoginAt = now

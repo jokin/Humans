@@ -263,11 +263,14 @@ public sealed class DevelopmentDashboardSeeder
             var email = $"{DevUserEmailPrefix}{i:D3}{DevUserEmailSuffix}";
             var createdAt = now.Minus(Duration.FromDays(_rng.Next(30, 400)));
             var lastLoginDaysAgo = _rng.Next(0, 85);
+            // Id MUST be set explicitly: UserManager's username uniqueness validator
+            // reads user.UserName before EF assigns the PK, and the override returns
+            // Id.ToString(). Without an explicit Id, every loop iteration resolves
+            // to UserName = Guid.Empty.ToString() and fails on the second insert.
+            var userId = Guid.NewGuid();
             var user = new User
             {
-                UserName = email,
-                Email = email,
-                EmailConfirmed = true,
+                Id = userId,
                 DisplayName = display,
                 CreatedAt = createdAt,
                 LastLoginAt = now.Minus(Duration.FromDays(lastLoginDaysAgo)).Minus(Duration.FromHours(_rng.Next(0, 23))),
@@ -280,7 +283,32 @@ public sealed class DevelopmentDashboardSeeder
                     $"Failed to create seeded dev user '{email}': {string.Join(", ", createResult.Errors.Select(e => e.Description))}");
             }
 
+            _dbContext.UserEmails.Add(new UserEmail
+            {
+                Id = Guid.NewGuid(),
+                UserId = user.Id,
+                Email = email,
+                IsVerified = true,
+                IsNotificationTarget = true,
+                IsOAuth = false,
+                Visibility = ContactFieldVisibility.BoardOnly,
+                DisplayOrder = 0,
+                CreatedAt = createdAt,
+                UpdatedAt = createdAt,
+            });
+
             users.Add(user);
+        }
+        try
+        {
+            await _dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex,
+                "Failed to save seeded UserEmail rows ({UserCount} users); aborting dev seed",
+                users.Count);
+            throw;
         }
 
         // Coordinators: 2 per parent team, routed via ITeamService.AddSeededMemberAsync so
@@ -417,12 +445,14 @@ public sealed class DevelopmentDashboardSeeder
             .Select(e => e.Id)
             .ToListAsync(cancellationToken);
 
-        // Dev users — looked up via UserManager's query surface (framework-owned).
-        var devUserIds = await _userManager.Users
-            .Where(u => u.Email != null
-                        && u.Email.EndsWith(DevUserEmailSuffix)
-                        && u.Email.StartsWith(DevUserEmailPrefix))
-            .Select(u => u.Id)
+        // Dev users — match the seed marker on UserEmails (post-PR-2 the User
+        // table no longer has an Email column; the seeder creates a verified
+        // UserEmail row for each dev human and we filter on that here).
+        var devUserIds = await _dbContext.UserEmails
+            .Where(ue => ue.Email.EndsWith(DevUserEmailSuffix)
+                      && ue.Email.StartsWith(DevUserEmailPrefix))
+            .Select(ue => ue.UserId)
+            .Distinct()
             .ToListAsync(cancellationToken);
 
         // Rotas created by the seeder live under the seeded event IDs; remove their

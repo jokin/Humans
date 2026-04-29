@@ -101,66 +101,74 @@ public class AccountController : Controller
             return RedirectToLocal(returnUrl);
         }
 
-        if (result.IsLockedOut)
-        {
-            // The external login is linked to a locked-out account (e.g., a merged source account).
-            // Check if the OAuth email belongs to a different, active account and re-link.
-            var lockedOutEmail = info.Principal.FindFirstValue(ClaimTypes.Email) ?? string.Empty;
-            if (!string.IsNullOrEmpty(lockedOutEmail))
-            {
-                var activeUser = await _magicLinkService.FindUserByVerifiedEmailAsync(lockedOutEmail);
-                if (activeUser is not null &&
-                    (activeUser.LockoutEnd is null || activeUser.LockoutEnd <= DateTimeOffset.UtcNow))
-                {
-                    try
-                    {
-                        // Remove the stale login from the locked source account
-                        var lockedUser = await _userManager.FindByLoginAsync(info.LoginProvider, info.ProviderKey);
-                        if (lockedUser is not null && lockedUser.Id != activeUser.Id)
-                        {
-                            await _userManager.RemoveLoginAsync(lockedUser, info.LoginProvider, info.ProviderKey);
-                        }
-
-                        // Add the login to the active target account
-                        var linkResult = await _userManager.AddLoginAsync(activeUser, info);
-                        if (linkResult.Succeeded)
-                        {
-                            activeUser.LastLoginAt = _clock.GetCurrentInstant();
-                            var pictureUrlClaim = info.Principal.FindFirstValue("urn:google:picture");
-                            if (string.IsNullOrEmpty(activeUser.ProfilePictureUrl) && pictureUrlClaim is not null)
-                            {
-                                activeUser.ProfilePictureUrl = pictureUrlClaim;
-                            }
-                            await _userManager.UpdateAsync(activeUser);
-
-                            await _signInManager.SignInAsync(activeUser, isPersistent: false);
-                            _logger.LogInformation(
-                                "Re-linked {Provider} login from locked account to active user {UserId} via email match",
-                                info.LoginProvider, activeUser.Id);
-                            return RedirectToLocal(returnUrl);
-                        }
-
-                        _logger.LogWarning(
-                            "Failed to re-link {Provider} to active user {UserId} after lockout: {Errors}",
-                            info.LoginProvider, activeUser.Id,
-                            string.Join(", ", linkResult.Errors.Select(e => e.Description)));
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogError(ex,
-                            "Error re-linking {Provider} to active user {UserId} after lockout",
-                            info.LoginProvider, activeUser.Id);
-                    }
-                }
-            }
-
-            return RedirectToAction(nameof(Login), new { returnUrl, error = "lockedout" });
-        }
-
         // No existing login — try to link to an existing account by email
         var email = info.Principal.FindFirstValue(ClaimTypes.Email) ?? string.Empty;
         var name = info.Principal.FindFirstValue(ClaimTypes.Name);
         var pictureUrl = info.Principal.FindFirstValue("urn:google:picture");
+
+        if (result.IsLockedOut)
+        {
+            // Lockout-relink: a merge or deletion locked out the source User
+            // that owns this OAuth login (UserRepository sets
+            // LockoutEnd = MaxValue on merge/anonymize). Move the login to the
+            // active User identified by the OAuth claim email so the human
+            // can keep signing in via Google. See Auth.md.
+            //
+            // Wrapped in try/catch because UserManager calls EF Core which can
+            // throw DbException / DbUpdateException / timeouts. Without the
+            // wrapper, RemoveLoginAsync succeeding then AddLoginAsync throwing
+            // would orphan the OAuth login (removed from source, not present
+            // on target) and the user's next sign-in would create a fresh
+            // duplicate. Catching and falling through to the lockedout
+            // redirect leaves the source row intact for retry.
+            try
+            {
+                if (!string.IsNullOrEmpty(email))
+                {
+                    var lockedSource = await _userManager.FindByLoginAsync(info.LoginProvider, info.ProviderKey);
+                    var activeTarget = await _magicLinkService.FindUserByVerifiedEmailAsync(email);
+                    if (lockedSource is not null && activeTarget is not null && lockedSource.Id != activeTarget.Id)
+                    {
+                        var removeResult = await _userManager.RemoveLoginAsync(
+                            lockedSource, info.LoginProvider, info.ProviderKey);
+                        if (removeResult.Succeeded)
+                        {
+                            var relinkResult = await _userManager.AddLoginAsync(activeTarget, info);
+                            if (relinkResult.Succeeded)
+                            {
+                                activeTarget.LastLoginAt = _clock.GetCurrentInstant();
+                                await _userManager.UpdateAsync(activeTarget);
+                                await _signInManager.SignInAsync(activeTarget, isPersistent: false);
+                                _logger.LogInformation(
+                                    "Relinked {Provider} login from locked source {SourceId} to active target {TargetId}",
+                                    info.LoginProvider, lockedSource.Id, activeTarget.Id);
+                                return RedirectToLocal(returnUrl);
+                            }
+
+                            _logger.LogWarning(
+                                "Lockout-relink: AddLoginAsync to {TargetId} failed: {Errors}",
+                                activeTarget.Id,
+                                string.Join(", ", relinkResult.Errors.Select(e => e.Description)));
+                        }
+                        else
+                        {
+                            _logger.LogWarning(
+                                "Lockout-relink: RemoveLoginAsync from {SourceId} failed: {Errors}",
+                                lockedSource.Id,
+                                string.Join(", ", removeResult.Errors.Select(e => e.Description)));
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex,
+                    "Error during lockout-relink for {Provider}; falling through to lockedout redirect",
+                    info.LoginProvider);
+            }
+
+            return RedirectToAction(nameof(Login), new { returnUrl, error = "lockedout" });
+        }
 
         if (string.IsNullOrEmpty(email))
         {
@@ -204,53 +212,11 @@ public class AccountController : Controller
             }
         }
 
-        // Before creating a new account, check unverified UserEmails and User.Email
-        // to prevent duplicates (e.g., email added to another account but not yet verified)
-        var existingByAnyEmail = await _magicLinkService.FindUserByAnyEmailAsync(email);
-        if (existingByAnyEmail is not null)
-        {
-            try
-            {
-                var linkAnyResult = await _userManager.AddLoginAsync(existingByAnyEmail, info);
-                if (linkAnyResult.Succeeded)
-                {
-                    existingByAnyEmail.LastLoginAt = _clock.GetCurrentInstant();
-                    if (string.IsNullOrEmpty(existingByAnyEmail.ProfilePictureUrl) && pictureUrl is not null)
-                    {
-                        existingByAnyEmail.ProfilePictureUrl = pictureUrl;
-                    }
-                    await _userManager.UpdateAsync(existingByAnyEmail);
-
-                    await _signInManager.SignInAsync(existingByAnyEmail, isPersistent: false);
-                    _logger.LogInformation(
-                        "Linked {Provider} login to existing user {UserId} via unverified/User.Email match",
-                        info.LoginProvider, existingByAnyEmail.Id);
-                    return RedirectToLocal(returnUrl);
-                }
-
-                _logger.LogWarning(
-                    "Failed to link {Provider} to existing user {UserId} via unverified email: {Errors}",
-                    info.LoginProvider, existingByAnyEmail.Id,
-                    string.Join(", ", linkAnyResult.Errors.Select(e => e.Description)));
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex,
-                    "Error linking {Provider} to existing user {UserId} via unverified email, falling through to create new account",
-                    info.LoginProvider, existingByAnyEmail.Id);
-            }
-        }
-
         // No existing account — create a new one.
-        // Identity-column writes decoupled per email-identity-decoupling spec PR 1
-        // (docs/superpowers/specs/2026-04-27-email-and-oauth-decoupling-design.md).
-        // UserName = id.ToString() (Identity needs a unique non-empty UserName);
-        // the email columns stay at defaults — UserEmail row is the source of truth.
         var newUserId = Guid.NewGuid();
         var user = new User
         {
             Id = newUserId,
-            UserName = newUserId.ToString(),
             DisplayName = name ?? email,
             ProfilePictureUrl = pictureUrl,
             CreatedAt = _clock.GetCurrentInstant(),
@@ -433,14 +399,10 @@ public class AccountController : Controller
         }
 
         var now = _clock.GetCurrentInstant();
-        // Identity-column writes decoupled per email-identity-decoupling spec PR 1.
-        // AddOAuthEmailAsync below creates the verified UserEmail row that
-        // becomes the source of truth for the email.
         var newUserId = Guid.NewGuid();
         var user = new User
         {
             Id = newUserId,
-            UserName = newUserId.ToString(),
             DisplayName = string.IsNullOrWhiteSpace(displayName) ? email : displayName.Trim(),
             CreatedAt = now,
             LastLoginAt = now

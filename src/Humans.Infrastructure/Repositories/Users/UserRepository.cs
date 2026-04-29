@@ -69,9 +69,12 @@ public sealed class UserRepository : IUserRepository
 
     public async Task<IReadOnlyList<User>> GetAllAsync(CancellationToken ct = default)
     {
+        // Include UserEmails so callers reading User.Email get the override's
+        // computed value rather than null. Cheap at ~500-user scale.
         await using var ctx = await _factory.CreateDbContextAsync(ct);
         return await ctx.Users
             .AsNoTracking()
+            .Include(u => u.UserEmails)
             .ToListAsync(ct);
     }
 
@@ -116,34 +119,56 @@ public sealed class UserRepository : IUserRepository
     public async Task<User?> GetByEmailOrAlternateAsync(
         string normalizedEmail, string? alternateEmail, CancellationToken ct = default)
     {
-        // ILIKE without escape treats '_' and '%' in the input as wildcards,
-        // so alex_smith@example.com would also match alexXsmith@example.com.
-        // Escape the pattern and pass '\' as the explicit escape character for
-        // literal (case-insensitive) matching.
+        // PR 2 of the email-identity-decoupling spec drops the User.Email
+        // column; verified email lookups now route through user_emails. The
+        // User.GoogleEmail field stays through PR 2 (PR 3 deletes it), so we
+        // still match against it here. ILIKE without escape treats '_' / '%'
+        // in the input as wildcards, so alex_smith@example.com would also
+        // match alexXsmith@example.com — escape the pattern with '\'.
         var escapedEmail = EscapeLikePattern(normalizedEmail);
         var escapedAlternate = alternateEmail is null ? null : EscapeLikePattern(alternateEmail);
 
         await using var ctx = await _factory.CreateDbContextAsync(ct);
 
+        // Step 1: look up by verified UserEmail (canonical email source).
+        var userIdByEmail = escapedAlternate is null
+            ? await ctx.UserEmails
+                .Where(e => e.IsVerified && EF.Functions.ILike(e.Email, escapedEmail, "\\"))
+                .Select(e => (Guid?)e.UserId)
+                .FirstOrDefaultAsync(ct)
+            : await ctx.UserEmails
+                .Where(e => e.IsVerified && (
+                    EF.Functions.ILike(e.Email, escapedEmail, "\\") ||
+                    EF.Functions.ILike(e.Email, escapedAlternate, "\\")))
+                .Select(e => (Guid?)e.UserId)
+                .FirstOrDefaultAsync(ct);
+
+        if (userIdByEmail is not null)
+        {
+            return await ctx.Users
+                .AsNoTracking()
+                .Include(u => u.UserEmails)
+                .FirstOrDefaultAsync(u => u.Id == userIdByEmail.Value, ct);
+        }
+
+        // Step 2: fall back to User.GoogleEmail (until PR 3 removes that field).
         if (escapedAlternate is null)
         {
             return await ctx.Users
                 .AsNoTracking()
+                .Include(u => u.UserEmails)
                 .FirstOrDefaultAsync(u =>
-                    (u.Email != null && EF.Functions.ILike(u.Email, escapedEmail, "\\")) ||
-                    (u.GoogleEmail != null && EF.Functions.ILike(u.GoogleEmail, escapedEmail, "\\")),
+                    u.GoogleEmail != null && EF.Functions.ILike(u.GoogleEmail, escapedEmail, "\\"),
                     ct);
         }
 
         return await ctx.Users
             .AsNoTracking()
+            .Include(u => u.UserEmails)
             .FirstOrDefaultAsync(u =>
-                (u.Email != null && (
-                    EF.Functions.ILike(u.Email, escapedEmail, "\\") ||
-                    EF.Functions.ILike(u.Email, escapedAlternate, "\\"))) ||
-                (u.GoogleEmail != null && (
+                u.GoogleEmail != null && (
                     EF.Functions.ILike(u.GoogleEmail, escapedEmail, "\\") ||
-                    EF.Functions.ILike(u.GoogleEmail, escapedAlternate, "\\"))),
+                    EF.Functions.ILike(u.GoogleEmail, escapedAlternate, "\\")),
                 ct);
     }
 
@@ -152,39 +177,6 @@ public sealed class UserRepository : IUserRepository
             .Replace("\\", "\\\\")
             .Replace("%", "\\%")
             .Replace("_", "\\_");
-
-    public async Task<User?> GetByNormalizedEmailAsync(
-        string? normalizedEmail, CancellationToken ct = default)
-    {
-        if (normalizedEmail is null)
-            return null;
-
-        await using var ctx = await _factory.CreateDbContextAsync(ct);
-        return await ctx.Users
-            .AsNoTracking()
-            .FirstOrDefaultAsync(u => u.NormalizedEmail == normalizedEmail, ct);
-    }
-
-    public async Task<IReadOnlyList<User>> GetContactUsersAsync(
-        string? search, CancellationToken ct = default)
-    {
-        await using var ctx = await _factory.CreateDbContextAsync(ct);
-        var query = ctx.Users
-            .AsNoTracking()
-            .Where(u => u.ContactSource != null && u.LastLoginAt == null);
-
-        if (!string.IsNullOrWhiteSpace(search))
-        {
-            var pattern = $"%{search}%";
-            query = query.Where(u =>
-                EF.Functions.ILike(u.DisplayName, pattern) ||
-                (u.Email != null && EF.Functions.ILike(u.Email, pattern)));
-        }
-
-        return await query
-            .OrderByDescending(u => u.CreatedAt)
-            .ToListAsync(ct);
-    }
 
     public async Task<IReadOnlyList<Instant>> GetLoginTimestampsInWindowAsync(
         Instant fromInclusive, Instant toExclusive, CancellationToken ct = default)
@@ -275,18 +267,22 @@ public sealed class UserRepository : IUserRepository
     public async Task<(bool Updated, string? OldEmail)> RewritePrimaryEmailAsync(
         Guid userId, string newEmail, CancellationToken ct = default)
     {
+        // The email rename is applied to the UserEmail row by the admin flow's
+        // call to IUserEmailService.RewriteEmailAddressAsync; this method only
+        // returns the previous value for audit logging. With Identity-column
+        // writes removed (PR 2), base.Email is null for users created post-PR 1
+        // — pull the old email from UserEmails so the audit log records a real
+        // address. Falls back to base.Email for legacy pre-PR 1 users (column
+        // still populated) so the audit remains accurate during the transition.
         await using var ctx = await _factory.CreateDbContextAsync(ct);
-        var user = await ctx.Users.FindAsync([userId], ct);
+        var user = await ctx.Users
+            .AsNoTracking()
+            .Include(u => u.UserEmails)
+            .FirstOrDefaultAsync(u => u.Id == userId, ct);
         if (user is null)
             return (false, null);
 
-        var oldEmail = user.Email;
-        user.Email = newEmail;
-        user.UserName = newEmail;
-        user.NormalizedEmail = newEmail.ToUpperInvariant();
-        user.NormalizedUserName = newEmail.ToUpperInvariant();
-        await ctx.SaveChangesAsync(ct);
-        return (true, oldEmail);
+        return (true, user.Email);
     }
 
     public async Task<bool> SetDeletionPendingAsync(
@@ -324,13 +320,7 @@ public sealed class UserRepository : IUserRepository
         if (user is null)
             return false;
 
-        var anonymizedId = $"merged-{user.Id:N}";
-
         user.DisplayName = "Merged User";
-        user.Email = $"{anonymizedId}@merged.local";
-        user.NormalizedEmail = user.Email.ToUpperInvariant();
-        user.UserName = anonymizedId;
-        user.NormalizedUserName = anonymizedId.ToUpperInvariant();
         user.ProfilePictureUrl = null;
         user.PhoneNumber = null;
         user.PhoneNumberConfirmed = false;
@@ -427,15 +417,10 @@ public sealed class UserRepository : IUserRepository
         var displayName = user.DisplayName;
 
         // Remove UserEmails so the unique index doesn't block the new account
+        // and the computed User.Email becomes null.
         var userEmails = await ctx.UserEmails.Where(e => e.UserId == userId).ToListAsync(ct);
         ctx.UserEmails.RemoveRange(userEmails);
 
-        // Change email so email-based lookup won't match
-        var purgedEmail = $"purged-{Guid.NewGuid()}@deleted.local";
-        user.Email = purgedEmail;
-        user.NormalizedEmail = purgedEmail.ToUpperInvariant();
-        user.UserName = purgedEmail;
-        user.NormalizedUserName = purgedEmail.ToUpperInvariant();
         user.DisplayName = $"Purged ({displayName})";
 
         // Lock out the account permanently
@@ -498,15 +483,7 @@ public sealed class UserRepository : IUserRepository
         var originalDisplayName = user.DisplayName;
         var preferredLanguage = user.PreferredLanguage;
 
-        // Synthetic anonymized identifier derived from the user id so the
-        // collision surface for the sentinel email is zero (one per user).
-        var anonymizedId = $"deleted-{user.Id:N}";
-
         user.DisplayName = "Deleted User";
-        user.Email = $"{anonymizedId}@deleted.local";
-        user.NormalizedEmail = user.Email.ToUpperInvariant();
-        user.UserName = anonymizedId;
-        user.NormalizedUserName = anonymizedId.ToUpperInvariant();
         user.ProfilePictureUrl = null;
         user.PhoneNumber = null;
         user.PhoneNumberConfirmed = false;
