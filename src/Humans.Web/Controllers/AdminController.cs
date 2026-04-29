@@ -4,6 +4,12 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Humans.Application.Configuration;
 using Humans.Application.Interfaces;
+using Humans.Application.Interfaces.Admin;
+using Humans.Application.Interfaces.AuditLog;
+using Humans.Application.Interfaces.Feedback;
+using Humans.Application.Interfaces.Onboarding;
+using Humans.Application.Interfaces.Profiles;
+using Humans.Application.Interfaces.Shifts;
 using Humans.Domain.Entities;
 using Humans.Web.Authorization;
 using Humans.Infrastructure.Data;
@@ -48,11 +54,43 @@ public class AdminController : HumansControllerBase
         _userEmailBackfillService = userEmailBackfillService;
     }
 
+    // Dashboard is reachable by any admin-shaped role (FinanceAdmin etc.) so the
+    // top-nav "Admin" link doesn't dead-end at 403. Sidebar items inside still
+    // filter per-item, and all dashboard tiles are aggregate counts that are
+    // safe across roles. Other AdminController actions remain AdminOnly.
     [HttpGet("")]
-    [Authorize(Policy = PolicyNames.AdminOnly)]
-    public IActionResult Index()
+    [Authorize(Policy = PolicyNames.AnyAdminRole)]
+    public async Task<IActionResult> Index(
+        [FromServices] IProfileService profileService,
+        [FromServices] IShiftManagementService shifts,
+        [FromServices] IFeedbackService feedback,
+        [FromServices] IAuditLogService auditLog,
+        [FromServices] IAdminDashboardService adminDashboard,
+        CancellationToken ct)
     {
-        return View();
+        var firstName = User.Identity?.Name?.Split(' ').FirstOrDefault() ?? "";
+        var activeHumans = await profileService.GetActiveApprovedCountAsync(ct);
+        var (filled, total, ratio) = await shifts.GetOverallCoverageAsync(ct);
+        var openFeedback = await feedback.GetActionableCountAsync(ct);
+        var health = await adminDashboard.GetSystemHealthAsync(ct);
+        var recent = (await auditLog.GetRecentAsync(8, ct))
+            .Select(e => new DashboardActivityRow(e.Action, e.Description, e.OccurredAt))
+            .ToArray();
+        var staffing = Array.Empty<DepartmentCoverage>();
+
+        var vm = new AdminDashboardViewModel(
+            GreetingFirstName: firstName,
+            ActiveHumans: activeHumans,
+            ShiftCoveragePercent: total > 0 ? (int)Math.Round(ratio * 100) : 0,
+            ShiftFilledOf: total > 0 ? filled : null,
+            ShiftTotalOf: total > 0 ? total : null,
+            OpenFeedback: openFeedback,
+            ErrorsLast24h: health.ErrorsLast24h,
+            FailedJobs: health.FailedJobs,
+            SystemAllNormal: health.AllNormal,
+            StaffingByDepartment: staffing,
+            RecentActivity: recent);
+        return View(vm);
     }
 
     [HttpPost("Humans/{id}/Purge")]
@@ -112,6 +150,10 @@ public class AdminController : HumansControllerBase
         ViewBag.LifetimeCounts = sink.GetLifetimeCounts();
         return View(events);
     }
+
+    [HttpGet("Maintenance")]
+    [Authorize(Policy = PolicyNames.AdminOnly)]
+    public IActionResult Maintenance() => View();
 
     [HttpGet("Configuration")]
     [Authorize(Policy = PolicyNames.AdminOnly)]
@@ -239,7 +281,7 @@ public class AdminController : HumansControllerBase
 
         _logger.LogWarning("Admin cleared {Count} stale Hangfire locks", deleted);
         SetSuccess($"Cleared {deleted} Hangfire lock(s). Restart the app to re-register recurring jobs.");
-        return RedirectToAction(nameof(Index));
+        return RedirectToAction(nameof(Maintenance));
     }
 
     /// <summary>
