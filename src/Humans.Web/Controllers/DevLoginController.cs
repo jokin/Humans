@@ -82,7 +82,7 @@ public class DevLoginController : Controller
     /// Signs in as a dev persona by slug (e.g., "admin", "noinfo-admin", "volunteer").
     /// </summary>
     [HttpGet("{persona}")]
-    public async Task<IActionResult> SignIn(string persona)
+    public async Task<IActionResult> SignIn(string persona, string? returnUrl = null)
     {
         if (!IsDevAuthEnabled())
             return NotFound();
@@ -123,7 +123,7 @@ public class DevLoginController : Controller
         await _signInManager.SignInAsync(user, isPersistent: false);
         _logger.LogWarning("DEV LOGIN: signed in as {Email} ({Id})", user.Email, user.Id);
 
-        return RedirectToAction(nameof(HomeController.Index), "Home");
+        return RedirectToLocalOrHome(returnUrl);
     }
 
     /// <summary>
@@ -131,7 +131,7 @@ public class DevLoginController : Controller
     /// Useful in preview environments with cloned production-like data.
     /// </summary>
     [HttpGet("users")]
-    public async Task<IActionResult> Users()
+    public async Task<IActionResult> Users(string? returnUrl = null)
     {
         if (!IsDevAuthEnabled())
             return NotFound();
@@ -142,6 +142,7 @@ public class DevLoginController : Controller
             .Take(100)
             .ToListAsync();
 
+        ViewData["ReturnUrl"] = returnUrl;
         return View(users.Select(u => (u.Id, u.DisplayName ?? u.Email ?? "Unknown", u.Email ?? "")).ToList());
     }
 
@@ -149,7 +150,7 @@ public class DevLoginController : Controller
     /// Signs in as any user by ID. Used by the user chooser.
     /// </summary>
     [HttpGet("users/{id:guid}")]
-    public async Task<IActionResult> SignInAsUser(Guid id)
+    public async Task<IActionResult> SignInAsUser(Guid id, string? returnUrl = null)
     {
         if (!IsDevAuthEnabled())
             return NotFound();
@@ -161,8 +162,13 @@ public class DevLoginController : Controller
         await _signInManager.SignInAsync(user, isPersistent: false);
         _logger.LogWarning("DEV LOGIN: signed in as {Email} ({Id})", user.Email, user.Id);
 
-        return RedirectToAction(nameof(HomeController.Index), "Home");
+        return RedirectToLocalOrHome(returnUrl);
     }
+
+    private IActionResult RedirectToLocalOrHome(string? returnUrl) =>
+        Url.IsLocalUrl(returnUrl)
+            ? LocalRedirect(returnUrl!)
+            : RedirectToAction(nameof(HomeController.Index), "Home");
 
     private bool IsDevAuthEnabled()
     {
