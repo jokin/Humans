@@ -25,6 +25,9 @@ public interface IEventGuideService
     Task<int> GetNextCategoryOrderAsync(CancellationToken ct = default);
     Task CreateCategoryAsync(EventCategory category, CancellationToken ct = default);
     Task UpdateCategoryAsync(EventCategory category, CancellationToken ct = default);
+    /// <summary>
+    /// Deletes a category when no guide events reference it.
+    /// </summary>
     /// <returns>null if not found; (false, count) if has linked events; (true, 0) on success.</returns>
     Task<(bool deleted, int linkedCount)> DeleteCategoryAsync(Guid id, CancellationToken ct = default);
     Task MoveCategoryAsync(Guid id, int direction, CancellationToken ct = default);
@@ -36,6 +39,9 @@ public interface IEventGuideService
     Task<int> GetNextVenueOrderAsync(CancellationToken ct = default);
     Task CreateVenueAsync(GuideSharedVenue venue, CancellationToken ct = default);
     Task UpdateVenueAsync(GuideSharedVenue venue, CancellationToken ct = default);
+    /// <summary>
+    /// Deletes a shared venue when no guide events reference it.
+    /// </summary>
     /// <returns>(false, count) if has linked events; (true, 0) on success.</returns>
     Task<(bool deleted, int linkedCount)> DeleteVenueAsync(Guid id, CancellationToken ct = default);
     Task MoveVenueAsync(Guid id, int direction, CancellationToken ct = default);
