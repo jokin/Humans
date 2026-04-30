@@ -2,6 +2,7 @@ using Humans.Application.Interfaces.EventGuide;
 using Humans.Domain.Entities;
 using Humans.Domain.Enums;
 using Humans.Web.Filters;
+using Humans.Web.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Cors;
 using Microsoft.AspNetCore.Identity;
@@ -42,7 +43,7 @@ public class GuideApiController : ControllerBase
         var excludedSlugs = await GetExcludedSlugsAsync();
         var events = await _guide.GetApprovedEventsAsync(campId, null, null, q, excludedSlugs);
 
-        var results = new List<object>();
+        var results = new List<GuideEventApiDto>();
         foreach (var e in events)
         {
             if (categorySlug != null && !string.Equals(e.Category.Slug, categorySlug, StringComparison.OrdinalIgnoreCase))
@@ -54,23 +55,11 @@ public class GuideApiController : ControllerBase
                 ? (e.SubmitterUser?.Profile?.BurnerName ?? e.SubmitterUser?.GetEffectiveEmail())
                 : null;
 
-            if (e.IsRecurring && !string.IsNullOrEmpty(e.RecurrenceDays))
+            foreach (var occurrenceStart in e.GetOccurrenceInstants())
             {
-                var offsets = e.RecurrenceDays.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-                foreach (var offsetStr in offsets)
-                {
-                    if (!int.TryParse(offsetStr, System.Globalization.CultureInfo.InvariantCulture, out var dayOffset)) continue;
-                    var occurrenceStart = e.StartAt.Plus(Duration.FromDays(dayOffset));
-                    var eventDayOffset = ComputeDayOffset(occurrenceStart, gateOpeningDate, tz);
-                    if (day.HasValue && eventDayOffset != day.Value) continue;
-                    results.Add(BuildEventDto(e, occurrenceStart, eventDayOffset, campName, submitterName));
-                }
-            }
-            else
-            {
-                var eventDayOffset = ComputeDayOffset(e.StartAt, gateOpeningDate, tz);
+                var eventDayOffset = ComputeDayOffset(occurrenceStart, gateOpeningDate, tz);
                 if (day.HasValue && eventDayOffset != day.Value) continue;
-                results.Add(BuildEventDto(e, e.StartAt, eventDayOffset, campName, submitterName));
+                results.Add(BuildEventDto(e, occurrenceStart, eventDayOffset, campName, submitterName));
             }
         }
 
@@ -109,12 +98,10 @@ public class GuideApiController : ControllerBase
             {
                 var first = g.First();
                 var season = first.Camp?.Seasons.OrderByDescending(s => s.Year).FirstOrDefault();
-                return new
-                {
-                    id = first.CampId!.Value,
-                    name = season?.Name ?? first.Camp?.Slug,
-                    slug = first.Camp?.Slug
-                };
+                return new GuideCampApiDto(
+                    first.CampId!.Value,
+                    season?.Name ?? first.Camp?.Slug,
+                    first.Camp?.Slug);
             })
             .ToList();
 
@@ -137,31 +124,27 @@ public class GuideApiController : ControllerBase
         var season = first.Camp?.Seasons.OrderByDescending(s => s.Year).FirstOrDefault();
         var campName = season?.Name ?? first.Camp?.Slug;
 
-        return Ok(new
-        {
+        return Ok(new GuideCampDetailApiDto(
             id,
-            name = campName,
-            slug = first.Camp?.Slug,
-            events = events.Select(e =>
+            campName,
+            first.Camp?.Slug,
+            events.Select(e =>
             {
                 var dayOffset = ComputeDayOffset(e.StartAt, gateOpeningDate, tz);
                 return BuildEventDto(e, e.StartAt, dayOffset, campName, null);
-            }).ToList()
-        });
+            }).ToList()));
     }
 
     [HttpGet("categories")]
     public async Task<IActionResult> GetCategories()
     {
         var categories = await _guide.GetActiveCategoriesAsync();
-        return Ok(categories.Select(c => new
-        {
-            id = c.Id,
-            name = c.Name,
-            slug = c.Slug,
-            isSensitive = c.IsSensitive,
-            displayOrder = c.DisplayOrder
-        }));
+        return Ok(categories.Select(c => new GuideCategoryApiDto(
+            c.Id,
+            c.Name,
+            c.Slug,
+            c.IsSensitive,
+            c.DisplayOrder)));
     }
 
     // ─── Preferences (authenticated, same-origin — no CORS) ───────
@@ -271,33 +254,29 @@ public class GuideApiController : ControllerBase
         return await _guide.GetExcludedCategorySlugsAsync(user.Id);
     }
 
-    private static object BuildEventDto(
+    private static GuideEventApiDto BuildEventDto(
         GuideEvent e, Instant startAt, int dayOffset, string? campName, string? submitterName)
     {
-        return new
-        {
-            id = e.Id,
-            title = e.Title,
-            description = e.Description,
-            category = new
-            {
-                id = e.Category.Id,
-                name = e.Category.Name,
-                slug = e.Category.Slug,
-                isSensitive = e.Category.IsSensitive
-            },
-            startAt = InstantPattern.General.Format(startAt),
-            durationMinutes = e.DurationMinutes,
+        return new GuideEventApiDto(
+            e.Id,
+            e.Title,
+            e.Description,
+            new GuideEventCategoryApiDto(
+                e.Category.Id,
+                e.Category.Name,
+                e.Category.Slug,
+                e.Category.IsSensitive),
+            InstantPattern.General.Format(startAt),
+            e.DurationMinutes,
             dayOffset,
-            isRecurring = e.IsRecurring,
-            camp = e.CampId.HasValue ? new { id = e.CampId.Value, name = campName } : (object?)null,
-            venue = e.GuideSharedVenueId.HasValue && e.GuideSharedVenue != null
-                ? new { id = e.GuideSharedVenueId.Value, name = e.GuideSharedVenue.Name }
-                : (object?)null,
+            e.IsRecurring,
+            e.CampId.HasValue ? new GuideEventCampApiDto(e.CampId.Value, campName) : null,
+            e.GuideSharedVenueId.HasValue && e.GuideSharedVenue != null
+                ? new GuideEventVenueApiDto(e.GuideSharedVenueId.Value, e.GuideSharedVenue.Name)
+                : null,
             submitterName,
-            locationNote = e.LocationNote,
-            priorityRank = e.PriorityRank
-        };
+            e.LocationNote,
+            e.PriorityRank);
     }
 
     private static int ComputeDayOffset(Instant instant, LocalDate? gateOpeningDate, DateTimeZone? tz)

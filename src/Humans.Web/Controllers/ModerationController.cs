@@ -1,6 +1,5 @@
 using Humans.Application.Interfaces.Email;
 using Humans.Application.Interfaces.EventGuide;
-using Humans.Application.Interfaces.Repositories;
 using Humans.Domain.Constants;
 using Humans.Domain.Entities;
 using Humans.Domain.Enums;

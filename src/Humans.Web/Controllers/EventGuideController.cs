@@ -114,7 +114,6 @@ public class EventGuideController : HumansControllerBase
         }
 
         var tz = GetTimeZone(guideSettings!);
-        var now = _clock.GetCurrentInstant();
         var durationMinutes = model.IsAllDay ? 1440 : model.DurationMinutes;
         var startTime = model.IsAllDay ? TimeSpan.Zero : model.StartTime;
 
@@ -132,11 +131,9 @@ public class EventGuideController : HumansControllerBase
             DurationMinutes = durationMinutes,
             IsRecurring = model.IsRecurring,
             RecurrenceDays = model.IsRecurring ? model.RecurrenceDays : null,
-            PriorityRank = 0,
-            Status = GuideEventStatus.Pending,
-            SubmittedAt = now,
-            LastUpdatedAt = now
+            PriorityRank = 0
         };
+        guideEvent.Submit(_clock);
 
         await _guide.SubmitEventAsync(guideEvent);
 
@@ -381,18 +378,7 @@ public class EventGuideController : HumansControllerBase
                 ? (e.SubmitterUser?.Profile?.BurnerName ?? e.SubmitterUser?.GetEffectiveEmail())
                 : null;
 
-            var occurrences = new List<Instant> { e.StartAt };
-            if (e.IsRecurring && !string.IsNullOrEmpty(e.RecurrenceDays))
-            {
-                occurrences.Clear();
-                foreach (var offsetStr in e.RecurrenceDays.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-                {
-                    if (int.TryParse(offsetStr, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var dayOffset))
-                        occurrences.Add(e.StartAt.Plus(Duration.FromDays(dayOffset)));
-                }
-            }
-
-            foreach (var startInstant in occurrences)
+            foreach (var startInstant in e.GetOccurrenceInstants())
             {
                 var eventDayOffset = 0;
                 if (gateOpeningDate != null)

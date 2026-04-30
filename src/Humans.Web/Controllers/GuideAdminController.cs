@@ -82,9 +82,9 @@ public class GuideAdminController : HumansControllerBase
             await _guide.SaveGuideSettingsAsync(
                 model.Id == Guid.Empty ? null : model.Id,
                 model.EventSettingsId,
-                model.SubmissionOpenAt,
-                model.SubmissionCloseAt,
-                model.GuidePublishAt,
+                LocalDateTime.FromDateTime(model.SubmissionOpenAt),
+                LocalDateTime.FromDateTime(model.SubmissionCloseAt),
+                LocalDateTime.FromDateTime(model.GuidePublishAt),
                 model.MaxPrintSlots);
 
             _logger.LogInformation("Guide settings saved for event {EventSettingsId}", model.EventSettingsId);

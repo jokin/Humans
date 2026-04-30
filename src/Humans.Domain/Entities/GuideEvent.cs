@@ -1,3 +1,4 @@
+using System.Globalization;
 using Humans.Domain.Enums;
 using NodaTime;
 
@@ -136,7 +137,7 @@ public class GuideEvent
     public void Submit(IClock clock)
     {
         if (Status is not (GuideEventStatus.Draft or GuideEventStatus.Rejected
-            or GuideEventStatus.ResubmitRequested or GuideEventStatus.Approved or GuideEventStatus.Pending))
+            or GuideEventStatus.ResubmitRequested))
             throw new InvalidOperationException($"Cannot submit event in {Status} state");
         var now = clock.GetCurrentInstant();
         Status = GuideEventStatus.Pending;
@@ -171,5 +172,23 @@ public class GuideEvent
             _ => throw new ArgumentOutOfRangeException(nameof(actionType))
         };
         LastUpdatedAt = clock.GetCurrentInstant();
+    }
+
+    /// <summary>
+    /// Returns the event start instant plus any recurrence-day offsets.
+    /// </summary>
+    public IReadOnlyList<Instant> GetOccurrenceInstants()
+    {
+        if (!IsRecurring || string.IsNullOrWhiteSpace(RecurrenceDays))
+            return [StartAt];
+
+        return RecurrenceDays
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(token => int.TryParse(token, NumberStyles.Integer, CultureInfo.InvariantCulture, out var dayOffset)
+                ? (int?)dayOffset
+                : null)
+            .Where(dayOffset => dayOffset.HasValue)
+            .Select(dayOffset => StartAt.Plus(Duration.FromDays(dayOffset!.Value)))
+            .ToList();
     }
 }

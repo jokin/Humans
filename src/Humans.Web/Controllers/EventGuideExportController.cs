@@ -85,7 +85,7 @@ public class EventGuideExportController : HumansControllerBase
             var campName = campSeason?.Name ?? e.Camp?.Slug;
             var venueName = e.GuideSharedVenue?.Name;
 
-            foreach (var occ in GetOccurrenceInstants(e))
+            foreach (var occ in e.GetOccurrenceInstants())
             {
                 allOccurrences.Add(new PrintGuideEntry
                 {
@@ -144,35 +144,12 @@ public class EventGuideExportController : HumansControllerBase
     private static List<(string Date, string Time)> GetOccurrences(GuideEvent e, DateTimeZone? tz)
     {
         var results = new List<(string, string)>();
-        if (e.IsRecurring && !string.IsNullOrEmpty(e.RecurrenceDays))
+        foreach (var occurrence in e.GetOccurrenceInstants())
         {
-            foreach (var offsetStr in e.RecurrenceDays.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-            {
-                if (!int.TryParse(offsetStr, CultureInfo.InvariantCulture, out var d)) continue;
-                var local = ToLocal(e.StartAt.Plus(Duration.FromDays(d)), tz);
-                results.Add((local.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture), local.ToString("HH:mm", CultureInfo.InvariantCulture)));
-            }
-        }
-        else
-        {
-            var local = ToLocal(e.StartAt, tz);
+            var local = ToLocal(occurrence, tz);
             results.Add((local.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture), local.ToString("HH:mm", CultureInfo.InvariantCulture)));
         }
         return results;
-    }
-
-    private static List<Instant> GetOccurrenceInstants(GuideEvent e)
-    {
-        if (e.IsRecurring && !string.IsNullOrEmpty(e.RecurrenceDays))
-        {
-            return e.RecurrenceDays
-                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                .Select(s => int.TryParse(s, CultureInfo.InvariantCulture, out var d) ? (int?)d : null)
-                .Where(d => d.HasValue)
-                .Select(d => e.StartAt.Plus(Duration.FromDays(d!.Value)))
-                .ToList();
-        }
-        return [e.StartAt];
     }
 
     private static string CsvEscape(string value)

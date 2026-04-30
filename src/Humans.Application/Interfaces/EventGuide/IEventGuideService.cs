@@ -1,6 +1,7 @@
-using Humans.Application.Interfaces.Repositories;
+using Humans.Application.DTOs.EventGuide;
 using Humans.Domain.Entities;
 using Humans.Domain.Enums;
+using NodaTime;
 
 namespace Humans.Application.Interfaces.EventGuide;
 
@@ -13,7 +14,7 @@ public interface IEventGuideService
     Task<EventSettings?> GetEventSettingsByIdAsync(Guid id, CancellationToken ct = default);
     Task SaveGuideSettingsAsync(
         Guid? existingId, Guid eventSettingsId,
-        DateTime submissionOpenAt, DateTime submissionCloseAt, DateTime guidePublishAt,
+        LocalDateTime submissionOpenAt, LocalDateTime submissionCloseAt, LocalDateTime guidePublishAt,
         int maxPrintSlots, CancellationToken ct = default);
 
     // ── Categories ────────────────────────────────────────────────────────

@@ -21,8 +21,6 @@ public class GuideEventTests
     [InlineData(GuideEventStatus.Draft)]
     [InlineData(GuideEventStatus.Rejected)]
     [InlineData(GuideEventStatus.ResubmitRequested)]
-    [InlineData(GuideEventStatus.Approved)]
-    [InlineData(GuideEventStatus.Pending)]
     public void Submit_FromValidState_SetsPendingAndTimestamps(GuideEventStatus source)
     {
         var guideEvent = CreateEvent(source);
@@ -43,6 +41,19 @@ public class GuideEventTests
 
         action.Should().Throw<InvalidOperationException>()
             .WithMessage("Cannot submit event in Withdrawn state");
+    }
+
+    [HumansTheory]
+    [InlineData(GuideEventStatus.Approved)]
+    [InlineData(GuideEventStatus.Pending)]
+    public void Submit_FromInvalidState_Throws(GuideEventStatus source)
+    {
+        var guideEvent = CreateEvent(source);
+
+        var action = () => guideEvent.Submit(_clock);
+
+        action.Should().Throw<InvalidOperationException>()
+            .WithMessage($"Cannot submit event in {source} state");
     }
 
     [HumansTheory]
@@ -113,6 +124,21 @@ public class GuideEventTests
         var action = () => guideEvent.ApplyModerationAction((ModerationActionType)999, _clock);
 
         action.Should().Throw<ArgumentOutOfRangeException>();
+    }
+
+    [HumansFact]
+    public void GetOccurrenceInstants_ForRecurringEvent_ReturnsExpandedInstants()
+    {
+        var guideEvent = CreateEvent(GuideEventStatus.Draft);
+        guideEvent.IsRecurring = true;
+        guideEvent.RecurrenceDays = "0,2,4";
+
+        var occurrences = guideEvent.GetOccurrenceInstants();
+
+        occurrences.Should().HaveCount(3);
+        occurrences[0].Should().Be(guideEvent.StartAt);
+        occurrences[1].Should().Be(guideEvent.StartAt.Plus(Duration.FromDays(2)));
+        occurrences[2].Should().Be(guideEvent.StartAt.Plus(Duration.FromDays(4)));
     }
 
     private GuideEvent CreateEvent(GuideEventStatus status)

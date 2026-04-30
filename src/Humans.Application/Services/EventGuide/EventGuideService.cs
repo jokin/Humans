@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Humans.Application.DTOs.EventGuide;
 using Humans.Application.Interfaces.EventGuide;
 using Humans.Application.Interfaces.Repositories;
 using Humans.Domain.Entities;
@@ -39,7 +40,7 @@ public sealed class EventGuideService : IEventGuideService
 
     public async Task SaveGuideSettingsAsync(
         Guid? existingId, Guid eventSettingsId,
-        DateTime submissionOpenAt, DateTime submissionCloseAt, DateTime guidePublishAt,
+        LocalDateTime submissionOpenAt, LocalDateTime submissionCloseAt, LocalDateTime guidePublishAt,
         int maxPrintSlots, CancellationToken ct = default)
     {
         var eventSettings = await _repo.GetEventSettingsByIdAsync(eventSettingsId, ct)
@@ -340,10 +341,13 @@ public sealed class EventGuideService : IEventGuideService
 
     // ── Helpers ───────────────────────────────────────────────────────────
 
-    private static Instant ToInstant(DateTime dateTime, DateTimeZone? tz)
+    private static Instant ToInstant(LocalDateTime localDateTime, DateTimeZone? tz)
     {
         if (tz == null)
-            return Instant.FromDateTimeUtc(DateTime.SpecifyKind(dateTime, DateTimeKind.Utc));
-        return LocalDateTime.FromDateTime(dateTime).InZoneLeniently(tz).ToInstant();
+        {
+            var utc = DateTime.SpecifyKind(localDateTime.ToDateTimeUnspecified(), DateTimeKind.Utc);
+            return Instant.FromDateTimeUtc(utc);
+        }
+        return localDateTime.InZoneLeniently(tz).ToInstant();
     }
 }

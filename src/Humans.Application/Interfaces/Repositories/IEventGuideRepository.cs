@@ -1,16 +1,8 @@
+using Humans.Application.DTOs.EventGuide;
 using Humans.Domain.Entities;
 using Humans.Domain.Enums;
-using NodaTime;
 
 namespace Humans.Application.Interfaces.Repositories;
-
-public record CampEventOverlap(
-    Guid Id,
-    Guid? CampId,
-    string Title,
-    Instant StartAt,
-    int DurationMinutes,
-    GuideEventStatus Status);
 
 /// <summary>
 /// Data-access interface for the EventGuide section. The only file that may

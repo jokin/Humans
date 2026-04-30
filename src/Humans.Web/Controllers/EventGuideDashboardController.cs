@@ -1,4 +1,3 @@
-using System.Globalization;
 using Humans.Application.Interfaces.EventGuide;
 using Humans.Domain.Constants;
 using Humans.Domain.Entities;
@@ -57,7 +56,7 @@ public class EventGuideDashboardController : HumansControllerBase
 
             foreach (var e in approvedEvents)
             {
-                foreach (var occ in GetOccurrenceInstants(e))
+                foreach (var occ in e.GetOccurrenceInstants())
                 {
                     var dayOffset = ComputeDayOffset(occ, gateOpeningDate.Value, tz);
                     if (dayCounts.ContainsKey(dayOffset))
@@ -108,20 +107,6 @@ public class EventGuideDashboardController : HumansControllerBase
             .ToList();
 
         return View(model);
-    }
-
-    private static List<Instant> GetOccurrenceInstants(GuideEvent e)
-    {
-        if (e.IsRecurring && !string.IsNullOrEmpty(e.RecurrenceDays))
-        {
-            return e.RecurrenceDays
-                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                .Select(s => int.TryParse(s, CultureInfo.InvariantCulture, out var d) ? (int?)d : null)
-                .Where(d => d.HasValue)
-                .Select(d => e.StartAt.Plus(Duration.FromDays(d!.Value)))
-                .ToList();
-        }
-        return [e.StartAt];
     }
 
     private static int ComputeDayOffset(Instant instant, LocalDate gateOpeningDate, DateTimeZone? tz)
