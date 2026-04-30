@@ -40,6 +40,8 @@ public interface IEventGuideRepository
     // ── Events (submitter) ────────────────────────────────────────────────
     Task<IReadOnlyList<GuideEvent>> GetUserSubmissionsAsync(Guid userId, CancellationToken ct = default);
     Task<GuideEvent?> GetUserEventAsync(Guid eventId, Guid userId, CancellationToken ct = default);
+    Task<IReadOnlyList<GuideEvent>> GetCampSubmissionsAsync(Guid campId, CancellationToken ct = default);
+    Task<GuideEvent?> GetCampEventAsync(Guid eventId, Guid campId, CancellationToken ct = default);
     void Add(GuideEvent guideEvent);
 
     // ── Events (browse / export / API) ────────────────────────────────────

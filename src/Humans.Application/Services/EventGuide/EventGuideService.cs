@@ -179,6 +179,12 @@ public sealed class EventGuideService : IEventGuideService
     public Task<GuideEvent?> GetUserEventAsync(Guid eventId, Guid userId, CancellationToken ct = default)
         => _repo.GetUserEventAsync(eventId, userId, ct);
 
+    public Task<IReadOnlyList<GuideEvent>> GetCampSubmissionsAsync(Guid campId, CancellationToken ct = default)
+        => _repo.GetCampSubmissionsAsync(campId, ct);
+
+    public Task<GuideEvent?> GetCampEventAsync(Guid eventId, Guid campId, CancellationToken ct = default)
+        => _repo.GetCampEventAsync(eventId, campId, ct);
+
     public async Task SubmitEventAsync(GuideEvent guideEvent, CancellationToken ct = default)
     {
         _repo.Add(guideEvent);

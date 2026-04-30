@@ -49,6 +49,8 @@ public interface IEventGuideService
     // ── Submissions ───────────────────────────────────────────────────────
     Task<IReadOnlyList<GuideEvent>> GetUserSubmissionsAsync(Guid userId, CancellationToken ct = default);
     Task<GuideEvent?> GetUserEventAsync(Guid eventId, Guid userId, CancellationToken ct = default);
+    Task<IReadOnlyList<GuideEvent>> GetCampSubmissionsAsync(Guid campId, CancellationToken ct = default);
+    Task<GuideEvent?> GetCampEventAsync(Guid eventId, Guid campId, CancellationToken ct = default);
     Task SubmitEventAsync(GuideEvent guideEvent, CancellationToken ct = default);
     Task UpdateAndResubmitAsync(GuideEvent guideEvent, CancellationToken ct = default);
     Task WithdrawEventAsync(GuideEvent guideEvent, CancellationToken ct = default);

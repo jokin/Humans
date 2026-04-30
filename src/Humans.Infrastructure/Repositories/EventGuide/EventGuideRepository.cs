@@ -111,6 +111,17 @@ public sealed class EventGuideRepository : IEventGuideRepository
         => _db.GuideEvents.FirstOrDefaultAsync(
             e => e.Id == eventId && e.CampId == null && e.SubmitterUserId == userId, ct);
 
+    public async Task<IReadOnlyList<GuideEvent>> GetCampSubmissionsAsync(Guid campId, CancellationToken ct = default)
+        => await _db.GuideEvents
+            .Include(e => e.Category)
+            .Where(e => e.CampId == campId)
+            .OrderByDescending(e => e.SubmittedAt)
+            .ToListAsync(ct);
+
+    public Task<GuideEvent?> GetCampEventAsync(Guid eventId, Guid campId, CancellationToken ct = default)
+        => _db.GuideEvents.FirstOrDefaultAsync(
+            e => e.Id == eventId && e.CampId == campId, ct);
+
     public void Add(GuideEvent guideEvent) => _db.GuideEvents.Add(guideEvent);
 
     // ── Events (browse / export / API) ────────────────────────────────────
