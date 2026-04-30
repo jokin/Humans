@@ -28,7 +28,7 @@ public class AdminController : HumansControllerBase
     private readonly ConfigurationRegistry _configRegistry;
     private readonly QueryStatistics _queryStatistics;
     private readonly ICacheStatsProvider _cacheStatsProvider;
-    private readonly IUserEmailBackfillService _userEmailBackfillService;
+    private readonly IUserEmailProviderBackfillService _userEmailProviderBackfillService;
 
     public AdminController(
         HumansDbContext dbContext,
@@ -39,7 +39,7 @@ public class AdminController : HumansControllerBase
         ConfigurationRegistry configRegistry,
         QueryStatistics queryStatistics,
         ICacheStatsProvider cacheStatsProvider,
-        IUserEmailBackfillService userEmailBackfillService)
+        IUserEmailProviderBackfillService userEmailProviderBackfillService)
         : base(userManager)
     {
         _dbContext = dbContext;
@@ -50,7 +50,7 @@ public class AdminController : HumansControllerBase
         _configRegistry = configRegistry;
         _queryStatistics = queryStatistics;
         _cacheStatsProvider = cacheStatsProvider;
-        _userEmailBackfillService = userEmailBackfillService;
+        _userEmailProviderBackfillService = userEmailProviderBackfillService;
     }
 
     // Dashboard is reachable by any admin-shaped role (FinanceAdmin etc.) so the
@@ -279,48 +279,53 @@ public class AdminController : HumansControllerBase
     }
 
     /// <summary>
-    /// One-shot backfill of <c>UserEmail</c> rows for any orphan Users (Users
-    /// with no <c>user_emails</c> row). Idempotent — safe to re-run. Recommended
-    /// before PR 2 of the email-identity-decoupling spec deploys so any humans
-    /// needing manual triage (no <c>User.Email</c> to backfill from) are flagged
-    /// ahead of the column-drop migration. The PR 2 migration also runs an
-    /// idempotent defensive backfill before the drop. See
-    /// <c>docs/superpowers/specs/2026-04-27-email-and-oauth-decoupling-design.md</c>.
+    /// One-shot backfill of <c>UserEmail.Provider</c> / <c>UserEmail.ProviderKey</c>
+    /// / <c>UserEmail.IsGoogle</c> from existing <c>AspNetUserLogins</c> rows and
+    /// the legacy <c>User.GoogleEmail</c> field. PR 3 of the
+    /// email-identity-decoupling spec. Idempotent — safe to re-run. Operator
+    /// runs once on QA (verifies the result counters), once on production
+    /// (verifies again), then PR 7 ships the legacy column drops.
     /// </summary>
-    [HttpGet("BackfillUserEmails")]
+    [HttpGet("BackfillUserEmailProviders")]
     [Authorize(Policy = PolicyNames.AdminOnly)]
-    public IActionResult BackfillUserEmails()
+    public IActionResult BackfillUserEmailProviders()
     {
-        return View(new BackfillUserEmailsViewModel(
+        return View(new BackfillUserEmailProvidersViewModel(
             HasRun: false,
-            OrphansFound: 0,
-            RowsInserted: 0,
-            SkippedUserIds: Array.Empty<Guid>()));
+            UsersProcessed: 0,
+            ProviderRowsUpdated: 0,
+            IsGoogleRowsUpdated: 0,
+            AmbiguousMatchesWarned: 0,
+            Warnings: Array.Empty<string>()));
     }
 
-    [HttpPost("BackfillUserEmails")]
+    [HttpPost("BackfillUserEmailProviders")]
     [Authorize(Policy = PolicyNames.AdminOnly)]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> BackfillUserEmailsRun(CancellationToken ct)
+    public async Task<IActionResult> BackfillUserEmailProvidersRun(CancellationToken ct)
     {
         var currentUser = await GetCurrentUserAsync();
         _logger.LogInformation(
-            "Admin {AdminId} running UserEmail backfill",
+            "Admin {AdminId} running UserEmail Provider/IsGoogle backfill",
             currentUser?.Id);
 
-        var result = await _userEmailBackfillService.BackfillAsync(ct);
+        var result = await _userEmailProviderBackfillService.RunAsync(ct);
 
-        var msg = result.SkippedUserIds.Count == 0
-            ? $"Backfill complete. Orphans found: {result.OrphansFound}. Rows inserted: {result.RowsInserted}."
-            : $"Backfill complete. Orphans found: {result.OrphansFound}. Rows inserted: {result.RowsInserted}. " +
-              $"{result.SkippedUserIds.Count} user(s) skipped (no User.Email to backfill from) — see view for IDs.";
+        var msg =
+            $"Provider/IsGoogle backfill complete. Users processed: {result.UsersProcessed}. " +
+            $"Provider rows updated: {result.ProviderRowsUpdated}. " +
+            $"IsGoogle rows updated: {result.IsGoogleRowsUpdated}.";
+        if (result.AmbiguousMatchesWarned > 0)
+            msg += $" {result.AmbiguousMatchesWarned} user(s) with ambiguous AspNetUserLogins matches — see view for details.";
         SetSuccess(msg);
 
-        return View(nameof(BackfillUserEmails), new BackfillUserEmailsViewModel(
+        return View(nameof(BackfillUserEmailProviders), new BackfillUserEmailProvidersViewModel(
             HasRun: true,
-            OrphansFound: result.OrphansFound,
-            RowsInserted: result.RowsInserted,
-            SkippedUserIds: result.SkippedUserIds));
+            UsersProcessed: result.UsersProcessed,
+            ProviderRowsUpdated: result.ProviderRowsUpdated,
+            IsGoogleRowsUpdated: result.IsGoogleRowsUpdated,
+            AmbiguousMatchesWarned: result.AmbiguousMatchesWarned,
+            Warnings: result.Warnings));
     }
 
     [HttpGet("CacheStats")]
