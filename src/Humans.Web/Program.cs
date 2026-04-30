@@ -442,7 +442,8 @@ builder.Services.AddLocalization();
 
 // CORS — allow the public nobodies.team website to fetch /api/barrios.
 // Localhost / 127.0.0.1 (any port) are allowed so devs working on the
-// public site locally can hit the deployed barrios API.
+// public site locally can hit the deployed barrios API. GuideApi remains
+// open so the PWA can fetch /api/guide.
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("BarriosPublic", policy =>
@@ -458,6 +459,12 @@ builder.Services.AddCors(options =>
             .WithMethods("GET")
             .WithHeaders("Content-Type", "Accept");
     });
+    options.AddPolicy("GuideApi", policy =>
+    {
+        policy.AllowAnyOrigin()
+            .WithMethods("GET")
+            .WithHeaders("Content-Type", "Accept");
+    });
 });
 
 // Add Controllers with Views
@@ -470,6 +477,7 @@ builder.Services.AddControllersWithViews(options =>
     .AddDataAnnotationsLocalization();
 builder.Services.AddRazorPages();
 builder.Services.AddSignalR();
+builder.Services.AddScoped<Humans.Web.Filters.EventGuideFeatureFilter>();
 
 // IExceptionHandler pipeline. Order matters — handlers run in registration order
 // until one returns true. Cancellation handler goes FIRST so client-abort
