@@ -13,7 +13,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Humans.Infrastructure.Migrations
 {
     [DbContext(typeof(HumansDbContext))]
-    [Migration("20260317225403_AddEventGuide")]
+    [Migration("20260430160428_AddEventGuide")]
     partial class AddEventGuide
     {
         /// <inheritdoc />
