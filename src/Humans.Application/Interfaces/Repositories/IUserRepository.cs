@@ -52,16 +52,6 @@ public interface IUserRepository
     Task<IReadOnlyList<User>> GetAllAsync(CancellationToken ct = default);
 
     /// <summary>
-    /// Returns every <see cref="User"/> that has no
-    /// <see cref="UserEmail"/> row. Used by
-    /// <c>IUserEmailBackfillService</c> to find orphan Users during the PR 1
-    /// admin backfill operation
-    /// (<c>docs/superpowers/specs/2026-04-27-email-and-oauth-decoupling-design.md</c>).
-    /// Read-only (AsNoTracking).
-    /// </summary>
-    Task<IReadOnlyList<User>> GetUsersWithoutUserEmailRowAsync(CancellationToken ct = default);
-
-    /// <summary>
     /// Returns the ids of every user in the system, read-only. Used by the
     /// admin dashboard to partition all users into status buckets without
     /// loading the full User graph.
@@ -103,6 +93,15 @@ public interface IUserRepository
     /// </summary>
     Task<Guid?> GetOtherUserIdHavingGoogleEmailAsync(
         string email, Guid excludeUserId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Returns the legacy <c>GoogleEmail</c> shadow-column value for the given
+    /// users (only entries where the column is non-null are present in the
+    /// result). The CLR property is gone — this is the only way to observe the
+    /// legacy column for the deferred backfill admin button. Read-only.
+    /// </summary>
+    Task<IReadOnlyDictionary<Guid, string>> GetLegacyGoogleEmailsAsync(
+        IReadOnlyCollection<Guid> userIds, CancellationToken ct = default);
 
     // ==========================================================================
     // Writes — User (atomic field updates)
@@ -324,7 +323,7 @@ public interface IUserRepository
         CancellationToken ct = default);
 
     /// <summary>
-    /// For each user whose <see cref="User.GoogleEmail"/> is currently null
+    /// For each user whose <c>User.GoogleEmail</c> is currently null
     /// but who has a verified <see cref="UserEmail"/> row whose address ends
     /// in <c>@nobodies.team</c>, set <c>User.GoogleEmail</c> to that verified
     /// address. Persists in a single save. Returns one descriptor per

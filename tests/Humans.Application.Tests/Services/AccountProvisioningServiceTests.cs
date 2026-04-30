@@ -100,8 +100,7 @@ public class AccountProvisioningServiceTests
         {
             foreach (var user in _users.Values)
             {
-                if (Matches(user.Email, normalizedEmail, alternateEmail) ||
-                    Matches(user.GoogleEmail, normalizedEmail, alternateEmail))
+                if (Matches(user.Email, normalizedEmail, alternateEmail))
                 {
                     return Task.FromResult<User?>(user);
                 }
@@ -109,6 +108,10 @@ public class AccountProvisioningServiceTests
 
             return Task.FromResult<User?>(null);
         }
+
+        public Task<IReadOnlyDictionary<Guid, string>> GetLegacyGoogleEmailsAsync(
+            IReadOnlyCollection<Guid> userIds, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyDictionary<Guid, string>>(new Dictionary<Guid, string>());
 
         public Task<bool> SetContactSourceIfNullAsync(
             Guid userId, ContactSource source, CancellationToken ct = default)
@@ -140,8 +143,6 @@ public class AccountProvisioningServiceTests
             IReadOnlyCollection<Guid> userIds, CancellationToken ct = default) =>
             throw new NotSupportedException();
         public Task<IReadOnlyList<User>> GetAllAsync(CancellationToken ct = default) =>
-            throw new NotSupportedException();
-        public Task<IReadOnlyList<User>> GetUsersWithoutUserEmailRowAsync(CancellationToken ct = default) =>
             throw new NotSupportedException();
         public Task<User?> GetByNormalizedEmailAsync(string? normalizedEmail, CancellationToken ct = default) =>
             throw new NotSupportedException();
@@ -257,10 +258,11 @@ public class AccountProvisioningServiceTests
             throw new NotSupportedException();
         public Task<UserEmail?> GetConflictingVerifiedEmailAsync(Guid excludeEmailId, string normalizedEmail, string? alternateEmail, CancellationToken ct = default) =>
             throw new NotSupportedException();
-        public Task<int> GetMaxDisplayOrderAsync(Guid userId, CancellationToken ct = default) =>
-            throw new NotSupportedException();
         public Task<IReadOnlyList<UserEmail>> GetAllVerifiedNobodiesTeamEmailsAsync(CancellationToken ct = default) =>
             throw new NotSupportedException();
+        public Task<IReadOnlyList<Humans.Application.DTOs.UserEmailLegacyBackfillSnapshot>>
+            GetLegacyBackfillSnapshotsByUserIdAsync(Guid userId, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<Humans.Application.DTOs.UserEmailLegacyBackfillSnapshot>>([]);
         public Task<Dictionary<Guid, string>> GetAllNotificationTargetEmailsAsync(CancellationToken ct = default) =>
             throw new NotSupportedException();
         public Task<string?> GetVerifiedEmailAddressAsync(Guid userId, Guid emailId, CancellationToken ct = default) =>
@@ -300,6 +302,9 @@ public class AccountProvisioningServiceTests
             throw new NotSupportedException();
         public Task<bool> RewriteEmailAddressAsync(
             Guid userId, string oldEmail, string newEmail, Instant now, CancellationToken ct = default) =>
+            throw new NotSupportedException();
+        public Task<IReadOnlyList<UserEmail>> FindAllByProviderKeyAsync(
+            string provider, string providerKey, CancellationToken ct = default) =>
             throw new NotSupportedException();
     }
 
@@ -382,7 +387,6 @@ public class AccountProvisioningServiceTests
             Id = Guid.NewGuid(),
             UserId = existingUser.Id,
             Email = "bob@example.com",
-            IsOAuth = true,
             IsVerified = true,
             IsNotificationTarget = true,
             CreatedAt = _clock.GetCurrentInstant(),
@@ -416,7 +420,6 @@ public class AccountProvisioningServiceTests
             Id = Guid.NewGuid(),
             UserId = existingUser.Id,
             Email = "carol@primary.com",
-            IsOAuth = true,
             IsVerified = true,
             IsNotificationTarget = true,
             CreatedAt = _clock.GetCurrentInstant(),
@@ -427,7 +430,6 @@ public class AccountProvisioningServiceTests
             Id = Guid.NewGuid(),
             UserId = existingUser.Id,
             Email = "carol@secondary.com",
-            IsOAuth = false,
             IsVerified = true,
             IsNotificationTarget = false,
             CreatedAt = _clock.GetCurrentInstant(),
@@ -500,7 +502,6 @@ public class AccountProvisioningServiceTests
             Id = Guid.NewGuid(),
             UserId = existingUser.Id,
             Email = "frank@example.com",
-            IsOAuth = true,
             IsVerified = true,
             IsNotificationTarget = true,
             CreatedAt = _clock.GetCurrentInstant(),

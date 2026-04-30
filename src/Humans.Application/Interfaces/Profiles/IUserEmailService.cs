@@ -1,4 +1,5 @@
 using Humans.Application.DTOs;
+using Humans.Domain.Entities;
 using Humans.Domain.Enums;
 using NodaTime;
 
@@ -67,7 +68,7 @@ public interface IUserEmailService
     /// Deletes a UserEmail row. Blocks the delete only if removing it would
     /// leave the user with zero verified UserEmail rows AND zero AspNetUserLogins
     /// rows (the "preserve at least one auth method" invariant). The OAuth-tied
-    /// row (currently flagged via <see cref="UserEmail.IsOAuth"/>) is now
+    /// row (rows with non-null <see cref="UserEmail.Provider"/>) is now
     /// deletable as long as another auth method remains — the
     /// <c>AspNetUserLogins</c> row is independent of the UserEmail row, so
     /// OAuth sign-in continues to work after the delete. Unverified rows are
@@ -257,7 +258,40 @@ public interface IUserEmailService
     Task<IReadOnlyList<UserEmailMatch>> MatchByEmailsAsync(
         IReadOnlyCollection<string> emails,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Sets <see cref="UserEmail.Provider"/> / <see cref="UserEmail.ProviderKey"/>
+    /// on the given row. Clears the same pair from any sibling row in the same
+    /// write batch (service-enforced single-row-per-pair invariant per
+    /// <c>feedback_db_enforcement_minimal</c>). Used by the OAuth callback when
+    /// linking a UserEmail to its OAuth identity (PR 3 of the
+    /// email-identity-decoupling spec). Throws
+    /// <see cref="System.ComponentModel.DataAnnotations.ValidationException"/>
+    /// when the target row does not exist or does not belong to the given
+    /// <paramref name="userId"/>.
+    /// </summary>
+    Task SetProviderAsync(
+        Guid userId, Guid userEmailId, string provider, string providerKey,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Looks up the UserEmail row tagged with
+    /// <paramref name="provider"/> / <paramref name="providerKey"/>. Returns
+    /// <c>null</c> when no row matches. Used by the OAuth callback's rename
+    /// detection to compare the row's email against the incoming claim email
+    /// and update the row when they diverge.
+    /// </summary>
+    Task<UserEmailProviderMatch?> FindByProviderKeyAsync(
+        string provider, string providerKey,
+        CancellationToken cancellationToken = default);
 }
+
+/// <summary>
+/// Narrow projection of a UserEmail row matched by (Provider, ProviderKey).
+/// Returned from <see cref="IUserEmailService.FindByProviderKeyAsync"/> so the
+/// service interface does not leak the Domain entity into Web-layer callers.
+/// </summary>
+public record UserEmailProviderMatch(Guid Id, Guid UserId, string Email);
 
 /// <summary>
 /// Narrow projection describing a <see cref="Domain.Entities.UserEmail"/>

@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using NodaTime;
 using Humans.Application.DTOs;
 using Humans.Application.Interfaces.Repositories;
@@ -25,6 +26,7 @@ public sealed class UserEmailService : IUserEmailService
     private readonly IClock _clock;
     private readonly IFullProfileInvalidator _fullProfileInvalidator;
     private readonly IServiceProvider _serviceProvider;
+    private readonly ILogger<UserEmailService> _logger;
 
     private const string EmailVerificationTokenPurpose = "UserEmailVerification";
 
@@ -34,7 +36,8 @@ public sealed class UserEmailService : IUserEmailService
         UserManager<User> userManager,
         IClock clock,
         IFullProfileInvalidator fullProfileInvalidator,
-        IServiceProvider serviceProvider)
+        IServiceProvider serviceProvider,
+        ILogger<UserEmailService> logger)
     {
         _repository = repository;
         _userService = userService;
@@ -42,6 +45,7 @@ public sealed class UserEmailService : IUserEmailService
         _clock = clock;
         _fullProfileInvalidator = fullProfileInvalidator;
         _serviceProvider = serviceProvider;
+        _logger = logger;
     }
 
     // Lazy to break the DI cycle:
@@ -61,7 +65,9 @@ public sealed class UserEmailService : IUserEmailService
             e.Id,
             e.Email,
             e.IsVerified,
-            e.IsOAuth,
+            IsGoogle: e.IsGoogle,
+            e.Provider,
+            e.ProviderKey,
             e.IsNotificationTarget,
             e.Visibility,
             IsPendingVerification: !e.IsVerified && e.VerificationSentAt.HasValue,
@@ -80,15 +86,18 @@ public sealed class UserEmailService : IUserEmailService
             .Where(e => e.IsVerified && e.Visibility != null && allowed.Contains(e.Visibility!.Value))
             .ToList();
 
-        return visible.Select(e => new UserEmailDto(
-            e.Id,
-            e.Email,
-            e.IsVerified,
-            e.IsOAuth,
-            e.IsNotificationTarget,
-            e.Visibility,
-            e.DisplayOrder
-        )).ToList();
+        return visible
+            .OrderBy(e => e.Email, StringComparer.OrdinalIgnoreCase)
+            .Select(e => new UserEmailDto(
+                e.Id,
+                e.Email,
+                e.IsVerified,
+                IsGoogle: e.IsGoogle,
+                e.Provider,
+                e.ProviderKey,
+                e.IsNotificationTarget,
+                e.Visibility))
+            .ToList();
     }
 
     public async Task<AddEmailResult> AddEmailAsync(
@@ -122,7 +131,6 @@ public sealed class UserEmailService : IUserEmailService
             throw new ValidationException("This is already your sign-in email.");
 
         var now = _clock.GetCurrentInstant();
-        var maxOrder = await _repository.GetMaxDisplayOrderAsync(userId, cancellationToken);
 
         var userEmail = new UserEmail
         {
@@ -130,9 +138,7 @@ public sealed class UserEmailService : IUserEmailService
             UserId = userId,
             Email = email,
             IsVerified = false,
-            IsOAuth = false,
             IsNotificationTarget = false,
-            DisplayOrder = maxOrder + 1,
             VerificationSentAt = now,
             CreatedAt = now,
             UpdatedAt = now
@@ -156,7 +162,7 @@ public sealed class UserEmailService : IUserEmailService
             ?? throw new InvalidOperationException("User not found.");
 
         var userEmails = await _repository.GetByUserIdForMutationAsync(userId, cancellationToken);
-        var pendingEmail = userEmails.FirstOrDefault(e => !e.IsVerified && !e.IsOAuth)
+        var pendingEmail = userEmails.FirstOrDefault(e => !e.IsVerified && e.Provider == null)
             ?? throw new ValidationException("No email pending verification.");
 
         var isValid = await _userManager.VerifyUserTokenAsync(
@@ -278,18 +284,13 @@ public sealed class UserEmailService : IUserEmailService
             }
 
             // If this row is the notification target, hand off to the next
-            // verified row by display order so the user keeps a usable
-            // notification address. The earlier "prefer IsOAuth" successor
-            // ranking is intentionally dropped: AddOAuthEmailAsync sets
-            // IsOAuth=true for magic-link signups too (pre-existing misnomer
-            // tracked for PR 3 when the flag becomes Provider/ProviderKey),
-            // so leaning on it here would mis-pick successors for users
-            // who never signed up via OAuth.
+            // verified row alphabetically so the user keeps a usable
+            // notification address.
             if (email.IsNotificationTarget)
             {
                 var successor = allEmails
                     .Where(e => e.Id != emailId && e.IsVerified)
-                    .OrderBy(e => e.DisplayOrder)
+                    .OrderBy(e => e.Email, StringComparer.OrdinalIgnoreCase)
                     .FirstOrDefault();
                 if (successor is not null)
                 {
@@ -321,11 +322,9 @@ public sealed class UserEmailService : IUserEmailService
             Id = Guid.NewGuid(),
             UserId = userId,
             Email = email,
-            IsOAuth = true,
             IsVerified = true,
             IsNotificationTarget = true,
             Visibility = ContactFieldVisibility.BoardOnly,
-            DisplayOrder = 0,
             CreatedAt = now,
             UpdatedAt = now
         };
@@ -363,11 +362,9 @@ public sealed class UserEmailService : IUserEmailService
             Id = Guid.NewGuid(),
             UserId = userId,
             Email = email,
-            IsOAuth = false,
             IsVerified = true,
             IsNotificationTarget = isNobodiesTeam,
             Visibility = ContactFieldVisibility.BoardOnly,
-            DisplayOrder = 0,
             CreatedAt = now,
             UpdatedAt = now
         };
@@ -384,11 +381,9 @@ public sealed class UserEmailService : IUserEmailService
     public async Task<bool> TryBackfillGoogleEmailAsync(
         Guid userId, CancellationToken cancellationToken = default)
     {
-        // Check if user already has a GoogleEmail (cross-section → IUserService)
-        var user = await _userService.GetByIdAsync(userId, cancellationToken);
-        if (user?.GoogleEmail is not null)
-            return false;
-
+        // The legacy User.GoogleEmail column is checked by
+        // IUserService.TrySetGoogleEmailAsync (which is a no-op when the
+        // column is non-null), so no read-then-set race exists here.
         var allNobodies = await _repository.GetAllVerifiedNobodiesTeamEmailsAsync(cancellationToken);
         var nobodiesEmail = allNobodies.FirstOrDefault(e => e.UserId == userId)?.Email;
         if (nobodiesEmail is null)
@@ -574,5 +569,63 @@ public sealed class UserEmailService : IUserEmailService
             return $"{normalizedEmail[..^"@googlemail.com".Length]}@gmail.com";
 
         return null;
+    }
+
+    /// <inheritdoc />
+    public async Task SetProviderAsync(
+        Guid userId, Guid userEmailId, string provider, string providerKey,
+        CancellationToken cancellationToken = default)
+    {
+        var target = await _repository.GetByIdAndUserIdAsync(userEmailId, userId, cancellationToken)
+            ?? throw new ValidationException(
+                $"UserEmail row {userEmailId} not found for user {userId}.");
+
+        var existing = await _repository.FindAllByProviderKeyAsync(
+            provider, providerKey, cancellationToken);
+
+        var now = _clock.GetCurrentInstant();
+        var updates = new List<UserEmail>();
+
+        foreach (var conflict in existing.Where(e => e.Id != userEmailId))
+        {
+            conflict.Provider = null;
+            conflict.ProviderKey = null;
+            conflict.UpdatedAt = now;
+            updates.Add(conflict);
+        }
+
+        target.Provider = provider;
+        target.ProviderKey = providerKey;
+        target.UpdatedAt = now;
+        updates.Add(target);
+
+        await _repository.UpdateBatchAsync(updates, cancellationToken);
+
+        await _fullProfileInvalidator.InvalidateAsync(userId, cancellationToken);
+        foreach (var conflictUserId in updates
+                     .Where(u => u.UserId != userId)
+                     .Select(u => u.UserId)
+                     .Distinct())
+        {
+            await _fullProfileInvalidator.InvalidateAsync(conflictUserId, cancellationToken);
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task<UserEmailProviderMatch?> FindByProviderKeyAsync(
+        string provider, string providerKey,
+        CancellationToken cancellationToken = default)
+    {
+        var matches = await _repository.FindAllByProviderKeyAsync(
+            provider, providerKey, cancellationToken);
+        if (matches.Count > 1)
+        {
+            _logger.LogWarning(
+                "FindByProviderKeyAsync: multiple rows matched provider={Provider} providerKey={ProviderKey} — single-row-per-pair invariant violated; returning first match {EmailId}.",
+                provider, providerKey, matches[0].Id);
+        }
+        if (matches.Count == 0) return null;
+        var first = matches[0];
+        return new UserEmailProviderMatch(first.Id, first.UserId, first.Email);
     }
 }

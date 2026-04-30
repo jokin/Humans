@@ -31,7 +31,7 @@ public sealed class UserEmailRepository : IUserEmailRepository
         return await ctx.UserEmails
             .AsNoTracking()
             .Where(e => e.UserId == userId)
-            .OrderBy(e => e.DisplayOrder)
+            .OrderBy(e => e.Email)
             .ThenBy(e => e.CreatedAt)
             .ToListAsync(ct);
     }
@@ -109,12 +109,23 @@ public sealed class UserEmailRepository : IUserEmailRepository
                      EF.Functions.ILike(e.Email, alternateEmail)), ct);
     }
 
-    public async Task<int> GetMaxDisplayOrderAsync(Guid userId, CancellationToken ct = default)
+    public async Task<IReadOnlyList<UserEmailLegacyBackfillSnapshot>>
+        GetLegacyBackfillSnapshotsByUserIdAsync(Guid userId, CancellationToken ct = default)
     {
         await using var ctx = await _factory.CreateDbContextAsync(ct);
         return await ctx.UserEmails
+            .AsNoTracking()
             .Where(e => e.UserId == userId)
-            .MaxAsync(e => (int?)e.DisplayOrder, ct) ?? -1;
+            .Select(e => new UserEmailLegacyBackfillSnapshot(
+                e.Id,
+                e.UserId,
+                e.Email,
+                e.IsVerified,
+                e.Provider,
+                e.ProviderKey,
+                e.IsGoogle,
+                EF.Property<bool>(e, "IsOAuth")))
+            .ToListAsync(ct);
     }
 
     public async Task<IReadOnlyList<UserEmail>> GetAllVerifiedNobodiesTeamEmailsAsync(
@@ -291,7 +302,7 @@ public sealed class UserEmailRepository : IUserEmailRepository
     {
         await using var ctx = await _factory.CreateDbContextAsync(ct);
         var oauth = await ctx.UserEmails
-            .FirstOrDefaultAsync(e => e.UserId == userId && e.IsOAuth, ct);
+            .FirstOrDefaultAsync(e => e.UserId == userId && e.Provider != null, ct);
         if (oauth is null)
             return false;
 
@@ -410,6 +421,7 @@ public sealed class UserEmailRepository : IUserEmailRepository
         await using var ctx = await _factory.CreateDbContextAsync(ct);
         ctx.Attach(email);
         ctx.Entry(email).State = EntityState.Modified;
+        ExcludeLegacyShadowsFromUpdate(ctx.Entry(email));
         await ctx.SaveChangesAsync(ct);
     }
 
@@ -420,7 +432,29 @@ public sealed class UserEmailRepository : IUserEmailRepository
         {
             ctx.Attach(email);
             ctx.Entry(email).State = EntityState.Modified;
+            ExcludeLegacyShadowsFromUpdate(ctx.Entry(email));
         }
         await ctx.SaveChangesAsync(ct);
+    }
+
+    // The legacy IsOAuth / DisplayOrder columns are mapped as EF shadow
+    // properties; detached UpdateAsync would write the CLR default (false / 0)
+    // and silently erase legacy values that the provider backfill still depends
+    // on. Drop the columns from the UPDATE until PR 7 removes them entirely.
+    private static void ExcludeLegacyShadowsFromUpdate(
+        Microsoft.EntityFrameworkCore.ChangeTracking.EntityEntry<UserEmail> entry)
+    {
+        entry.Property("IsOAuth").IsModified = false;
+        entry.Property("DisplayOrder").IsModified = false;
+    }
+
+    public async Task<IReadOnlyList<UserEmail>> FindAllByProviderKeyAsync(
+        string provider, string providerKey, CancellationToken ct = default)
+    {
+        await using var ctx = await _factory.CreateDbContextAsync(ct);
+        return await ctx.UserEmails
+            .AsNoTracking()
+            .Where(e => e.Provider == provider && e.ProviderKey == providerKey)
+            .ToListAsync(ct);
     }
 }
