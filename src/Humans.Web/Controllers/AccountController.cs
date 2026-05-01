@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Localization;
 using NodaTime;
 using Humans.Domain.Entities;
 using Humans.Domain.Enums;
@@ -10,7 +11,7 @@ using Humans.Application.Interfaces.Profiles;
 
 namespace Humans.Web.Controllers;
 
-public class AccountController : Controller
+public class AccountController : HumansControllerBase
 {
     private readonly SignInManager<User> _signInManager;
     private readonly UserManager<User> _userManager;
@@ -19,6 +20,7 @@ public class AccountController : Controller
     private readonly IUserEmailService _userEmailService;
     private readonly IMagicLinkService _magicLinkService;
     private readonly IAuditLogService _auditLogService;
+    private readonly IStringLocalizer<SharedResource> _localizer;
 
     public AccountController(
         SignInManager<User> signInManager,
@@ -27,7 +29,9 @@ public class AccountController : Controller
         ILogger<AccountController> logger,
         IUserEmailService userEmailService,
         IMagicLinkService magicLinkService,
-        IAuditLogService auditLogService)
+        IAuditLogService auditLogService,
+        IStringLocalizer<SharedResource> localizer)
+        : base(userManager)
     {
         _signInManager = signInManager;
         _userManager = userManager;
@@ -36,6 +40,7 @@ public class AccountController : Controller
         _userEmailService = userEmailService;
         _magicLinkService = magicLinkService;
         _auditLogService = auditLogService;
+        _localizer = localizer;
     }
 
     [HttpGet]
@@ -112,6 +117,54 @@ public class AccountController : Controller
         var email = info.Principal.FindFirstValue(ClaimTypes.Email) ?? string.Empty;
         var name = info.Principal.FindFirstValue(ClaimTypes.Name);
         var pictureUrl = info.Principal.FindFirstValue("urn:google:picture");
+
+        // Link-while-signed-in branch: the user is already authenticated
+        // (e.g. via magic link) and just clicked "Link Google account" on
+        // /Profile/Me/Emails. Attach the OAuth identity to the current user
+        // rather than searching by email or creating a new user. This must
+        // run before the lockout, email-match, and create-new-user branches
+        // so a fresh OAuth email never spawns a duplicate account.
+        if (User.Identity?.IsAuthenticated == true)
+        {
+            var currentUser = await GetCurrentUserAsync();
+            if (currentUser is not null)
+            {
+                var addLinkResult = await _userManager.AddLoginAsync(currentUser, info);
+                if (addLinkResult.Succeeded)
+                {
+                    currentUser.LastLoginAt = _clock.GetCurrentInstant();
+                    if (string.IsNullOrEmpty(currentUser.ProfilePictureUrl) && pictureUrl is not null)
+                    {
+                        currentUser.ProfilePictureUrl = pictureUrl;
+                    }
+                    await _userManager.UpdateAsync(currentUser);
+
+                    if (!string.IsNullOrEmpty(email))
+                    {
+                        await TryLinkProviderForUserEmailAsync(currentUser.Id, email, info);
+                    }
+
+                    _logger.LogInformation(
+                        "Linked {Provider} login to currently-authenticated user {UserId}",
+                        info.LoginProvider, currentUser.Id);
+                    return RedirectToLocal(returnUrl);
+                }
+
+                _logger.LogWarning(
+                    "Failed to link {Provider} to authenticated user {UserId}: {Errors}",
+                    info.LoginProvider, currentUser.Id,
+                    string.Join(", ", addLinkResult.Errors.Select(e => e.Description)));
+
+                // AddLoginAsync failed for an already-authenticated user. Do NOT
+                // fall through to the lockedout / email-match / create-new-user
+                // branches below — those exist for the unauthenticated flow and
+                // can produce a duplicate User row when the caller is already
+                // signed in. Surface the failure as an error toast on the emails
+                // page instead.
+                SetError(_localizer["EmailGrid_LinkFailed"].Value);
+                return LocalRedirect(Url.IsLocalUrl(returnUrl) ? returnUrl! : "/Profile/Me/Emails");
+            }
+        }
 
         if (result.IsLockedOut)
         {
@@ -199,7 +252,7 @@ public class AccountController : Controller
                     }
                     await _userManager.UpdateAsync(existingByEmail);
 
-                    await TrySetProviderForUserEmailAsync(existingByEmail.Id, email, info);
+                    await TryLinkProviderForUserEmailAsync(existingByEmail.Id, email, info);
 
                     await _signInManager.SignInAsync(existingByEmail, isPersistent: false);
                     _logger.LogInformation(
@@ -266,14 +319,19 @@ public class AccountController : Controller
             return View(nameof(Login));
         }
 
-        // Create OAuth UserEmail record for the login email. If this fails
-        // after CreateAsync + AddLoginAsync both succeeded, we still have an
-        // orphan: the User + AspNetUserLogins row persist, but no UserEmail
-        // row exists, so GetEffectiveEmail() returns null and the user
-        // becomes un-notifiable. Symmetric to CompleteSignup's cleanup.
+        // Create the OAuth-linked UserEmail row via LinkAsync (find-or-create
+        // with Provider/ProviderKey tagged). If this fails after CreateAsync +
+        // AddLoginAsync both succeeded, we still have an orphan: the User +
+        // AspNetUserLogins row persist, but no UserEmail row exists, so the
+        // user becomes un-notifiable. Symmetric to CompleteSignup's cleanup.
         try
         {
-            await _userEmailService.AddOAuthEmailAsync(user.Id, email);
+            await _userEmailService.LinkAsync(
+                user.Id,
+                info.LoginProvider,
+                info.ProviderKey,
+                email,
+                actorUserId: user.Id);
         }
         catch (Exception ex)
         {
@@ -287,7 +345,7 @@ public class AccountController : Controller
             catch (Exception deleteEx)
             {
                 _logger.LogError(deleteEx,
-                    "Failed to clean up orphan user {UserId} after AddOAuthEmailAsync failure",
+                    "Failed to clean up orphan user {UserId} after LinkAsync failure",
                     user.Id);
             }
             ModelState.AddModelError(string.Empty,
@@ -295,8 +353,6 @@ public class AccountController : Controller
             ViewData["ReturnUrl"] = returnUrl;
             return View(nameof(Login));
         }
-
-        await TrySetProviderForUserEmailAsync(user.Id, email, info);
 
         await _signInManager.SignInAsync(user, isPersistent: false);
         _logger.LogInformation("User created an account using {Provider}", info.LoginProvider);
@@ -337,27 +393,26 @@ public class AccountController : Controller
         }
     }
 
-    private async Task TrySetProviderForUserEmailAsync(Guid userId, string email, ExternalLoginInfo info)
+    private async Task TryLinkProviderForUserEmailAsync(Guid userId, string email, ExternalLoginInfo info)
     {
         try
         {
-            var rows = await _userEmailService.GetUserEmailsAsync(userId);
-            var match = rows.FirstOrDefault(r =>
-                string.Equals(r.Email, email, StringComparison.OrdinalIgnoreCase));
-            if (match is null)
-            {
-                _logger.LogWarning(
-                    "OAuth provider tag: no UserEmail row matching {Email} found for user {UserId}",
-                    email, userId);
-                return;
-            }
-
-            await _userEmailService.SetProviderAsync(userId, match.Id, info.LoginProvider, info.ProviderKey);
+            // The actor for the OAuth callback is the user being authenticated
+            // (themselves) — there is no separate admin/system invoker on this
+            // path. UserEmailService.LinkAsync is find-or-create, so passing the
+            // claim email handles both the "row already exists" and "fresh row"
+            // cases without a separate lookup in the controller.
+            await _userEmailService.LinkAsync(
+                userId,
+                info.LoginProvider,
+                info.ProviderKey,
+                email,
+                actorUserId: userId);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex,
-                "OAuth provider tag failed for user {UserId} {Provider} sub={Sub}",
+                "OAuth provider link failed for user {UserId} {Provider} sub={Sub}",
                 userId, info.LoginProvider, info.ProviderKey);
         }
     }
@@ -486,19 +541,12 @@ public class AccountController : Controller
             return View("MagicLinkError");
         }
 
-        // Create the verified UserEmail row. Misnomer alert: AddOAuthEmailAsync
-        // sets IsOAuth=true even though this is a magic-link signup, not OAuth.
-        // The IsOAuth flag is repurposed in PR 3 (becomes Provider/ProviderKey)
-        // and this call site will be revisited then.
-        //
-        // If creating the UserEmail row fails (race condition, DB error, etc.)
-        // delete the just-created User. RequireUniqueEmail = false means
-        // Identity no longer rejects partial state on its own; an orphan User
-        // with no UserEmail row would be unreachable via either OAuth or
-        // magic link. Same pattern as the OAuth callback new-user branch.
+        // RequireUniqueEmail = false: Identity no longer rejects partial state,
+        // so if creating the UserEmail row fails we must roll back the User to
+        // avoid an orphan that's unreachable via either OAuth or magic link.
         try
         {
-            await _userEmailService.AddOAuthEmailAsync(user.Id, email);
+            await _userEmailService.AddVerifiedEmailAsync(user.Id, email);
         }
         catch (Exception ex)
         {
@@ -512,7 +560,7 @@ public class AccountController : Controller
             catch (Exception deleteEx)
             {
                 _logger.LogError(deleteEx,
-                    "Failed to clean up orphan user {UserId} after AddOAuthEmailAsync failure",
+                    "Failed to clean up orphan user {UserId} after AddVerifiedEmailAsync failure",
                     user.Id);
             }
             return View("MagicLinkError");

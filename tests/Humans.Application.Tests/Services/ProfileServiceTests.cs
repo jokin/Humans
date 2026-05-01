@@ -1475,7 +1475,7 @@ public class ProfileServiceTests : IDisposable
             UserId = userId,
             Email = "notify@example.com",
             IsVerified = true,
-            IsNotificationTarget = true,
+            IsPrimary = true,
         });
         await _dbContext.SaveChangesAsync();
 
@@ -1666,5 +1666,46 @@ public class ProfileServiceTests : IDisposable
             CreatedAt = _clock.GetCurrentInstant(),
             UpdatedAt = _clock.GetCurrentInstant()
         };
+    }
+
+    [HumansFact]
+    public async Task ContributeForUserAsync_EmitsIsOAuthKey_SourcedFromProviderColumn()
+    {
+        // The JSON key stays "IsOAuth" per coding-rules.md (never rename serialized
+        // fields — exports are JSON files users download). The value sources from
+        // (Provider != null) — pre-PR-4 semantics meaning "this row has an OAuth
+        // login attached". The PR 4 spec's Task 17 swapped both the JSON key and
+        // the value source (e.IsGoogle); both have been reverted so the export
+        // emits identical bytes for the same row data as before PR 4.
+        //
+        // This row has Provider="Google" and IsGoogle=false to pin the source:
+        // under the reverted (Provider != null) projection it emits IsOAuth=true,
+        // which proves the source is Provider, not IsGoogle.
+        var userId = Guid.NewGuid();
+        await SeedUserAsync(userId);
+        _dbContext.UserEmails.Add(new UserEmail
+        {
+            Id = Guid.NewGuid(),
+            UserId = userId,
+            Email = "g@example.com",
+            IsVerified = true,
+            IsPrimary = true,
+            Provider = "Google",
+            ProviderKey = "sub-1",
+            IsGoogle = false,
+        });
+        await _dbContext.SaveChangesAsync();
+
+        var slices = await _service.ContributeForUserAsync(userId, CancellationToken.None);
+
+        var userEmailsSlice = slices.Single(s =>
+            string.Equals(s.SectionName, Humans.Application.Interfaces.Gdpr.GdprExportSections.UserEmails, StringComparison.Ordinal));
+        var json = System.Text.Json.JsonSerializer.Serialize(userEmailsSlice.Data);
+        json.Should().Contain("\"IsOAuth\":true");
+        // Legacy JSON key preserved for the C# IsPrimary rename (coding-rules.md
+        // never-rename-serialized-fields). Mirrors EF's HasColumnName pin on the
+        // renamed property — the GDPR export must keep emitting "IsNotificationTarget".
+        json.Should().Contain("\"IsNotificationTarget\":true");
+        json.Should().NotContain("\"IsPrimary\":");
     }
 }

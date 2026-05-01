@@ -229,7 +229,7 @@ public sealed class UserEmailRepository : IUserEmailRepository
         await using var ctx = await _factory.CreateDbContextAsync(ct);
         return await ctx.UserEmails
             .AsNoTracking()
-            .Where(e => e.IsVerified && e.IsNotificationTarget)
+            .Where(e => e.IsVerified && e.IsPrimary)
             .GroupBy(e => e.UserId)
             .Select(g => new
             {
@@ -297,7 +297,7 @@ public sealed class UserEmailRepository : IUserEmailRepository
             .FirstOrDefaultAsync(ct);
     }
 
-    public async Task<bool> RewriteOAuthEmailAsync(
+    public async Task<bool> RewriteLinkedEmailAsync(
         Guid userId, string newEmail, CancellationToken ct = default)
     {
         await using var ctx = await _factory.CreateDbContextAsync(ct);
@@ -326,6 +326,31 @@ public sealed class UserEmailRepository : IUserEmailRepository
         row.UpdatedAt = updatedAt;
         await ctx.SaveChangesAsync(ct);
         return true;
+    }
+
+    public async Task SetGoogleExclusiveAsync(
+        Guid userId,
+        Guid userEmailId,
+        Instant updatedAt,
+        CancellationToken cancellationToken = default)
+    {
+        await using var ctx = await _factory.CreateDbContextAsync(cancellationToken);
+        await using var tx = await ctx.Database.BeginTransactionAsync(cancellationToken);
+
+        var rows = await ctx.UserEmails
+            .Where(e => e.UserId == userId)
+            .ToListAsync(cancellationToken);
+
+        foreach (var row in rows)
+        {
+            var shouldBeGoogle = row.Id == userEmailId;
+            if (row.IsGoogle == shouldBeGoogle) continue;
+            row.IsGoogle = shouldBeGoogle;
+            row.UpdatedAt = updatedAt;
+        }
+
+        await ctx.SaveChangesAsync(cancellationToken);
+        await tx.CommitAsync(cancellationToken);
     }
 
     public async Task AddAsync(UserEmail email, CancellationToken ct = default)

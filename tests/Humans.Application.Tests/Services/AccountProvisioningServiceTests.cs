@@ -277,6 +277,8 @@ public class AccountProvisioningServiceTests
             throw new NotSupportedException();
         public Task UpdateBatchAsync(IReadOnlyList<UserEmail> emails, CancellationToken ct = default) =>
             throw new NotSupportedException();
+        public Task SetGoogleExclusiveAsync(Guid userId, Guid userEmailId, Instant updatedAt, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
         public Task<Guid?> GetUserIdByVerifiedEmailAsync(string email, CancellationToken ct = default) =>
             throw new NotSupportedException();
         public Task<IReadOnlyList<UserEmail>> GetAllAsync(CancellationToken ct = default) =>
@@ -298,7 +300,7 @@ public class AccountProvisioningServiceTests
             throw new NotSupportedException();
         public Task<bool> AnyWithEmailAsync(string email, CancellationToken ct = default) =>
             throw new NotSupportedException();
-        public Task<bool> RewriteOAuthEmailAsync(Guid userId, string newEmail, CancellationToken ct = default) =>
+        public Task<bool> RewriteLinkedEmailAsync(Guid userId, string newEmail, CancellationToken ct = default) =>
             throw new NotSupportedException();
         public Task<bool> RewriteEmailAddressAsync(
             Guid userId, string oldEmail, string newEmail, Instant now, CancellationToken ct = default) =>
@@ -362,7 +364,7 @@ public class AccountProvisioningServiceTests
         var userEmail = _userEmailRepo.All.FirstOrDefault(ue => ue.UserId == result.User.Id);
         userEmail.Should().NotBeNull();
         userEmail!.Email.Should().Be("alice@example.com");
-        userEmail.IsNotificationTarget.Should().BeTrue();
+        userEmail.IsPrimary.Should().BeTrue();
         userEmail.IsVerified.Should().BeTrue();
     }
 
@@ -388,7 +390,7 @@ public class AccountProvisioningServiceTests
             UserId = existingUser.Id,
             Email = "bob@example.com",
             IsVerified = true,
-            IsNotificationTarget = true,
+            IsPrimary = true,
             CreatedAt = _clock.GetCurrentInstant(),
             UpdatedAt = _clock.GetCurrentInstant(),
         });
@@ -421,7 +423,7 @@ public class AccountProvisioningServiceTests
             UserId = existingUser.Id,
             Email = "carol@primary.com",
             IsVerified = true,
-            IsNotificationTarget = true,
+            IsPrimary = true,
             CreatedAt = _clock.GetCurrentInstant(),
             UpdatedAt = _clock.GetCurrentInstant(),
         });
@@ -431,7 +433,7 @@ public class AccountProvisioningServiceTests
             UserId = existingUser.Id,
             Email = "carol@secondary.com",
             IsVerified = true,
-            IsNotificationTarget = false,
+            IsPrimary = false,
             CreatedAt = _clock.GetCurrentInstant(),
             UpdatedAt = _clock.GetCurrentInstant(),
         });
@@ -503,7 +505,7 @@ public class AccountProvisioningServiceTests
             UserId = existingUser.Id,
             Email = "frank@example.com",
             IsVerified = true,
-            IsNotificationTarget = true,
+            IsPrimary = true,
             CreatedAt = _clock.GetCurrentInstant(),
             UpdatedAt = _clock.GetCurrentInstant(),
         });

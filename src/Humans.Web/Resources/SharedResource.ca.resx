@@ -1853,5 +1853,36 @@
   <data name="ShiftDash_Status_AtRisk" xml:space="preserve"><value>En risc</value></data>
   <data name="ShiftDash_Status_BelowTarget" xml:space="preserve"><value>Per sota de l'objectiu</value></data>
   <data name="ShiftDash_Coordinators_StaleLabel" xml:space="preserve"><value>Inactiu més de 7 dies</value></data>
+  <data name="EmailGrid_AdminContextBanner" xml:space="preserve"><value>Gestionant correus d'un altre usuari</value></data>
+  <data name="EmailGrid_AdminContextBannerNamed" xml:space="preserve"><value>Gestionant correus de {0}</value><comment>{0} = target user display name</comment></data>
+  <data name="EmailGrid_AdminUnknownTarget" xml:space="preserve"><value>un altre usuari</value></data>
+  <data name="Emails_AdminUnknownTarget" xml:space="preserve"><value>un altre usuari</value></data>
+  <data name="EmailGrid_Email" xml:space="preserve"><value>Correu</value></data>
+  <data name="EmailGrid_Status" xml:space="preserve"><value>Estat</value></data>
+  <data name="EmailGrid_Primary" xml:space="preserve"><value>Principal</value></data>
+  <data name="EmailGrid_Google" xml:space="preserve"><value>Google</value></data>
+  <data name="EmailGrid_GoogleColumnTooltip" xml:space="preserve"><value>Correu usat per a la sincronització amb Google Workspace.</value></data>
+  <data name="EmailGrid_WorkspaceLockedHelp" xml:space="preserve"><value>Principal i Google els gestiona Google Workspace mentre la teva adreça @nobodies.team hi sigui present.</value></data>
+  <data name="EmailGrid_VerificationPendingTitle" xml:space="preserve"><value>Verificació de correu pendent</value></data>
+  <data name="EmailGrid_VerificationPendingBody" xml:space="preserve"><value>Revisa la teva safata d’entrada i fes clic a l’enllaç del correu de verificació per confirmar la teva adreça.</value></data>
+  <data name="EmailGrid_Visibility" xml:space="preserve"><value>Visibilitat</value></data>
+  <data name="EmailGrid_Actions" xml:space="preserve"><value>Accions</value></data>
+  <data name="EmailGrid_StatusMergePending" xml:space="preserve"><value>Fusió pendent</value></data>
+  <data name="EmailGrid_StatusVerified" xml:space="preserve"><value>Verificat</value></data>
+  <data name="EmailGrid_StatusPending" xml:space="preserve"><value>Pendent</value></data>
+  <data name="EmailGrid_PrimarySelected" xml:space="preserve"><value>Principal</value></data>
+  <data name="EmailGrid_LinkGoogleAccount" xml:space="preserve"><value>Vincular compte de Google</value></data>
+  <data name="EmailGrid_LinkGoogleHelp" xml:space="preserve"><value>Inicia sessió amb Google per vincular un compte de Google addicional al teu perfil.</value></data>
+  <data name="EmailGrid_BackToAdminDetail" xml:space="preserve"><value>Torna al detall de l'usuari</value></data>
+  <data name="EmailGrid_Unlink" xml:space="preserve"><value>Desvincular</value></data>
+  <data name="EmailGrid_ConfirmUnlink" xml:space="preserve"><value>Desvincular aquest compte de Google?</value></data>
+  <data name="EmailGrid_SetGoogleRejected" xml:space="preserve"><value>No s'ha pogut establir el correu de servei de Google: fila desconeguda o no verificada.</value></data>
+  <data name="EmailGrid_UnlinkRejected" xml:space="preserve"><value>No s'ha pogut desvincular: fila desconeguda o sense proveïdor d'inici de sessió.</value></data>
+  <data name="EmailGrid_GoogleServiceUpdated" xml:space="preserve"><value>Correu de servei de Google actualitzat. La sincronització es reintentarà amb el correu nou.</value></data>
+  <data name="EmailGrid_UnlinkSuccess" xml:space="preserve"><value>Proveïdor d'inici de sessió desvinculat.</value></data>
+  <data name="EmailGrid_DeleteRejectedHasProvider" xml:space="preserve"><value>Aquest correu està vinculat a un proveïdor d'inici de sessió. Fes servir Desvincula en lloc seu.</value></data>
+  <data name="EmailGrid_AdminAddSentVerification" xml:space="preserve"><value>Correu de verificació enviat a l'usuari.</value></data>
+  <data name="EmailGrid_LinkFailed" xml:space="preserve"><value>No hem pogut vincular aquest compte de Google. Torna-ho a provar.</value></data>
+  <data name="AdminDetail_ManageEmails" xml:space="preserve"><value>Gestiona correus</value></data>
 
 </root>

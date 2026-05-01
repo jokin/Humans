@@ -153,6 +153,34 @@ Aggregate-local navs: `CampRoleAssignment.CampSeason`, `CampRoleAssignment.Defin
 
 All stored as strings via `HasConversion<string>()`. `Vibes` stored as jsonb array.
 
+## Routing
+
+Three controllers serve this section. The MVC URL surface is dual-routed under `/Camps/*` (English) and `/Barrios/*` (Spanish); the API surface is dual-routed under `/api/camps/*` and `/api/barrios/*`. The dual-route alias is governed by an invariant below — no other section may add aliases.
+
+| Route | Controller | Purpose |
+|-------|------------|---------|
+| `/Camps` | `CampController` | Public directory |
+| `/Camps/{slug}` | `CampController` | Camp detail (current season, leads, images, history) |
+| `/Camps/{slug}/Season/{year}` | `CampController` | Past-season detail |
+| `/Camps/{slug}/Contact` | `CampController` | Facilitated message to camp leads |
+| `/Camps/{slug}/Edit` | `CampController` | Lead-only edit of season copy / images / leads |
+| `/Camps/Register` | `CampController` | New camp registration |
+| `/Camps/{slug}/OptIn/{year}`, `.../Withdraw/{seasonId}`, `.../Rejoin/{seasonId}` | `CampController` | Per-season participation toggles |
+| `/Camps/{slug}/Leads/*` | `CampController` | Lead add/remove |
+| `/Camps/{slug}/Members/*` | `CampController` | Member request/approve/reject/remove/leave |
+| `/Camps/{slug}/Roles/*` | `CampController` | Per-camp role assignment/unassignment |
+| `/Camps/{slug}/Images/*` | `CampController` | Image upload/delete/reorder |
+| `/Camps/{slug}/HistoricalNames/*` | `CampController` | Historical-name add/remove |
+| `/Camps/Admin` | `CampAdminController` | CampAdmin-only directory + season management |
+| `/Camps/Admin/Roles/*` | `CampAdminController` | `CampRoleDefinition` CRUD |
+| `/Camps/Admin/Compliance` | `CampAdminController` | Per-season role compliance report |
+| `/Camps/Admin/Export` | `CampAdminController` | CSV export |
+| `/Camps/Admin/{Approve,Reject,OpenSeason,CloseSeason,SetPublicYear,SetNameLockDate,Reactivate,UpdateRegistrationInfo,Delete}/...` | `CampAdminController` | Season lifecycle actions |
+| `/api/camps/{year}` | `CampApiController` | Year directory JSON |
+| `/api/camps/{year}/placement` | `CampApiController` | Placement-data JSON |
+
+Admin pages live under `/Camps/Admin/*` — never `/Admin/Camps/*` (per `docs/architecture/design-rules.md` § "Admin is not a section": `/Admin/*` is a nav holder for actions whose services live in their owning sections).
+
 ## Actors & Roles
 
 | Actor | Capabilities |
@@ -180,6 +208,7 @@ All stored as strings via `HasConversion<string>()`. `Vibes` stored as jsonb arr
 - All role-assignment data is private (no anonymous render). The public Camp Details page does not expose role assignments.
 - Leave/Withdraw/Remove cascades clear role assignments via `ICampRoleService.RemoveAllForMemberAsync` before the soft-delete. Hard-delete of a `CampMember` row cascades through the FK directly.
 - Camp Lead authz remains on the `CampLead` entity until the follow-up issue retires it. The "Camp Lead" role is **not** a `CampRoleDefinition` row in this PR.
+- The `/Camps ↔ /Barrios` and `/api/camps ↔ /api/barrios` dual-route aliases are the **only sanctioned URL aliases in the codebase**. No other section may add URL aliases without explicit owner approval.
 
 ## Negative Access Rules
 

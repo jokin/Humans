@@ -296,7 +296,19 @@
         </div>
 
         <div class="card mb-4">
-            <div class="card-header"><i class="fa-solid fa-at me-1"></i> Emails</div>
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span><i class="fa-solid fa-at me-1"></i> Emails</span>
+                @* AdminEmails authorizes via UserEmailOperations.Edit which only
+                   succeeds for self-or-Admin. AdminDetail is reachable by Board /
+                   HumanAdmin too, so gate the link to avoid a visible 403. *@
+                @if (User.IsInRole(Humans.Domain.Constants.RoleNames.Admin))
+                {
+                    <a asp-action="AdminEmails" asp-route-id="@Model.UserId"
+                       class="btn btn-sm btn-outline-secondary">
+                        @Localizer["AdminDetail_ManageEmails"]
+                    </a>
+                }
+            </div>
             <div class="card-body p-0">
                 @if (Model.UserEmails.Count > 0)
                 {
@@ -323,9 +335,9 @@
                                                 <i class="fa-solid fa-clock"></i>
                                             </span>
                                         }
-                                        @if (email.IsNotificationTarget)
+                                        @if (email.IsPrimary)
                                         {
-                                            <span class="badge bg-primary" title="Notification target">
+                                            <span class="badge bg-primary" title="@Localizer["EmailGrid_Primary"]">
                                                 <i class="fa-solid fa-bell"></i>
                                             </span>
                                         }

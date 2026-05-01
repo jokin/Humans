@@ -191,7 +191,7 @@ public interface IUserEmailRepository
     /// email-backfill workflow. Returns true when a row was updated. No-op if the
     /// user has no OAuth email row.
     /// </summary>
-    Task<bool> RewriteOAuthEmailAsync(Guid userId, string newEmail, CancellationToken ct = default);
+    Task<bool> RewriteLinkedEmailAsync(Guid userId, string newEmail, CancellationToken ct = default);
 
     /// <summary>
     /// Rewrites the <c>Email</c> of the user's existing <see cref="UserEmail"/> row
@@ -207,14 +207,22 @@ public interface IUserEmailRepository
     /// <summary>
     /// Returns every <see cref="UserEmail"/> row with matching
     /// <paramref name="provider"/> / <paramref name="providerKey"/>.
-    /// Read-only (AsNoTracking). Used by <c>UserEmailService.SetProviderAsync</c>
-    /// to find rows that need their pair cleared, and by
+    /// Read-only (AsNoTracking). Used by
     /// <c>UserEmailService.FindByProviderKeyAsync</c> for OAuth-callback rename
     /// detection. The single-row-per-pair invariant is service-enforced; a
     /// healthy database returns 0 or 1 rows.
     /// </summary>
     Task<IReadOnlyList<UserEmail>> FindAllByProviderKeyAsync(
         string provider, string providerKey, CancellationToken ct = default);
+
+    /// <summary>
+    /// Single-transaction flip: sets <see cref="UserEmail.IsGoogle"/> = true
+    /// on the target row, and IsGoogle = false on every sibling row for the
+    /// same user. Stamps <c>UpdatedAt</c> with <paramref name="updatedAt"/>
+    /// on every row whose <c>IsGoogle</c> value changes. Owner-gate
+    /// (userId match) is performed by the caller.
+    /// </summary>
+    Task SetGoogleExclusiveAsync(Guid userId, Guid userEmailId, Instant updatedAt, CancellationToken cancellationToken = default);
 
     Task AddAsync(UserEmail email, CancellationToken ct = default);
     Task RemoveAsync(UserEmail email, CancellationToken ct = default);
