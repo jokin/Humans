@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using NodaTime;
 using Humans.Application.DTOs;
+using Humans.Application.Interfaces.AuditLog;
 using Humans.Application.Interfaces.Repositories;
 using Humans.Domain.Entities;
 using Humans.Domain.Enums;
@@ -25,6 +26,7 @@ public sealed class UserEmailService : IUserEmailService
     private readonly UserManager<User> _userManager;
     private readonly IClock _clock;
     private readonly IFullProfileInvalidator _fullProfileInvalidator;
+    private readonly IAuditLogService _auditLogService;
     private readonly IServiceProvider _serviceProvider;
     private readonly ILogger<UserEmailService> _logger;
 
@@ -36,6 +38,7 @@ public sealed class UserEmailService : IUserEmailService
         UserManager<User> userManager,
         IClock clock,
         IFullProfileInvalidator fullProfileInvalidator,
+        IAuditLogService auditLogService,
         IServiceProvider serviceProvider,
         ILogger<UserEmailService> logger)
     {
@@ -44,6 +47,7 @@ public sealed class UserEmailService : IUserEmailService
         _userManager = userManager;
         _clock = clock;
         _fullProfileInvalidator = fullProfileInvalidator;
+        _auditLogService = auditLogService;
         _serviceProvider = serviceProvider;
         _logger = logger;
     }
@@ -68,7 +72,7 @@ public sealed class UserEmailService : IUserEmailService
             IsGoogle: e.IsGoogle,
             e.Provider,
             e.ProviderKey,
-            e.IsNotificationTarget,
+            e.IsPrimary,
             e.Visibility,
             IsPendingVerification: !e.IsVerified && e.VerificationSentAt.HasValue,
             IsMergePending: mergePendingSet.Contains(e.Id)
@@ -95,7 +99,7 @@ public sealed class UserEmailService : IUserEmailService
                 IsGoogle: e.IsGoogle,
                 e.Provider,
                 e.ProviderKey,
-                e.IsNotificationTarget,
+                e.IsPrimary,
                 e.Visibility))
             .ToList();
     }
@@ -138,7 +142,7 @@ public sealed class UserEmailService : IUserEmailService
             UserId = userId,
             Email = email,
             IsVerified = false,
-            IsNotificationTarget = false,
+            IsPrimary = false,
             VerificationSentAt = now,
             CreatedAt = now,
             UpdatedAt = now
@@ -162,6 +166,15 @@ public sealed class UserEmailService : IUserEmailService
             ?? throw new InvalidOperationException("User not found.");
 
         var userEmails = await _repository.GetByUserIdForMutationAsync(userId, cancellationToken);
+        // TODO(nobodies-collective#611): VerifyEmailAsync uses FirstOrDefault on
+        // (!IsVerified && Provider == null), which is ambiguous when multiple pending
+        // plain rows exist for the same user. The token IS bound to a specific row Id
+        // (purpose = "{EmailVerificationTokenPurpose}:{pendingEmail.Id}"), so a row
+        // mismatch causes token validation to fail against the wrong row, surfacing as
+        // a confusing user error even when the token is valid for ANOTHER pending row.
+        // Surfaced during PR 4 review (peterdrier/Humans#376) — AdminAddEmail amplifies
+        // the multi-pending-row scenario. Fix: load the row by the Id embedded in the
+        // token's purpose suffix, not via FirstOrDefault.
         var pendingEmail = userEmails.FirstOrDefault(e => !e.IsVerified && e.Provider == null)
             ?? throw new ValidationException("No email pending verification.");
 
@@ -208,14 +221,15 @@ public sealed class UserEmailService : IUserEmailService
         await _repository.UpdateAsync(pendingEmail, cancellationToken);
 
         await TryBackfillGoogleEmailAsync(userId, cancellationToken);
+        await _fullProfileInvalidator.InvalidateAsync(userId, cancellationToken);
 
         return new VerifyEmailResult(pendingEmail.Email, MergeRequestCreated: false);
     }
 
-    public async Task SetNotificationTargetAsync(
+    public async Task SetPrimaryAsync(
         Guid userId, Guid emailId, CancellationToken cancellationToken = default)
     {
-        var emails = await _repository.GetByUserIdForMutationAsync(userId, cancellationToken);
+        var emails = (await _repository.GetByUserIdForMutationAsync(userId, cancellationToken)).ToList();
 
         var target = emails.FirstOrDefault(e => e.Id == emailId)
             ?? throw new InvalidOperationException("Email not found.");
@@ -224,15 +238,24 @@ public sealed class UserEmailService : IUserEmailService
             throw new ValidationException("Only verified emails can be the notification target.");
 
         var now = _clock.GetCurrentInstant();
+        var changed = new List<UserEmail>();
         foreach (var email in emails)
         {
-            email.IsNotificationTarget = email.Id == emailId;
-            email.UpdatedAt = now;
+            var shouldBePrimary = email.Id == emailId;
+            if (email.IsPrimary != shouldBePrimary)
+            {
+                email.IsPrimary = shouldBePrimary;
+                email.UpdatedAt = now;
+                changed.Add(email);
+            }
         }
 
-        await _repository.UpdateBatchAsync(emails.ToList(), cancellationToken);
+        if (changed.Count == 0)
+            return;
 
-        // FullProfile.NotificationEmail derives from the row with IsNotificationTarget=true.
+        await _repository.UpdateBatchAsync(changed, cancellationToken);
+
+        // FullProfile.NotificationEmail derives from the row with IsPrimary=true.
         await _fullProfileInvalidator.InvalidateAsync(userId, cancellationToken);
     }
 
@@ -246,31 +269,29 @@ public sealed class UserEmailService : IUserEmailService
         email.Visibility = visibility;
         email.UpdatedAt = _clock.GetCurrentInstant();
         await _repository.UpdateAsync(email, cancellationToken);
+        await _fullProfileInvalidator.InvalidateAsync(userId, cancellationToken);
     }
 
-    public async Task DeleteEmailAsync(
+    public async Task<bool> DeleteEmailAsync(
         Guid userId, Guid emailId, CancellationToken cancellationToken = default)
     {
         var email = await _repository.GetByIdAndUserIdAsync(emailId, userId, cancellationToken)
             ?? throw new InvalidOperationException("Email not found.");
 
-        // Preserve-at-least-one-verified-email invariant — replaces the old
-        // IsOAuth-based block per email-identity-decoupling spec PR 1
-        // (docs/superpowers/specs/2026-04-27-email-and-oauth-decoupling-design.md).
-        //
-        // The original rule was "preserve at least one auth method" (verified
-        // UserEmail OR AspNetUserLogins row). Tightened to "preserve at least
-        // one verified UserEmail" because OAuth-only users are still un-
-        // notifiable: GetEffectiveEmail() falls back to User.Email which is
-        // null for post-PR-1 users, so an OAuth-only state would silently
-        // drop every system email (re-consent reminders, suspension notices,
-        // password resets, etc.). The OAuth login still works for sign-in,
-        // but signing in to an account that can't receive notifications is
-        // worse UX than blocking the delete.
-        //
-        // We only enforce when removing a verified row — unverified rows
-        // aren't notification targets and aren't usable for magic-link
-        // sign-in, so deleting one cannot reduce the verified-email count.
+        if (!string.IsNullOrEmpty(email.Provider))
+        {
+            // Provider-attached rows go through UnlinkAsync (which removes the
+            // AspNetUserLogins row and the email row). The per-row UI never
+            // routes a Provider-attached row to Delete; this is the service-level
+            // guard for non-UI callers.
+            return false;
+        }
+
+        // Preserve at least one verified UserEmail. An OAuth-only account can still
+        // sign in but cannot receive system notifications (GetEffectiveEmail falls
+        // back to User.Email, which is null post email-decoupling), so blocking the
+        // last-verified-row delete is preferable to silently dropping notifications.
+        // Unverified rows aren't notification targets, so deleting one is safe.
         if (email.IsVerified)
         {
             var allEmails = await _repository.GetByUserIdForMutationAsync(userId, cancellationToken);
@@ -282,55 +303,24 @@ public sealed class UserEmailService : IUserEmailService
                     "Cannot remove your last verified email. Add another verified email first " +
                     "so you can still receive system notifications.");
             }
-
-            // If this row is the notification target, hand off to the next
-            // verified row alphabetically so the user keeps a usable
-            // notification address.
-            if (email.IsNotificationTarget)
-            {
-                var successor = allEmails
-                    .Where(e => e.Id != emailId && e.IsVerified)
-                    .OrderBy(e => e.Email, StringComparer.OrdinalIgnoreCase)
-                    .FirstOrDefault();
-                if (successor is not null)
-                {
-                    successor.IsNotificationTarget = true;
-                    successor.UpdatedAt = _clock.GetCurrentInstant();
-                    await _repository.UpdateAsync(successor, cancellationToken);
-                }
-            }
         }
 
         await _repository.RemoveAsync(email, cancellationToken);
 
+        // If the removed row was primary, promote the highest-priority remaining
+        // verified row (Workspace > most-recently-updated).
+        await EnsurePrimaryInvariantAsync(userId, cancellationToken);
+
         // FullProfile.NotificationEmail derives from user_emails; drop the stale entry so
         // admin/search/profile surfaces stop showing the removed address.
         await _fullProfileInvalidator.InvalidateAsync(userId, cancellationToken);
+
+        return true;
     }
 
     public Task RemoveAllEmailsAsync(
         Guid userId, CancellationToken cancellationToken = default) =>
         _repository.RemoveAllForUserAsync(userId, cancellationToken);
-
-    public async Task AddOAuthEmailAsync(
-        Guid userId, string email, CancellationToken cancellationToken = default)
-    {
-        var now = _clock.GetCurrentInstant();
-
-        var userEmail = new UserEmail
-        {
-            Id = Guid.NewGuid(),
-            UserId = userId,
-            Email = email,
-            IsVerified = true,
-            IsNotificationTarget = true,
-            Visibility = ContactFieldVisibility.BoardOnly,
-            CreatedAt = now,
-            UpdatedAt = now
-        };
-
-        await _repository.AddAsync(userEmail, cancellationToken);
-    }
 
     public async Task AddVerifiedEmailAsync(
         Guid userId, string email, CancellationToken cancellationToken = default)
@@ -344,32 +334,22 @@ public sealed class UserEmailService : IUserEmailService
         var now = _clock.GetCurrentInstant();
         var isNobodiesTeam = email.EndsWith("@nobodies.team", StringComparison.OrdinalIgnoreCase);
 
-        // If @nobodies.team, clear existing notification target
-        if (isNobodiesTeam)
-        {
-            var emails = await _repository.GetByUserIdForMutationAsync(userId, cancellationToken);
-            var currentTarget = emails.FirstOrDefault(e => e.IsNotificationTarget);
-            if (currentTarget is not null)
-            {
-                currentTarget.IsNotificationTarget = false;
-                currentTarget.UpdatedAt = now;
-                await _repository.UpdateAsync(currentTarget, cancellationToken);
-            }
-        }
-
         var userEmail = new UserEmail
         {
             Id = Guid.NewGuid(),
             UserId = userId,
             Email = email,
             IsVerified = true,
-            IsNotificationTarget = isNobodiesTeam,
+            // IsPrimary set below by EnsurePrimaryInvariantAsync.
+            IsPrimary = false,
             Visibility = ContactFieldVisibility.BoardOnly,
             CreatedAt = now,
             UpdatedAt = now
         };
 
         await _repository.AddAsync(userEmail, cancellationToken);
+
+        await EnsurePrimaryInvariantAsync(userId, cancellationToken);
 
         // Auto-set GoogleEmail when @nobodies.team email is added (cross-section → IUserService)
         if (isNobodiesTeam)
@@ -418,7 +398,7 @@ public sealed class UserEmailService : IUserEmailService
             .GroupBy(e => e.UserId)
             .ToDictionary(
                 g => g.Key,
-                g => g.Any(e => e.IsNotificationTarget));
+                g => g.Any(e => e.IsPrimary));
     }
 
     public async Task<Dictionary<Guid, string>> GetNobodiesTeamEmailsByUserIdsAsync(
@@ -434,7 +414,7 @@ public sealed class UserEmailService : IUserEmailService
             .GroupBy(e => e.UserId)
             .ToDictionary(
                 g => g.Key,
-                g => g.OrderByDescending(e => e.IsNotificationTarget)
+                g => g.OrderByDescending(e => e.IsPrimary)
                     .ThenBy(e => e.CreatedAt)
                     .First().Email);
     }
@@ -445,7 +425,7 @@ public sealed class UserEmailService : IUserEmailService
         if (userIds.Count == 0)
             return new Dictionary<Guid, string>();
 
-        // Start with users who have a verified IsNotificationTarget row.
+        // Start with users who have a verified IsPrimary row.
         var allNotificationTargets = await _repository.GetAllNotificationTargetEmailsAsync(cancellationToken);
 
         var result = new Dictionary<Guid, string>(userIds.Count);
@@ -531,7 +511,7 @@ public sealed class UserEmailService : IUserEmailService
         var rows = await _repository.GetByEmailsAsync(emails, cancellationToken);
         return rows
             .Select(r => new UserEmailMatch(
-                r.Email, r.UserId, r.IsNotificationTarget, r.IsVerified, r.UpdatedAt))
+                r.Email, r.UserId, r.IsPrimary, r.IsVerified, r.UpdatedAt))
             .ToList();
     }
 
@@ -571,44 +551,224 @@ public sealed class UserEmailService : IUserEmailService
         return null;
     }
 
-    /// <inheritdoc />
-    public async Task SetProviderAsync(
-        Guid userId, Guid userEmailId, string provider, string providerKey,
-        CancellationToken cancellationToken = default)
+    /// <summary>
+    /// Maintains the "exactly one IsPrimary=true verified row per user" invariant
+    /// (Profiles.md Data Model — UserEmail.IsNotificationTarget). Centralizes the
+    /// rule in one place so any code path that adds or removes a UserEmail row
+    /// can call it as a safety step.
+    ///
+    /// Rules:
+    /// - 0 verified rows → no-op (no candidate to promote; unverified rows are
+    ///   never the notification target).
+    /// - 1+ verified rows but 0 IsPrimary → pick a successor and promote it.
+    /// - 2+ IsPrimary rows → demote all but the winner.
+    ///
+    /// Successor priority (highest to lowest):
+    /// 1. Verified @nobodies.team row (Workspace identity wins per Peter's
+    ///    feedback — the Workspace row IS the canonical Primary).
+    /// 2. Most recently updated verified row.
+    /// 3. Any verified row.
+    /// </summary>
+    private async Task EnsurePrimaryInvariantAsync(
+        Guid userId, CancellationToken cancellationToken)
     {
-        var target = await _repository.GetByIdAndUserIdAsync(userEmailId, userId, cancellationToken)
-            ?? throw new ValidationException(
-                $"UserEmail row {userEmailId} not found for user {userId}.");
+        var emails = (await _repository.GetByUserIdForMutationAsync(userId, cancellationToken)).ToList();
+        var verified = emails.Where(e => e.IsVerified).ToList();
+        if (verified.Count == 0)
+            return;
 
-        var existing = await _repository.FindAllByProviderKeyAsync(
-            provider, providerKey, cancellationToken);
+        var currentPrimaries = verified.Where(e => e.IsPrimary).ToList();
+
+        // Pick the canonical winner from the verified set.
+        // 1. Workspace (@nobodies.team) row wins per Peter's feedback — that row IS
+        //    the canonical Primary when present.
+        // 2. Otherwise prefer an existing IsPrimary row if any (stable — don't
+        //    flip the primary just because a row was added/removed elsewhere).
+        // 3. Otherwise most-recently-updated, with Id as the stable tiebreaker.
+        var winner =
+            verified.FirstOrDefault(e => e.Email.EndsWith("@nobodies.team", StringComparison.OrdinalIgnoreCase))
+            ?? currentPrimaries.OrderBy(e => e.Id).FirstOrDefault()
+            ?? verified.OrderByDescending(e => e.UpdatedAt).ThenBy(e => e.Id).First();
+
+        // Already correct: exactly one primary, and it's the winner.
+        if (currentPrimaries.Count == 1 && currentPrimaries[0].Id == winner.Id)
+            return;
 
         var now = _clock.GetCurrentInstant();
-        var updates = new List<UserEmail>();
-
-        foreach (var conflict in existing.Where(e => e.Id != userEmailId))
+        var changed = new List<UserEmail>();
+        foreach (var row in verified)
         {
-            conflict.Provider = null;
-            conflict.ProviderKey = null;
-            conflict.UpdatedAt = now;
-            updates.Add(conflict);
+            var shouldBePrimary = row.Id == winner.Id;
+            if (row.IsPrimary != shouldBePrimary)
+            {
+                row.IsPrimary = shouldBePrimary;
+                row.UpdatedAt = now;
+                changed.Add(row);
+            }
         }
 
-        target.Provider = provider;
-        target.ProviderKey = providerKey;
-        target.UpdatedAt = now;
-        updates.Add(target);
+        if (changed.Count == 0)
+            return;
 
-        await _repository.UpdateBatchAsync(updates, cancellationToken);
+        await _repository.UpdateBatchAsync(changed, cancellationToken);
+        await _fullProfileInvalidator.InvalidateAsync(userId, cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public async Task<bool> SetGoogleAsync(
+        Guid userId, Guid userEmailId, Guid actorUserId,
+        CancellationToken cancellationToken = default)
+    {
+        var row = await _repository.GetByIdAndUserIdAsync(userEmailId, userId, cancellationToken);
+        if (row is null || !row.IsVerified) return false;
+
+        // Capture the previous Google email (if any) for the audit description.
+        // ReadOnly is fine — SetGoogleExclusiveAsync is the canonical mutation.
+        var allEmails = await _repository.GetByUserIdReadOnlyAsync(userId, cancellationToken);
+        var previousGoogle = allEmails.FirstOrDefault(e => e.IsGoogle && e.Id != row.Id);
+
+        var now = _clock.GetCurrentInstant();
+        await _repository.SetGoogleExclusiveAsync(userId, row.Id, now, cancellationToken);
+        await _fullProfileInvalidator.InvalidateAsync(userId, cancellationToken);
+
+        var description = previousGoogle is null
+            ? $"Set Google identity to {row.Email}"
+            : $"Set Google identity to {row.Email} (was {previousGoogle.Email})";
+
+        await _auditLogService.LogAsync(
+            AuditAction.UserEmailGoogleSet,
+            nameof(User), userId,
+            description,
+            actorUserId,
+            relatedEntityId: row.Id, relatedEntityType: nameof(UserEmail));
+
+        return true;
+    }
+
+    /// <inheritdoc />
+    public async Task<bool> LinkAsync(
+        Guid userId, string provider, string providerKey, string email, Guid actorUserId,
+        CancellationToken cancellationToken = default)
+    {
+        var now = _clock.GetCurrentInstant();
+        var existing = await _repository.GetByUserIdReadOnlyAsync(userId, cancellationToken);
+        var match = existing.FirstOrDefault(
+            e => string.Equals(e.Email, email, StringComparison.OrdinalIgnoreCase));
+
+        Guid rowId;
+        string description;
+
+        if (match is not null)
+        {
+            // Re-fetch tracked entity for mutation. GetByIdAndUserIdAsync returns
+            // a tracked row (per repo XML: "tracked for modification").
+            var tracked = await _repository.GetByIdAndUserIdAsync(match.Id, userId, cancellationToken)
+                ?? throw new InvalidOperationException(
+                    $"UserEmail row {match.Id} disappeared between read and mutate.");
+
+            tracked.Provider = provider;
+            tracked.ProviderKey = providerKey;
+            tracked.UpdatedAt = now;
+            await _repository.UpdateAsync(tracked, cancellationToken);
+
+            rowId = tracked.Id;
+            description = $"Linked {provider} `{tracked.Email}` to user";
+        }
+        else
+        {
+            var fresh = new UserEmail
+            {
+                Id = Guid.NewGuid(),
+                UserId = userId,
+                Email = email,
+                IsVerified = true,
+                IsPrimary = false,
+                IsGoogle = false,
+                Provider = provider,
+                ProviderKey = providerKey,
+                CreatedAt = now,
+                UpdatedAt = now,
+            };
+            await _repository.AddAsync(fresh, cancellationToken);
+
+            rowId = fresh.Id;
+            description = $"Linked {provider} `{fresh.Email}` to user (new row)";
+        }
+
+        // First OAuth sign-in: promote the just-added row to primary so
+        // GetEffectiveEmail() / NotificationEmail derivation has a target.
+        await EnsurePrimaryInvariantAsync(userId, cancellationToken);
 
         await _fullProfileInvalidator.InvalidateAsync(userId, cancellationToken);
-        foreach (var conflictUserId in updates
-                     .Where(u => u.UserId != userId)
-                     .Select(u => u.UserId)
-                     .Distinct())
+
+        await _auditLogService.LogAsync(
+            AuditAction.UserEmailLinked,
+            nameof(User), userId,
+            description,
+            actorUserId,
+            relatedEntityId: rowId, relatedEntityType: nameof(UserEmail));
+
+        return true;
+    }
+
+    /// <inheritdoc />
+    public async Task<bool> UnlinkAsync(
+        Guid userId, Guid userEmailId, Guid actorUserId,
+        CancellationToken cancellationToken = default)
+    {
+        var row = await _repository.GetByIdAndUserIdAsync(userEmailId, userId, cancellationToken);
+        if (row is null) return false;
+        if (string.IsNullOrEmpty(row.Provider) || string.IsNullOrEmpty(row.ProviderKey))
+            return false;
+
+        var user = await _userManager.FindByIdAsync(userId.ToString());
+        if (user is null) return false;
+
+        // Capture provider/key/email before mutation — RemoveAsync may detach
+        // the entity and the audit description needs them.
+        var provider = row.Provider;
+        var providerKey = row.ProviderKey;
+        var email = row.Email;
+
+        var removeLogin = await _userManager.RemoveLoginAsync(user, provider, providerKey);
+        if (!removeLogin.Succeeded)
         {
-            await _fullProfileInvalidator.InvalidateAsync(conflictUserId, cancellationToken);
+            // Hard-fail: don't delete the UserEmail row if Identity refused to
+            // remove the AspNetUserLogins row. Otherwise the user would believe
+            // they unlinked their Google account (UserEmail row is gone) but
+            // they could still sign in via Google (AspNetUserLogins row
+            // persists). Hard-failing keeps the two stores in sync — the caller
+            // can retry, and an admin can investigate the logged failure.
+            _logger.LogError(
+                "UnlinkAsync: UserManager.RemoveLoginAsync failed for user {UserId} provider {Provider}; aborting unlink to preserve consistency between AspNetUserLogins and user_emails. Errors: {Errors}",
+                userId, provider,
+                string.Join("; ", removeLogin.Errors.Select(e => $"{e.Code}:{e.Description}")));
+            return false;
         }
+
+        await _repository.RemoveAsync(row, cancellationToken);
+
+        // If the unlinked row was primary, promote the highest-priority
+        // remaining verified row.
+        await EnsurePrimaryInvariantAsync(userId, cancellationToken);
+
+        await _fullProfileInvalidator.InvalidateAsync(userId, cancellationToken);
+
+        await _auditLogService.LogAsync(
+            AuditAction.UserEmailUnlinked,
+            nameof(User), userId,
+            $"Unlinked {provider} (key {ShortHash(providerKey)}) from {email}",
+            actorUserId,
+            relatedEntityId: row.Id, relatedEntityType: nameof(UserEmail));
+
+        return true;
+    }
+
+    private static string ShortHash(string s)
+    {
+        var bytes = System.Security.Cryptography.SHA256.HashData(
+            System.Text.Encoding.UTF8.GetBytes(s));
+        return Convert.ToHexString(bytes.AsSpan(0, 8));
     }
 
     /// <inheritdoc />

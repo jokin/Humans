@@ -55,9 +55,12 @@ public class UserEmail
     public bool IsGoogle { get; set; }
 
     /// <summary>
-    /// Whether this email is the notification target (exactly one per user must be true).
+    /// True when this row is the canonical recipient for system notifications
+    /// to this user. Exactly-one-true-per-UserId is service-enforced inside
+    /// UserEmailService — no DB partial unique index per
+    /// feedback_db_enforcement_minimal.
     /// </summary>
-    public bool IsNotificationTarget { get; set; }
+    public bool IsPrimary { get; set; }
 
     /// <summary>
     /// Profile visibility for this email. Null means hidden from profile.

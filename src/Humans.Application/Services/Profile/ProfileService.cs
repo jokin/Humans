@@ -101,7 +101,7 @@ public sealed class ProfileService : IProfileService, IUserDataContributor
         if (user is null) return null;
 
         var userEmails = await _userEmailRepository.GetByUserIdReadOnlyAsync(userId, ct);
-        var notificationEmail = userEmails.FirstOrDefault(e => e.IsNotificationTarget && e.IsVerified)?.Email ?? user.Email;
+        var notificationEmail = userEmails.FirstOrDefault(e => e.IsPrimary && e.IsVerified)?.Email ?? user.Email;
 
         return FullProfile.Create(profile, user, profile.VolunteerHistory.ToList(), notificationEmail);
     }
@@ -866,10 +866,17 @@ public sealed class ProfileService : IProfileService, IUserDataContributor
         {
             e.Email,
             e.IsVerified,
-            // GDPR-export schema is observable by data subjects; key stays "IsOAuth"
-            // even though the source column moved to Provider/ProviderKey.
+            // JSON keys stay "IsOAuth" and "IsNotificationTarget" per coding-rules.md
+            // "Never Rename Fields in Serialized Objects" — the GDPR export is a JSON
+            // file users download. IsOAuth sources from (Provider != null) — the
+            // pre-PR-4 semantics meaning "this row has an OAuth login attached".
+            // The PR 4 spec's Task 17 swapped both the JSON key (rename) and the
+            // value source (e.IsGoogle); both have been reverted so the export
+            // emits identical bytes for the same row data as before PR 4.
+            // IsNotificationTarget is the legacy JSON key for the renamed C#
+            // property IsPrimary (mirrors the EF HasColumnName pin).
             IsOAuth = e.Provider != null,
-            e.IsNotificationTarget,
+            IsNotificationTarget = e.IsPrimary,
             e.Visibility
         }).ToList());
 

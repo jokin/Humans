@@ -50,7 +50,7 @@ public interface IUserEmailService
     /// Sets which email is the notification target.
     /// The email must be verified.
     /// </summary>
-    Task SetNotificationTargetAsync(
+    Task SetPrimaryAsync(
         Guid userId,
         Guid emailId,
         CancellationToken cancellationToken = default);
@@ -65,18 +65,19 @@ public interface IUserEmailService
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Deletes a UserEmail row. Blocks the delete only if removing it would
-    /// leave the user with zero verified UserEmail rows AND zero AspNetUserLogins
-    /// rows (the "preserve at least one auth method" invariant). The OAuth-tied
-    /// row (rows with non-null <see cref="UserEmail.Provider"/>) is now
-    /// deletable as long as another auth method remains — the
-    /// <c>AspNetUserLogins</c> row is independent of the UserEmail row, so
-    /// OAuth sign-in continues to work after the delete. Unverified rows are
-    /// always deletable since they can't be used for sign-in. See
+    /// Deletes a UserEmail row. Returns <c>true</c> when the row was removed,
+    /// <c>false</c> when the precondition rejected the delete (currently:
+    /// rows with a non-empty <see cref="UserEmail.Provider"/> must go through
+    /// <see cref="UnlinkAsync"/>, which removes the AspNetUserLogins row and
+    /// the UserEmail row in one step). Blocks the delete (throws
+    /// <see cref="System.ComponentModel.DataAnnotations.ValidationException"/>)
+    /// when removing a verified row would leave the user with zero verified
+    /// UserEmail rows. Unverified rows are always deletable since they can't
+    /// be used for sign-in. See
     /// <c>docs/superpowers/specs/2026-04-27-email-and-oauth-decoupling-design.md</c>
-    /// PR 1 for the design rationale.
+    /// PRs 1 and 4 for the design rationale.
     /// </summary>
-    Task DeleteEmailAsync(
+    Task<bool> DeleteEmailAsync(
         Guid userId,
         Guid emailId,
         CancellationToken cancellationToken = default);
@@ -86,15 +87,6 @@ public interface IUserEmailService
     /// </summary>
     Task RemoveAllEmailsAsync(
         Guid userId,
-        CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Adds an OAuth-sourced email (already verified, no token needed).
-    /// Used during first-time OAuth login to record the provider email.
-    /// </summary>
-    Task AddOAuthEmailAsync(
-        Guid userId,
-        string email,
         CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -165,7 +157,7 @@ public interface IUserEmailService
 
     /// <summary>
     /// Resolves the notification-target email for each requested user. The
-    /// result is <c>UserEmail.Email</c> where <c>IsNotificationTarget</c> is
+    /// result is <c>UserEmail.Email</c> where <c>IsPrimary</c> is
     /// true and the email is verified, falling back to <c>User.Email</c> when
     /// no notification-target email exists. Users for whom no email can be
     /// resolved are omitted from the result. Used by cross-section callers
@@ -260,18 +252,51 @@ public interface IUserEmailService
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Sets <see cref="UserEmail.Provider"/> / <see cref="UserEmail.ProviderKey"/>
-    /// on the given row. Clears the same pair from any sibling row in the same
-    /// write batch (service-enforced single-row-per-pair invariant per
-    /// <c>feedback_db_enforcement_minimal</c>). Used by the OAuth callback when
-    /// linking a UserEmail to its OAuth identity (PR 3 of the
-    /// email-identity-decoupling spec). Throws
-    /// <see cref="System.ComponentModel.DataAnnotations.ValidationException"/>
-    /// when the target row does not exist or does not belong to the given
-    /// <paramref name="userId"/>.
+    /// Sets the user's canonical Google Workspace identity to the given verified
+    /// email row. Single-transaction exclusive flip via
+    /// <see cref="IUserEmailRepository.SetGoogleExclusiveAsync"/>: the target row's
+    /// <see cref="UserEmail.IsGoogle"/> goes to true, every sibling row for the
+    /// same user is cleared. Owner-gated via
+    /// <see cref="IUserEmailRepository.GetByIdAndUserIdAsync"/>; returns
+    /// <c>false</c> if the row is not found for this user or is not verified.
+    /// Service-auth-free per the design rules: the controller authorizes against
+    /// <paramref name="userId"/>, which is the <b>target</b> user (not the actor).
+    /// <paramref name="actorUserId"/> is captured on the audit log entry so the
+    /// admin self/admin grid distinguishes who flipped the flag.
     /// </summary>
-    Task SetProviderAsync(
-        Guid userId, Guid userEmailId, string provider, string providerKey,
+    Task<bool> SetGoogleAsync(
+        Guid userId, Guid userEmailId, Guid actorUserId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Find-or-create. Attaches the OAuth identity (<paramref name="provider"/>,
+    /// <paramref name="providerKey"/>) to the user's email row matching
+    /// <paramref name="email"/> (Ordinal/case-insensitive); creates a new
+    /// verified row when none matches. <paramref name="userId"/> is the
+    /// <b>target</b> user; <paramref name="actorUserId"/> is the actor.
+    /// Replaces the legacy AddOAuthEmailAsync + SetProviderAsync pair (PR 4
+    /// consolidation).
+    /// </summary>
+    Task<bool> LinkAsync(
+        Guid userId,
+        string provider,
+        string providerKey,
+        string email,
+        Guid actorUserId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Removes both the AspNetUserLogins row and the UserEmail row for a
+    /// Provider-attached email. Owner-gated. Returns <c>false</c> if the row
+    /// is not found for this user or has no <see cref="UserEmail.Provider"/>/
+    /// <see cref="UserEmail.ProviderKey"/>. No "would lock yourself out"
+    /// guard — magic-link sign-in is the fallback. <paramref name="userId"/>
+    /// is the <b>target</b> user; <paramref name="actorUserId"/> is the actor.
+    /// </summary>
+    Task<bool> UnlinkAsync(
+        Guid userId,
+        Guid userEmailId,
+        Guid actorUserId,
         CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -301,6 +326,6 @@ public record UserEmailProviderMatch(Guid Id, Guid UserId, string Email);
 public record UserEmailMatch(
     string Email,
     Guid UserId,
-    bool IsNotificationTarget,
+    bool IsPrimary,
     bool IsVerified,
     Instant UpdatedAt);

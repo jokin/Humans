@@ -1851,5 +1851,36 @@
   <data name="ShiftDash_Status_AtRisk" xml:space="preserve"><value>A rischio</value></data>
   <data name="ShiftDash_Status_BelowTarget" xml:space="preserve"><value>Sotto obiettivo</value></data>
   <data name="ShiftDash_Coordinators_StaleLabel" xml:space="preserve"><value>Inattivo da più di 7 giorni</value></data>
+  <data name="EmailGrid_AdminContextBanner" xml:space="preserve"><value>Gestione delle email di un altro utente</value></data>
+  <data name="EmailGrid_AdminContextBannerNamed" xml:space="preserve"><value>Gestione delle email di {0}</value><comment>{0} = target user display name</comment></data>
+  <data name="EmailGrid_AdminUnknownTarget" xml:space="preserve"><value>un altro utente</value></data>
+  <data name="Emails_AdminUnknownTarget" xml:space="preserve"><value>un altro utente</value></data>
+  <data name="EmailGrid_Email" xml:space="preserve"><value>Email</value></data>
+  <data name="EmailGrid_Status" xml:space="preserve"><value>Stato</value></data>
+  <data name="EmailGrid_Primary" xml:space="preserve"><value>Principale</value></data>
+  <data name="EmailGrid_Google" xml:space="preserve"><value>Google</value></data>
+  <data name="EmailGrid_GoogleColumnTooltip" xml:space="preserve"><value>Email usata per la sincronizzazione con Google Workspace.</value></data>
+  <data name="EmailGrid_WorkspaceLockedHelp" xml:space="preserve"><value>Principale e Google sono gestiti da Google Workspace finché il tuo indirizzo @nobodies.team è presente.</value></data>
+  <data name="EmailGrid_VerificationPendingTitle" xml:space="preserve"><value>Verifica dell’email in sospeso</value></data>
+  <data name="EmailGrid_VerificationPendingBody" xml:space="preserve"><value>Controlla la tua casella di posta e fai clic sul link nell’email di verifica per confermare il tuo indirizzo.</value></data>
+  <data name="EmailGrid_Visibility" xml:space="preserve"><value>Visibilità</value></data>
+  <data name="EmailGrid_Actions" xml:space="preserve"><value>Azioni</value></data>
+  <data name="EmailGrid_StatusMergePending" xml:space="preserve"><value>Unione in sospeso</value></data>
+  <data name="EmailGrid_StatusVerified" xml:space="preserve"><value>Verificata</value></data>
+  <data name="EmailGrid_StatusPending" xml:space="preserve"><value>In sospeso</value></data>
+  <data name="EmailGrid_PrimarySelected" xml:space="preserve"><value>Principale</value></data>
+  <data name="EmailGrid_LinkGoogleAccount" xml:space="preserve"><value>Collega account Google</value></data>
+  <data name="EmailGrid_LinkGoogleHelp" xml:space="preserve"><value>Accedi con Google per collegare un altro account Google al tuo profilo.</value></data>
+  <data name="EmailGrid_BackToAdminDetail" xml:space="preserve"><value>Torna al dettaglio utente</value></data>
+  <data name="EmailGrid_Unlink" xml:space="preserve"><value>Scollega</value></data>
+  <data name="EmailGrid_ConfirmUnlink" xml:space="preserve"><value>Scollegare questo account Google?</value></data>
+  <data name="EmailGrid_SetGoogleRejected" xml:space="preserve"><value>Impossibile impostare l'email di servizio Google — riga sconosciuta o non verificata.</value></data>
+  <data name="EmailGrid_UnlinkRejected" xml:space="preserve"><value>Impossibile scollegare — riga sconosciuta o senza provider di accesso.</value></data>
+  <data name="EmailGrid_GoogleServiceUpdated" xml:space="preserve"><value>Email di servizio Google aggiornata. La sincronizzazione verrà riprovata con la nuova email.</value></data>
+  <data name="EmailGrid_UnlinkSuccess" xml:space="preserve"><value>Provider di accesso scollegato.</value></data>
+  <data name="EmailGrid_DeleteRejectedHasProvider" xml:space="preserve"><value>Questa email è collegata a un provider di accesso. Usa Scollega invece.</value></data>
+  <data name="EmailGrid_AdminAddSentVerification" xml:space="preserve"><value>Email di verifica inviata all'utente.</value></data>
+  <data name="EmailGrid_LinkFailed" xml:space="preserve"><value>Non siamo riusciti a collegare questo account Google. Riprova.</value></data>
+  <data name="AdminDetail_ManageEmails" xml:space="preserve"><value>Gestisci email</value></data>
 
 </root>
