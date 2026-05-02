@@ -1630,10 +1630,6 @@
   <data name="CommPrefs_Alert" xml:space="preserve"><value>Alert</value></data>
   <data name="CommPrefs_BackToProfile" xml:space="preserve"><value>Back to Profile</value></data>
   <data name="CommPrefs_BackToDashboard" xml:space="preserve"><value>Back to Dashboard</value></data>
-  <data name="CommPrefs_OneClick_Prompt" xml:space="preserve"><value>You clicked an unsubscribe link from {0} emails.</value></data>
-  <data name="CommPrefs_OneClick_Hint" xml:space="preserve"><value>One-click unsubscribe, or fine-tune the matrix below.</value></data>
-  <data name="CommPrefs_OneClick_Button" xml:space="preserve"><value>Unsubscribe from {0}</value></data>
-  <data name="CommPrefs_OneClick_Done" xml:space="preserve"><value>Unsubscribed. You can re-enable any category below.</value></data>
 
   <data name="Emails_Header_Email" xml:space="preserve"><value>Email</value></data>
   <data name="Emails_Header_Status" xml:space="preserve"><value>Status</value></data>
@@ -2032,15 +2028,5 @@
   <data name="Issue_Assignee_Updated" xml:space="preserve"><value>Assignee updated.</value></data>
   <data name="Issue_Section_Updated" xml:space="preserve"><value>Section updated.</value></data>
   <data name="Issue_GitHub_Linked" xml:space="preserve"><value>Linked to GitHub.</value></data>
-
-  <data name="Welcome_Title" xml:space="preserve"><value>Welcome</value></data>
-  <data name="Welcome_Heading" xml:space="preserve"><value>You're in.</value></data>
-  <data name="Welcome_Subtitle" xml:space="preserve"><value>Your ticket for Elsewhere 2026 is confirmed.</value></data>
-  <data name="Welcome_ShiftsTitle" xml:space="preserve"><value>Now let's make this thing happen together.</value></data>
-  <data name="Welcome_ShiftsBody" xml:space="preserve"><value>Elsewhere isn't a festival you show up to — it's one you help build. Every human picks shifts: setting up before, keeping things running during, and taking it all down after.</value></data>
-  <data name="Welcome_ShiftsBody2" xml:space="preserve"><value>To browse and sign up for shifts, you need a Humans account. It takes a couple of minutes.</value></data>
-  <data name="Welcome_CTA" xml:space="preserve"><value>Sign in or create account</value></data>
-  <data name="Welcome_Footer" xml:space="preserve"><value>Already have an account? Same button — sign in and you'll land straight on the shifts page.</value></data>
-  <data name="Welcome_Contact" xml:space="preserve"><value>Questions? Reach us at</value></data>
 
 </root>
