@@ -82,12 +82,20 @@ jobs:
             invariant doc under docs/sections/ and the feature spec under
             docs/features/.
 
-            Post inline comments for specific issues and a single top-level
-            summary comment on the PR. Cover correctness, security, the
-            project's design/coding rules (services own their data, no
-            cross-service DB access, NodaTime, append-only ConsentRecord,
-            no concurrency tokens, etc.), and adherence to documented
-            invariants. Do not flag stylistic nits.
+            Cover correctness, security, the project's design/coding rules
+            (services own their data, no cross-service DB access, NodaTime,
+            append-only ConsentRecord, no concurrency tokens, etc.), and
+            adherence to documented invariants. Do not flag stylistic nits.
+
+            ALWAYS post exactly one top-level summary comment on the PR
+            (via `gh pr comment`), even when the review is clean. The
+            comment MUST reference the head commit SHA so it's clear which
+            revision was reviewed. Examples:
+              - Clean: "Reviewed commit <sha> — no issues found."
+              - With findings: start with "Reviewed commit <sha>." then
+                summarize findings; post specific issues as inline comments.
+            Without that summary comment, a reader cannot distinguish a
+            clean review from a failed/never-ran job, so this is required.
           claude_args: |
             --max-turns 100
             --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr checks:*)"
