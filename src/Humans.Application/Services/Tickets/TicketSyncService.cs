@@ -1,4 +1,3 @@
-using Humans.Application;
 using Humans.Application.Configuration;
 using Humans.Application.DTOs;
 using Humans.Application.Extensions;
@@ -45,7 +44,7 @@ namespace Humans.Application.Services.Tickets;
 /// updates route through <see cref="ICampaignService"/>.
 /// </para>
 /// </remarks>
-public sealed class TicketSyncService : ITicketSyncService
+public sealed class TicketSyncService : ITicketSyncService, IUserMerge
 {
     private readonly ITicketRepository _ticketRepository;
     private readonly ITicketVendorService _vendorService;
@@ -220,6 +219,18 @@ public sealed class TicketSyncService : ITicketSyncService
     public async Task ResetSyncStateForFullResyncAsync()
     {
         await _ticketRepository.ResetSyncStateLastSyncAsync();
+    }
+
+    public async Task ReassignAsync(Guid sourceUserId, Guid targetUserId, Guid actorUserId, Instant updatedAt,
+        CancellationToken ct)
+    {
+        await _ticketRepository.ReassignToUserAsync(sourceUserId, targetUserId, updatedAt, ct);
+
+        // Per-user ticket coverage / dashboard / who-hasn't-bought derive from
+        // MatchedUserId on orders + attendees, so all of them must refresh.
+        // Use the established InvalidateTicketCaches seam (see Tickets.md
+        // touch-and-clean guidance).
+        _cache.InvalidateTicketCaches();
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────

@@ -177,11 +177,13 @@ public class AccountProvisioningServiceTests
             int year, IReadOnlyList<(Guid UserId, ParticipationStatus Status)> entries,
             CancellationToken ct = default) =>
             throw new NotSupportedException();
-        public Task<bool> AnonymizeForMergeAsync(Guid userId, CancellationToken ct = default) =>
+        public Task<bool> AnonymizeForMergeAsync(
+            Guid sourceUserId, Guid targetUserId, Instant now, CancellationToken ct = default) =>
             throw new NotSupportedException();
-        public Task RemoveExternalLoginsAsync(Guid userId, CancellationToken ct = default) =>
+        public Task<int> ReassignLoginsToUserAsync(
+            Guid sourceUserId, Guid targetUserId, CancellationToken ct = default) =>
             throw new NotSupportedException();
-        public Task MigrateExternalLoginsAsync(
+        public Task<int> ReassignEventParticipationToUserAsync(
             Guid sourceUserId, Guid targetUserId, CancellationToken ct = default) =>
             throw new NotSupportedException();
         public Task<Guid?> GetOtherUserIdHavingGoogleEmailAsync(
@@ -193,15 +195,11 @@ public class AccountProvisioningServiceTests
             throw new NotSupportedException();
         public Task<(bool Updated, string? OldEmail)> RewritePrimaryEmailAsync(Guid userId, string newEmail, CancellationToken ct = default) =>
             throw new NotSupportedException();
-        public Task<IReadOnlyList<Guid>> GetAllUserIdsAsync(CancellationToken ct = default) =>
-            throw new NotSupportedException();
         public Task<IReadOnlyList<(string Language, int Count)>>
             GetLanguageDistributionForUserIdsAsync(
                 IReadOnlyCollection<Guid> userIds, CancellationToken ct = default) =>
             throw new NotSupportedException();
         public Task<string?> PurgeAsync(Guid userId, CancellationToken ct = default) =>
-            throw new NotSupportedException();
-        public Task<int> GetPendingDeletionCountAsync(CancellationToken ct = default) =>
             throw new NotSupportedException();
         public Task SetLastConsentReminderSentAsync(Guid userId, Instant sentAt, CancellationToken ct = default) =>
             throw new NotSupportedException();
@@ -211,8 +209,8 @@ public class AccountProvisioningServiceTests
             throw new NotSupportedException();
         public Task<ExpiredDeletionAnonymizationResult?> ApplyExpiredDeletionAnonymizationAsync(Guid userId, CancellationToken ct = default) =>
             throw new NotSupportedException();
-        public Task<IReadOnlyList<(Guid UserId, string DisplayName, string GoogleEmail)>>
-            BackfillNobodiesTeamGoogleEmailsAsync(CancellationToken ct = default) =>
+        public Task<IReadOnlyList<Guid>> GetMergedSourceIdsAsync(
+            Guid targetUserId, CancellationToken ct = default) =>
             throw new NotSupportedException();
     }
 
@@ -307,6 +305,10 @@ public class AccountProvisioningServiceTests
             throw new NotSupportedException();
         public Task<IReadOnlyList<UserEmail>> FindAllByProviderKeyAsync(
             string provider, string providerKey, CancellationToken ct = default) =>
+            throw new NotSupportedException();
+        public Task<int> ReassignToUserAsync(
+            Guid sourceUserId, Guid targetUserId, Instant updatedAt,
+            CancellationToken ct = default) =>
             throw new NotSupportedException();
     }
 

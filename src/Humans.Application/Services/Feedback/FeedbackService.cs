@@ -37,7 +37,7 @@ namespace Humans.Application.Services.Feedback;
 /// continue to read <c>report.User.DisplayName</c>, <c>report.AssignedToTeam.Name</c>,
 /// etc. without change — this is the "in-memory join" from design-rules §6b.
 /// </remarks>
-public sealed class FeedbackService : IFeedbackService, IUserDataContributor
+public sealed class FeedbackService : IFeedbackService, IUserDataContributor, IUserMerge
 {
     private readonly IFeedbackRepository _repository;
     private readonly IUserService _userService;
@@ -444,6 +444,10 @@ public sealed class FeedbackService : IFeedbackService, IUserDataContributor
             .OrderBy(r => r.name, StringComparer.OrdinalIgnoreCase)
             .ToList();
     }
+
+    public Task ReassignAsync(Guid sourceUserId, Guid targetUserId, Guid actorUserId, Instant updatedAt,
+        CancellationToken ct)
+        => _repository.ReassignToUserAsync(sourceUserId, targetUserId, updatedAt, ct);
 
     public async Task<IReadOnlyList<UserDataSlice>> ContributeForUserAsync(Guid userId, CancellationToken ct)
     {

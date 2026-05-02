@@ -5,6 +5,7 @@ using Humans.Application.Interfaces.Notifications;
 using Humans.Application.Interfaces.Repositories;
 using Humans.Application.Interfaces.Shifts;
 using Humans.Application.Interfaces.Teams;
+using Humans.Application.Interfaces.Users;
 using Humans.Domain.Entities;
 using Humans.Domain.Enums;
 using Microsoft.Extensions.DependencyInjection;
@@ -43,7 +44,7 @@ namespace Humans.Application.Services.Shifts;
 /// belongs with the #541a migration. See <c>design-rules.md</c> §15g.
 /// </para>
 /// </remarks>
-public sealed class ShiftSignupService : IShiftSignupService, IUserDataContributor
+public sealed class ShiftSignupService : IShiftSignupService, IUserDataContributor, IUserMerge
 {
     private readonly IShiftSignupRepository _repo;
     private readonly IShiftManagementService _shiftMgmt;
@@ -1090,4 +1091,8 @@ public sealed class ShiftSignupService : IShiftSignupService, IUserDataContribut
     public Task<IReadOnlyList<(Guid SignupId, Guid ShiftId)>> CancelActiveSignupsForUserAsync(
         Guid userId, string reason, CancellationToken ct = default) =>
         _repo.CancelActiveSignupsForUserAsync(userId, reason, ct);
+
+    public Task ReassignAsync(Guid sourceUserId, Guid targetUserId, Guid actorUserId, Instant updatedAt,
+        CancellationToken ct)
+        => _repo.ReassignToUserAsync(sourceUserId, targetUserId, updatedAt, ct);
 }

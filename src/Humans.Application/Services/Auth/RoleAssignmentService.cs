@@ -37,7 +37,7 @@ namespace Humans.Application.Services.Auth;
 /// <c>ra.CreatedByUser.DisplayName</c>, etc. without change — this is the
 /// "in-memory join" from design-rules §6b.
 /// </remarks>
-public sealed class RoleAssignmentService : IRoleAssignmentService, IUserDataContributor
+public sealed class RoleAssignmentService : IRoleAssignmentService, IUserDataContributor, IUserMerge
 {
     private readonly IRoleAssignmentRepository _repository;
     private readonly IUserService _userService;
@@ -271,9 +271,22 @@ public sealed class RoleAssignmentService : IRoleAssignmentService, IUserDataCon
         return activeRoles.Count;
     }
 
-    public Task<IReadOnlyList<Guid>> GetActiveUserIdsForRoleAsync(
-        string roleName, CancellationToken ct = default) =>
-        _repository.GetActiveUserIdsForRoleAsync(roleName, _clock.GetCurrentInstant(), ct);
+    public Task ReassignAsync(Guid sourceUserId, Guid targetUserId, Guid actorUserId, Instant updatedAt,
+        CancellationToken cancellationToken)
+    {
+        // Cache invalidation is the caller's responsibility — must run AFTER
+        // the ambient TransactionScope completes so a rolled-back fold
+        // doesn't strand the claims cache (and per-request roles) seeing
+        // now-uncommitted writes. The orchestrator calls
+        // <see cref="InvalidateClaimsCacheForUser"/> for both users and
+        // <see cref="InvalidateNavBadgeCache"/> globally in its post-commit
+        // block. See AccountMergeService.AcceptAsync.
+        return _repository.ReassignToUserAsync(sourceUserId, targetUserId, updatedAt, cancellationToken);
+    }
+
+    public void InvalidateClaimsCacheForUser(Guid userId) => _claimsInvalidator.Invalidate(userId);
+
+    public void InvalidateNavBadgeCache() => _navBadge.Invalidate();
 
     public async Task<IReadOnlyList<UserDataSlice>> ContributeForUserAsync(Guid userId, CancellationToken ct)
     {

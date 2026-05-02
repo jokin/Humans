@@ -21,12 +21,6 @@ public interface IShiftManagementService
     Task<bool> IsDeptCoordinatorAsync(Guid userId, Guid departmentTeamId);
 
     /// <summary>
-    /// Whether the user can create/edit shifts and rotas for the department.
-    /// True for dept coordinators, Admin, and VolunteerCoordinator (NOT NoInfoAdmin).
-    /// </summary>
-    Task<bool> CanManageShiftsAsync(Guid userId, Guid departmentTeamId);
-
-    /// <summary>
     /// Whether the user can approve/refuse signups and voluntell for the department.
     /// True for dept coordinators, Admin, NoInfoAdmin, AND VolunteerCoordinator.
     /// </summary>

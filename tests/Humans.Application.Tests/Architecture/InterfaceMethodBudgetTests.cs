@@ -46,7 +46,11 @@ public class InterfaceMethodBudgetTests
     private static readonly IReadOnlyDictionary<Type, int> Budgets = new Dictionary<Type, int>
     {
         // Audited 2026-04-26 against reforge audit-surface 0.8.0
-        [typeof(ITeamService)] = 71,
+        // 71→70: account-merge fold redesign — removed ReassignToUserAsync
+        // from ITeamService (moved to IUserMerge.ReassignAsync, implemented
+        // by TeamService and dispatched by AccountMergeService via
+        // IEnumerable<IUserMerge> fan-out).
+        [typeof(ITeamService)] = 70,
         // ICampService raised 53→57 for per-camp roles feature (peterdrier#489):
         // AddCampMemberAsLeadAsync, GetSeasonMembersAsync, GetCampMemberStatusAsync,
         // GetCampSeasonsForComplianceAsync — all needed by ICampRoleService and the
@@ -55,17 +59,74 @@ public class InterfaceMethodBudgetTests
         // CampSeason getters (SoundZone/Name/Info) with single GetCampSeasonByIdAsync.
         // 56→55: collapsed GetCampsForYearAsync + GetAllCampsForYearAsync into one
         // method; callers filter via Camp.IsPublic predicate.
-        [typeof(ICampService)] = 55,
+        // 55→55: account-merge fold redesign Phase 3.3. Added
+        // ReassignAssignmentsToUserAsync; removed GetCampByIdAsync (pure
+        // passthrough to ICampRepository.GetByIdAsync — zero production
+        // callers, zero tests, zero internal callers; CampDetail/Edit
+        // flows resolve by slug, not id).
+        // 55→54: account-merge fold final consolidation — removed
+        // ReassignAssignmentsToUserAsync from ICampService (moved to
+        // IUserMerge.ReassignAsync, dispatched via fan-out).
+        [typeof(ICampService)] = 54,
         // +1: GetOverallCoverageAsync for admin dashboard shift-coverage tile (peterdrier#349).
-        [typeof(IShiftManagementService)] = 50,
+        // 50→50: account-merge fold redesign Phase 3.2. Added
+        // ReassignProfilesAndTagPrefsToUserAsync; removed CanManageShiftsAsync
+        // (zero production callers, zero tests — fully dead since the
+        // shift-management slice 1/2 plan that introduced it never wired it
+        // up; controllers use IsDeptCoordinatorAsync + role checks directly).
+        // 50→49: account-merge fold final consolidation — removed
+        // ReassignProfilesAndTagPrefsToUserAsync from IShiftManagementService
+        // (moved to IUserMerge.ReassignAsync, dispatched via fan-out).
+        [typeof(IShiftManagementService)] = 49,
         // +1 for SetProfilePictureAsync (nobodies-collective/Humans#532 — Google avatar import button needs a
         // narrow service write that owns its own cache invalidation; controllers can't reach
         // the FullProfile cache directly).
         // +1 for GetActiveApprovedCountAsync (admin dashboard active-humans tile, peterdrier#349).
-        [typeof(IProfileService)] = 41,
+        // 41→41: account-merge fold redesign Phase 1.2. Added
+        // ReassignSubAggregatesToUserAsync; removed
+        // GetActiveOrCompletedCampaignGrantsAsync (pure passthrough to
+        // ICampaignService.GetActiveOrCompletedGrantsForUserAsync — sole
+        // caller ProfileController already injects ICampaignService and now
+        // calls it directly).
+        // 41→40: account-merge fold final consolidation — removed
+        // ReassignSubAggregatesToUserAsync from IProfileService (moved to
+        // IUserMerge.ReassignAsync, dispatched via fan-out).
+        [typeof(IProfileService)] = 40,
         // -1 for GetContactUsersAsync removal (/Contacts surface deleted in PR 2 of
         // email-identity-decoupling — only ContactService called it).
-        [typeof(IUserService)] = 31,
+        // 31→31: account-merge fold redesign Phase 3.4. Added 3 fold primitives
+        // (AnonymizeForMergeAsync, ReassignLoginsToUserAsync,
+        // ReassignEventParticipationToUserAsync); removed 3 to match.
+        // Removed: SetGoogleEmailStatusAsync (interface-surface-dead — sole
+        // external caller in GoogleWorkspaceSyncService is sync-driven and
+        // routes through TrySetGoogleEmailStatusFromSyncAsync, which the
+        // Rejected-is-terminal guard short-circuits identically; impl keeps
+        // a private helper). BackfillNobodiesTeamGoogleEmailsAsync (sole
+        // caller SystemTeamSyncJob.BackfillGoogleEmailsAsync now iterates
+        // per-user via IUserEmailService.TryBackfillGoogleEmailAsync, which
+        // already exists). GetAllUserIdsAsync (4 callers replaced with
+        // (await GetAllUsersAsync(ct)).Select(u => u.Id) — at ~500-user
+        // scale the extra User-entity hydration is cheap per design rules).
+        // 31→31: account-merge fold redesign Phase 4.1. Added
+        // GetMergedSourceIdsAsync (the chain-follow service primitive that
+        // AuditLog/Consent/BudgetAuditLog reads call to surface rows still
+        // attributed to merged source tombstones); removed 1 to match.
+        // Removed: GetPendingDeletionCountAsync. Three callers (admin daily
+        // digest, board daily digest, NotificationMeterProvider) each
+        // already load — or can cheaply load — the full user list and
+        // derive the count in-memory as
+        // allUsers.Count(u => u.DeletionRequestedAt != null). The two
+        // digest jobs already had `allUsers` in scope; the meter provider
+        // is itself cached for ~2 minutes (CacheKeys.NotificationMeters)
+        // so loading the user list per cache window is acceptable at
+        // ~500-user scale per design rules.
+        // 31→29: account-merge fold final consolidation — removed
+        // ReassignLoginsToUserAsync and ReassignEventParticipationToUserAsync
+        // from IUserService. Login move and event-participation move now
+        // both happen through IUserMerge.ReassignAsync on UserService;
+        // DuplicateAccountService routes the logins move directly via
+        // IUserRepository (it doesn't run the full IUserMerge fan-out).
+        [typeof(IUserService)] = 29,
     };
 
     [HumansTheory]

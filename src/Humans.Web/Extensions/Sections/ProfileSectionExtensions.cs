@@ -37,11 +37,19 @@ internal static class ProfileSectionExtensions
 
         services.AddScoped<IUnsubscribeTokenProvider, UnsubscribeTokenProvider>();
 
-        services.AddScoped<ICommunicationPreferenceService, ProfilesCommunicationPreferenceService>();
+        services.AddScoped<ProfilesCommunicationPreferenceService>();
+        services.AddScoped<ICommunicationPreferenceService>(sp => sp.GetRequiredService<ProfilesCommunicationPreferenceService>());
+        services.AddScoped<IUserMerge>(sp => sp.GetRequiredService<ProfilesCommunicationPreferenceService>());
+
         services.AddScoped<IUnsubscribeService, UsersUnsubscribeService>();
 
-        services.AddScoped<IContactFieldService, ProfilesContactFieldService>();
-        services.AddScoped<IUserEmailService, ProfilesUserEmailService>();
+        services.AddScoped<ProfilesContactFieldService>();
+        services.AddScoped<IContactFieldService>(sp => sp.GetRequiredService<ProfilesContactFieldService>());
+        services.AddScoped<IUserMerge>(sp => sp.GetRequiredService<ProfilesContactFieldService>());
+
+        services.AddScoped<ProfilesUserEmailService>();
+        services.AddScoped<IUserEmailService>(sp => sp.GetRequiredService<ProfilesUserEmailService>());
+        services.AddScoped<IUserMerge>(sp => sp.GetRequiredService<ProfilesUserEmailService>());
         // Google Integration §15 migration (issue #554) — email provisioning.
         // Service lives in Humans.Application, goes through IUserService /
         // IProfileService / IUserEmailService rather than injecting HumansDbContext.
@@ -76,10 +84,13 @@ internal static class ProfileSectionExtensions
         services.AddSingleton<CachingProfileService>();
         services.AddSingleton<IProfileService>(sp => sp.GetRequiredService<CachingProfileService>());
 
-        // CRITICAL: IFullProfileInvalidator must resolve to the same Singleton decorator instance
-        // that backs IProfileService. Both interfaces share the single CachingProfileService
-        // instance, so the _byUserId dict is never split.
+        // CRITICAL: IFullProfileInvalidator and IUserMerge must resolve to the same
+        // Singleton decorator instance that backs IProfileService. The merge fan-out
+        // goes through the decorator so the orchestrator never has to know
+        // ProfileService has a cache — the decorator owns its own eviction.
         services.AddSingleton<IFullProfileInvalidator>(sp =>
+            sp.GetRequiredService<CachingProfileService>());
+        services.AddSingleton<IUserMerge>(sp =>
             sp.GetRequiredService<CachingProfileService>());
 
         // Eagerly warm the FullProfile dict at startup so bulk reads

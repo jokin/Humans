@@ -39,7 +39,7 @@ namespace Humans.Application.Services.Shifts;
 /// (design-rules §6b).
 /// </para>
 /// </summary>
-public sealed class ShiftManagementService : IShiftManagementService, IShiftAuthorizationInvalidator
+public sealed class ShiftManagementService : IShiftManagementService, IShiftAuthorizationInvalidator, IUserMerge
 {
     private static readonly TimeSpan AuthCacheDuration = TimeSpan.FromSeconds(60);
     private static readonly TimeSpan DashboardCacheTtl = TimeSpan.FromMinutes(5);
@@ -101,16 +101,6 @@ public sealed class ShiftManagementService : IShiftManagementService, IShiftAuth
         // Parent department coordinators can manage child teams
         var team = await TeamService.GetTeamByIdAsync(departmentTeamId);
         return team?.ParentTeamId is not null && teamIds.Contains(team.ParentTeamId.Value);
-    }
-
-    public async Task<bool> CanManageShiftsAsync(Guid userId, Guid departmentTeamId)
-    {
-        // Admin and VolunteerCoordinator can manage all shifts system-wide; NoInfoAdmin CANNOT
-        if (await HasActiveRoleAsync(userId, RoleNames.Admin) ||
-            await HasActiveRoleAsync(userId, RoleNames.VolunteerCoordinator))
-            return true;
-
-        return await IsDeptCoordinatorAsync(userId, departmentTeamId);
     }
 
     public async Task<bool> CanApproveSignupsAsync(Guid userId, Guid departmentTeamId)
@@ -1609,4 +1599,8 @@ public sealed class ShiftManagementService : IShiftManagementService, IShiftAuth
     public Task<int> DeleteShiftProfilesForUserAsync(
         Guid userId, CancellationToken ct = default) =>
         _repo.DeleteVolunteerEventProfilesForUserAsync(userId, ct);
+
+    public Task ReassignAsync(Guid sourceUserId, Guid targetUserId, Guid actorUserId, Instant updatedAt,
+        CancellationToken ct) =>
+        _repo.ReassignProfilesAndTagPrefsToUserAsync(sourceUserId, targetUserId, updatedAt, ct);
 }
