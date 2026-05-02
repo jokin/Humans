@@ -303,6 +303,18 @@ public sealed class ShiftManagementService : IShiftManagementService, IShiftAuth
     // Bulk Shift Creation
     // ============================================================
 
+    /// <summary>
+    /// Re-export of <see cref="Shift.AllDayWindowStart"/> for callers in the Application
+    /// layer that do not reference the Domain entity directly.
+    /// </summary>
+    public static LocalTime AllDayShiftStartTime => Shift.AllDayWindowStart;
+
+    /// <summary>
+    /// Re-export of <see cref="Shift.AllDayWindowEnd"/> for callers in the Application
+    /// layer that do not reference the Domain entity directly.
+    /// </summary>
+    public static LocalTime AllDayShiftEndTime => Shift.AllDayWindowEnd;
+
     public async Task CreateBuildStrikeShiftsAsync(Guid rotaId, Dictionary<int, (int Min, int Max)> dailyStaffing)
     {
         var rota = await _repo.GetRotaWithEventSettingsAsync(rotaId);
@@ -335,7 +347,9 @@ public sealed class ShiftManagementService : IShiftManagementService, IShiftAuth
                 RotaId = rotaId,
                 IsAllDay = true,
                 DayOffset = dayOffset,
-                StartTime = new LocalTime(0, 0),
+                // StartTime and Duration are don't-care for IsAllDay rows; GetAbsoluteStart/End
+                // short-circuit to AllDayWindowStart/End. Store midnight/24h as a neutral sentinel.
+                StartTime = LocalTime.Midnight,
                 Duration = Duration.FromHours(24),
                 MinVolunteers = staffing.Min,
                 MaxVolunteers = staffing.Max,
@@ -729,7 +743,9 @@ public sealed class ShiftManagementService : IShiftManagementService, IShiftAuth
 
             foreach (var shift in overlapping)
             {
-                var hours = shift.IsAllDay ? 8.0 : shift.Duration.TotalHours;
+                var hours = shift.IsAllDay
+                    ? Duration.FromTicks(Shift.AllDayWindowEnd.TickOfDay - Shift.AllDayWindowStart.TickOfDay).TotalHours
+                    : shift.Duration.TotalHours;
                 var totalHours = hours * shift.MaxVolunteers;
 
                 switch (shift.Rota.Priority)
