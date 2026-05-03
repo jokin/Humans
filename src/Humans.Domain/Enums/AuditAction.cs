@@ -93,6 +93,10 @@ public enum AuditAction
     CampRoleDefinitionReactivated,
     CampRoleAssigned,
     CampRoleUnassigned,
+    IssueStatusChanged,
+    IssueAssigneeChanged,
+    IssueSectionChanged,
+    IssueGitHubLinked,
     AccountPurged,
     UserEmailProviderBackfilled,
     UserEmailGoogleSet,
@@ -102,4 +106,6 @@ public enum AuditAction
     UserEmailDeleted,
     UserEmailVisibilityChanged,
     UserEmailAdded,
+    ShiftSignupCreated,
+    ShiftSignupReassigned,
 }

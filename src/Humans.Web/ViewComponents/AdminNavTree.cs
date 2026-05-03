@@ -44,6 +44,11 @@ public static class AdminNavTree
             new("Campaigns",          "Campaign", "Index",      null, null, "fa-solid fa-bullhorn",  PolicyNames.AdminOnly),
             new("Workspace accounts", "Google",  "Accounts",    null, null, "fa-solid fa-at",        PolicyNames.AdminOnly),
         }),
+        new("Agent", new AdminNavItem[]
+        {
+            new("Agent Config",  "AdminAgent", "Settings",      null, null, "fa-solid fa-robot",    PolicyNames.AdminOnly),
+            new("Agent History", "AdminAgent", "Conversations", null, null, "fa-solid fa-comments", PolicyNames.AdminOnly),
+        }),
         new("People data", new AdminNavItem[]
         {
             new("Merge requests",        "AdminMerge", "Index",            null, null, "fa-solid fa-code-merge", PolicyNames.AdminOnly),
@@ -54,13 +59,14 @@ public static class AdminNavTree
         }),
         new("Diagnostics", new AdminNavItem[]
         {
-            new("Logs",          "Admin", "Logs",          null, null, "fa-solid fa-triangle-exclamation", PolicyNames.AdminOnly),
-            new("DB stats",      "Admin", "DbStats",       null, null, "fa-solid fa-database",            PolicyNames.AdminOnly),
-            new("Cache stats",   "Admin", "CacheStats",    null, null, "fa-solid fa-bolt",                PolicyNames.AdminOnly),
-            new("Configuration", "Admin", "Configuration", null, null, "fa-solid fa-gear",                PolicyNames.AdminOnly),
-            new("Maintenance",   "Admin", "Maintenance",   null, null, "fa-solid fa-screwdriver-wrench",  PolicyNames.AdminOnly),
-            new("Hangfire",      null, null, null, "/hangfire",      "fa-solid fa-clock-rotate-left", PolicyNames.AdminOnly),
-            new("Health",        null, null, null, "/health/ready",  "fa-solid fa-heart-pulse",       PolicyNames.AdminOnly),
+            new("Logs",            "Admin", "Logs",          null, null, "fa-solid fa-triangle-exclamation", PolicyNames.AdminOnly),
+            new("DB stats",        "Admin", "DbStats",       null, null, "fa-solid fa-database",            PolicyNames.AdminOnly),
+            new("Cache stats",     "Admin", "CacheStats",    null, null, "fa-solid fa-bolt",                PolicyNames.AdminOnly),
+            new("Configuration",   "Admin", "Configuration", null, null, "fa-solid fa-gear",                PolicyNames.AdminOnly),
+            new("Maintenance",     "Admin", "Maintenance",   null, null, "fa-solid fa-screwdriver-wrench",  PolicyNames.AdminOnly),
+            new("Orphan signups",  "Shifts", "OrphanSignups", null, null, "fa-solid fa-user-secret",        PolicyNames.AdminOnly),
+            new("Hangfire",        null, null, null, "/hangfire",      "fa-solid fa-clock-rotate-left", PolicyNames.AdminOnly),
+            new("Health",          null, null, null, "/health/ready",  "fa-solid fa-heart-pulse",       PolicyNames.AdminOnly),
         }),
         new("Dev", new AdminNavItem[]
         {

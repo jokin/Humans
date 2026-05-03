@@ -78,15 +78,6 @@ public sealed class UserRepository : IUserRepository
             .ToListAsync(ct);
     }
 
-    public async Task<IReadOnlyList<Guid>> GetAllUserIdsAsync(CancellationToken ct = default)
-    {
-        await using var ctx = await _factory.CreateDbContextAsync(ct);
-        return await ctx.Users
-            .AsNoTracking()
-            .Select(u => u.Id)
-            .ToListAsync(ct);
-    }
-
     public async Task<IReadOnlyList<(string Language, int Count)>>
         GetLanguageDistributionForUserIdsAsync(
             IReadOnlyCollection<Guid> userIds, CancellationToken ct = default)
@@ -325,12 +316,18 @@ public sealed class UserRepository : IUserRepository
         return true;
     }
 
-    public async Task<bool> AnonymizeForMergeAsync(Guid userId, CancellationToken ct = default)
+    public async Task<bool> AnonymizeForMergeAsync(
+        Guid sourceUserId, Guid targetUserId, Instant now,
+        CancellationToken ct = default)
     {
         await using var ctx = await _factory.CreateDbContextAsync(ct);
-        var user = await ctx.Users.FindAsync([userId], ct);
+        var user = await ctx.Users.FindAsync([sourceUserId], ct);
         if (user is null)
             return false;
+
+        // Tombstone fields — point this row at its target, stamp the time.
+        user.MergedToUserId = targetUserId;
+        user.MergedAt = now;
 
         user.DisplayName = "Merged User";
         user.ProfilePictureUrl = null;
@@ -355,6 +352,17 @@ public sealed class UserRepository : IUserRepository
         return true;
     }
 
+    public async Task<IReadOnlyList<Guid>> GetMergedSourceIdsAsync(
+        Guid targetUserId, CancellationToken ct = default)
+    {
+        await using var ctx = await _factory.CreateDbContextAsync(ct);
+        return await ctx.Users
+            .AsNoTracking()
+            .Where(u => u.MergedToUserId == targetUserId)
+            .Select(u => u.Id)
+            .ToListAsync(ct);
+    }
+
     public async Task<bool> SetContactSourceIfNullAsync(
         Guid userId, ContactSource source, CancellationToken ct = default)
     {
@@ -368,21 +376,7 @@ public sealed class UserRepository : IUserRepository
         return true;
     }
 
-    public async Task RemoveExternalLoginsAsync(Guid userId, CancellationToken ct = default)
-    {
-        await using var ctx = await _factory.CreateDbContextAsync(ct);
-        var logins = await ctx.Set<IdentityUserLogin<Guid>>()
-            .Where(l => l.UserId == userId)
-            .ToListAsync(ct);
-
-        if (logins.Count == 0)
-            return;
-
-        ctx.Set<IdentityUserLogin<Guid>>().RemoveRange(logins);
-        await ctx.SaveChangesAsync(ct);
-    }
-
-    public async Task MigrateExternalLoginsAsync(
+    public async Task<int> ReassignLoginsToUserAsync(
         Guid sourceUserId, Guid targetUserId, CancellationToken ct = default)
     {
         await using var ctx = await _factory.CreateDbContextAsync(ct);
@@ -391,33 +385,99 @@ public sealed class UserRepository : IUserRepository
             .Where(l => l.UserId == sourceUserId)
             .ToListAsync(ct);
 
-        if (sourceLogins.Count == 0)
-            return;
-
-        var targetProviders = await ctx.Set<IdentityUserLogin<Guid>>()
-            .Where(l => l.UserId == targetUserId)
-            .Select(l => l.LoginProvider)
-            .ToListAsync(ct);
-        var targetProviderSet = targetProviders.ToHashSet(StringComparer.Ordinal);
-
+        // No dedup needed: IdentityUserLogin<Guid>'s PK is
+        // (LoginProvider, ProviderKey), so two users cannot already share a
+        // row at the DB level. We re-FK every source row onto target.
+        //
+        // Two-pass Remove+Add is required because EF's identity map keys on
+        // the composite PK — Remove(source) and Add(target) with the same
+        // (LoginProvider, ProviderKey) in the same DbContext otherwise
+        // throws "another instance with the same key value is already being
+        // tracked". The intermediate SaveChanges flushes the deletes first.
         foreach (var login in sourceLogins)
         {
             ctx.Set<IdentityUserLogin<Guid>>().Remove(login);
+        }
 
-            if (!targetProviderSet.Contains(login.LoginProvider))
+        if (sourceLogins.Count > 0)
+        {
+            await ctx.SaveChangesAsync(ct);
+        }
+
+        foreach (var login in sourceLogins)
+        {
+            ctx.Set<IdentityUserLogin<Guid>>().Add(new IdentityUserLogin<Guid>
             {
-                ctx.Set<IdentityUserLogin<Guid>>().Add(new IdentityUserLogin<Guid>
-                {
-                    LoginProvider = login.LoginProvider,
-                    ProviderKey = login.ProviderKey,
-                    ProviderDisplayName = login.ProviderDisplayName,
-                    UserId = targetUserId
-                });
+                LoginProvider = login.LoginProvider,
+                ProviderKey = login.ProviderKey,
+                ProviderDisplayName = login.ProviderDisplayName,
+                UserId = targetUserId
+            });
+        }
+
+        if (sourceLogins.Count > 0)
+        {
+            await ctx.SaveChangesAsync(ct);
+        }
+
+        return await ctx.Set<IdentityUserLogin<Guid>>()
+            .CountAsync(l => l.UserId == targetUserId, ct);
+    }
+
+    public async Task<int> ReassignEventParticipationToUserAsync(
+        Guid sourceUserId, Guid targetUserId, CancellationToken ct = default)
+    {
+        await using var ctx = await _factory.CreateDbContextAsync(ct);
+
+        // Load both sides' rows in a single round-trip; resolve collisions
+        // (Year, UserId) by keeping the highest-precedence ParticipationStatus.
+        var rows = await ctx.EventParticipations
+            .Where(ep => ep.UserId == sourceUserId || ep.UserId == targetUserId)
+            .ToListAsync(ct);
+
+        var byYear = rows.GroupBy(ep => ep.Year);
+
+        foreach (var group in byYear)
+        {
+            var sourceRow = group.FirstOrDefault(ep => ep.UserId == sourceUserId);
+            if (sourceRow is null)
+                continue;
+
+            var targetRow = group.FirstOrDefault(ep => ep.UserId == targetUserId);
+            if (targetRow is null)
+            {
+                // No collision — re-FK the source row onto target.
+                sourceRow.UserId = targetUserId;
+                continue;
             }
+
+            // Collision — keep highest precedence status; drop the loser.
+            if (StatusPrecedence(sourceRow.Status) > StatusPrecedence(targetRow.Status))
+            {
+                // Source wins: copy its status/source/declaredAt onto target,
+                // then drop the source row.
+                targetRow.Status = sourceRow.Status;
+                targetRow.Source = sourceRow.Source;
+                targetRow.DeclaredAt = sourceRow.DeclaredAt;
+            }
+            // Target wins (or tie): keep target as-is.
+            ctx.EventParticipations.Remove(sourceRow);
         }
 
         await ctx.SaveChangesAsync(ct);
+
+        return await ctx.EventParticipations
+            .CountAsync(ep => ep.UserId == targetUserId, ct);
     }
+
+    private static int StatusPrecedence(ParticipationStatus status) => status switch
+    {
+        ParticipationStatus.Attended => 4,
+        ParticipationStatus.Ticketed => 3,
+        ParticipationStatus.NoShow => 2,
+        ParticipationStatus.NotAttending => 1,
+        _ => 0
+    };
 
     public async Task<string?> PurgeAsync(Guid userId, CancellationToken ct = default)
     {
@@ -441,12 +501,6 @@ public sealed class UserRepository : IUserRepository
 
         await ctx.SaveChangesAsync(ct);
         return displayName;
-    }
-
-    public async Task<int> GetPendingDeletionCountAsync(CancellationToken ct = default)
-    {
-        await using var ctx = await _factory.CreateDbContextAsync(ct);
-        return await ctx.Users.CountAsync(u => u.DeletionRequestedAt != null, ct);
     }
 
     public async Task SetLastConsentReminderSentAsync(
@@ -669,42 +723,4 @@ public sealed class UserRepository : IUserRepository
         return count;
     }
 
-    public async Task<IReadOnlyList<(Guid UserId, string DisplayName, string GoogleEmail)>>
-        BackfillNobodiesTeamGoogleEmailsAsync(CancellationToken ct = default)
-    {
-        await using var ctx = await _factory.CreateDbContextAsync(ct);
-
-        var usersToFix = await ctx.Users
-            .Where(u => EF.Property<string?>(u, "GoogleEmail") == null
-                && ctx.UserEmails.Any(ue =>
-                    ue.UserId == u.Id
-                    && ue.IsVerified
-                    && EF.Functions.ILike(ue.Email, "%@nobodies.team")))
-            .ToListAsync(ct);
-
-        var result = new List<(Guid UserId, string DisplayName, string GoogleEmail)>(usersToFix.Count);
-
-        foreach (var user in usersToFix)
-        {
-            var nobodiesEmail = await ctx.UserEmails
-                .Where(ue => ue.UserId == user.Id
-                    && ue.IsVerified
-                    && EF.Functions.ILike(ue.Email, "%@nobodies.team"))
-                .Select(ue => ue.Email)
-                .FirstOrDefaultAsync(ct);
-
-            if (nobodiesEmail is not null)
-            {
-                ctx.Entry(user).Property<string?>("GoogleEmail").CurrentValue = nobodiesEmail;
-                result.Add((user.Id, user.DisplayName, nobodiesEmail));
-            }
-        }
-
-        if (result.Count > 0)
-        {
-            await ctx.SaveChangesAsync(ct);
-        }
-
-        return result;
-    }
 }

@@ -1,4 +1,5 @@
 using Humans.Application.Interfaces.Teams;
+using Humans.Application.Services.Shifts;
 using Humans.Domain.Entities;
 using Humans.Domain.Enums;
 using Humans.Infrastructure.Data;
@@ -233,7 +234,11 @@ public sealed class DevelopmentDashboardSeeder
                     Id = Guid.NewGuid(),
                     RotaId = rota.Id,
                     DayOffset = dayOffset,
-                    StartTime = isAllDay ? new LocalTime(0, 0) : new LocalTime(_rng.Next(8, 20), 0),
+                    // All-day rows: StartTime/Duration are don't-care; GetAbsoluteStart/End
+                    // compute bounds from Shift.AllDayWindowStart/End. Store midnight/24h sentinel.
+                    StartTime = isAllDay
+                        ? LocalTime.Midnight
+                        : new LocalTime(_rng.Next(8, 20), 0),
                     Duration = isAllDay
                         ? Duration.FromHours(24)
                         : Duration.FromHours(_rng.Next(2, 9)),

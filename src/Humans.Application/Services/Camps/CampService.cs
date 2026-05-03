@@ -43,7 +43,7 @@ namespace Humans.Application.Services.Camps;
 /// are request-acceleration caches, not canonical domain caches, so §15
 /// transparent-cache rules do not apply (see design-rules §15f).
 /// </remarks>
-public sealed class CampService : ICampService, IUserDataContributor
+public sealed class CampService : ICampService, IUserDataContributor, IUserMerge
 {
     private readonly ICampRepository _repo;
     private readonly ICampRoleRepository _roleRepo;
@@ -177,9 +177,6 @@ public sealed class CampService : ICampService, IUserDataContributor
 
     public Task<Camp?> GetCampBySlugAsync(string slug, CancellationToken cancellationToken = default) =>
         _repo.GetBySlugAsync(slug, cancellationToken);
-
-    public Task<Camp?> GetCampByIdAsync(Guid campId, CancellationToken cancellationToken = default) =>
-        _repo.GetByIdAsync(campId, cancellationToken);
 
     public async Task<CampDetailData?> GetCampDetailAsync(
         string slug,
@@ -1770,6 +1767,31 @@ public sealed class CampService : ICampService, IUserDataContributor
                 m.RequestedAt,
                 m.ConfirmedAt))
             .ToList();
+    }
+
+    // ==========================================================================
+    // Account-merge fold
+    // ==========================================================================
+
+    public async Task ReassignAsync(Guid sourceUserId, Guid targetUserId, Guid actorUserId, Instant updatedAt,
+        CancellationToken ct)
+    {
+        // Two repo calls because section ownership splits the tables:
+        // CampRepository owns camp_leads, CampRoleRepository owns
+        // camp_role_assignments. Each repo runs a single SaveChanges; the
+        // caller (AccountMergeService.AcceptAsync) wraps both inside its
+        // ambient TransactionScope so the two saves are atomic.
+        await _repo.ReassignLeadsToUserAsync(sourceUserId, targetUserId, updatedAt, ct);
+        await _roleRepo.ReassignAssignmentsToUserAsync(sourceUserId, targetUserId, updatedAt, ct);
+
+        // Active CampLead moves change Barrio Leads system-team membership
+        // for both source and target, and the per-lead pending-membership
+        // nav badge depends on lead-camp ownership; refresh both for each
+        // user. Plain CampRoleAssignment moves don't touch either cache.
+        await _systemTeamSync.SyncBarrioLeadsMembershipForUserAsync(sourceUserId, ct);
+        await _systemTeamSync.SyncBarrioLeadsMembershipForUserAsync(targetUserId, ct);
+        _leadBadgeInvalidator.Invalidate(sourceUserId);
+        _leadBadgeInvalidator.Invalidate(targetUserId);
     }
 
     // ==========================================================================

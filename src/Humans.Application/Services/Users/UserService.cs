@@ -34,7 +34,7 @@ namespace Humans.Application.Services.Users;
 /// <c>feedback_user_profile_foundational</c> memory.
 /// </para>
 /// </remarks>
-public sealed class UserService : IUserService, IUserDataContributor
+public sealed class UserService : IUserService, IUserDataContributor, IUserMerge
 {
     private readonly IUserRepository _repo;
     private readonly IFullProfileInvalidator _fullProfileInvalidator;
@@ -74,9 +74,6 @@ public sealed class UserService : IUserService, IUserDataContributor
 
     public Task<IReadOnlyList<User>> GetAllUsersAsync(CancellationToken ct = default) =>
         _repo.GetAllAsync(ct);
-
-    public Task<IReadOnlyList<Guid>> GetAllUserIdsAsync(CancellationToken ct = default) =>
-        _repo.GetAllUserIdsAsync(ct);
 
     public Task<IReadOnlyList<(string Language, int Count)>>
         GetLanguageDistributionForUserIdsAsync(
@@ -130,9 +127,6 @@ public sealed class UserService : IUserService, IUserDataContributor
         string email, Guid excludeUserId, CancellationToken ct = default) =>
         _repo.GetOtherUserIdHavingGoogleEmailAsync(email, excludeUserId, ct);
 
-    public Task<int> GetPendingDeletionCountAsync(CancellationToken ct = default) =>
-        _repo.GetPendingDeletionCountAsync(ct);
-
     public Task<int> GetRejectedGoogleEmailCountAsync(CancellationToken ct = default) =>
         _repo.GetRejectedGoogleEmailCountAsync(ct);
 
@@ -160,15 +154,6 @@ public sealed class UserService : IUserService, IUserDataContributor
         return set;
     }
 
-    public async Task<bool> SetGoogleEmailStatusAsync(
-        Guid userId, GoogleEmailStatus status, CancellationToken ct = default)
-    {
-        var set = await _repo.SetGoogleEmailStatusAsync(userId, status, ct);
-        if (set)
-            await _fullProfileInvalidator.InvalidateAsync(userId, ct);
-        return set;
-    }
-
     public async Task<bool> TrySetGoogleEmailStatusFromSyncAsync(
         Guid userId, GoogleEmailStatus status, CancellationToken ct = default)
     {
@@ -179,7 +164,23 @@ public sealed class UserService : IUserService, IUserDataContributor
                 return false;
         }
 
-        return await SetGoogleEmailStatusAsync(userId, status, ct);
+        return await SetGoogleEmailStatusInternalAsync(userId, status, ct);
+    }
+
+    /// <summary>
+    /// Private write helper for <see cref="User.GoogleEmailStatus"/>. Used
+    /// by <see cref="TrySetGoogleEmailStatusFromSyncAsync"/> after the
+    /// "Rejected is terminal" guard runs. Public surface was collapsed in
+    /// the account-merge fold redesign — every external caller is sync-driven
+    /// and goes through the Try variant.
+    /// </summary>
+    private async Task<bool> SetGoogleEmailStatusInternalAsync(
+        Guid userId, GoogleEmailStatus status, CancellationToken ct = default)
+    {
+        var set = await _repo.SetGoogleEmailStatusAsync(userId, status, ct);
+        if (set)
+            await _fullProfileInvalidator.InvalidateAsync(userId, ct);
+        return set;
     }
 
     public async Task<(bool Updated, string? OldEmail)> ApplyEmailBackfillAsync(
@@ -343,7 +344,33 @@ public sealed class UserService : IUserService, IUserDataContributor
         return null;
     }
 
-    public Task<IReadOnlyList<(Guid UserId, string DisplayName, string GoogleEmail)>>
-        BackfillNobodiesTeamGoogleEmailsAsync(CancellationToken ct = default) =>
-        _repo.BackfillNobodiesTeamGoogleEmailsAsync(ct);
+    // ==========================================================================
+    // Account merge — fold-into-target primitives
+    // ==========================================================================
+
+    public async Task<bool> AnonymizeForMergeAsync(
+        Guid sourceUserId, Guid targetUserId, Instant now,
+        CancellationToken ct = default)
+    {
+        return await _repo.AnonymizeForMergeAsync(sourceUserId, targetUserId, now, ct);
+    }
+
+    public async Task ReassignAsync(Guid mergedFromUserId, Guid mergedToUserId, Guid actorUserId, Instant now,
+        CancellationToken ct)
+    {
+        // Neither AspNetUserLogins nor EventParticipation carries an
+        // UpdatedAt column or an actor field, so `now` and `actorUserId`
+        // are unused here — kept for the IUserMerge contract.
+        _ = actorUserId;
+        _ = now;
+        await _repo.ReassignLoginsToUserAsync(mergedFromUserId, mergedToUserId, ct);
+        await _repo.ReassignEventParticipationToUserAsync(mergedFromUserId, mergedToUserId, ct);
+    }
+
+    public async Task<IReadOnlySet<Guid>> GetMergedSourceIdsAsync(
+        Guid targetUserId, CancellationToken ct = default)
+    {
+        var ids = await _repo.GetMergedSourceIdsAsync(targetUserId, ct);
+        return ids.ToHashSet();
+    }
 }

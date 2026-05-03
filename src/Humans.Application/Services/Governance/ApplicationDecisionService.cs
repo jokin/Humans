@@ -34,7 +34,7 @@ namespace Humans.Application.Services.Governance;
 /// badge cache invalidations are called inline after successful writes —
 /// Governance is low-traffic enough that a caching decorator isn't warranted.
 /// </summary>
-public sealed class ApplicationDecisionService : IApplicationDecisionService, IUserDataContributor
+public sealed class ApplicationDecisionService : IApplicationDecisionService, IUserDataContributor, IUserMerge
 {
     private readonly IApplicationRepository _repository;
     private readonly IUserService _userService;
@@ -701,6 +701,10 @@ public sealed class ApplicationDecisionService : IApplicationDecisionService, IU
     public Task<IReadOnlyDictionary<Guid, MembershipTier>> GetOtherActiveTierAssignmentsAsync(
         MembershipTier excludeTier, LocalDate today, CancellationToken ct = default) =>
         _repository.GetOtherActiveTierAssignmentsAsync(excludeTier, today, ct);
+
+    public Task ReassignAsync(Guid sourceUserId, Guid targetUserId, Guid actorUserId, Instant updatedAt,
+        CancellationToken ct) =>
+        _repository.ReassignApplicationsToUserAsync(sourceUserId, targetUserId, updatedAt, ct);
 
     public async Task UpdateDraftApplicationAsync(
         Guid applicationId, MembershipTier tier, string motivation,

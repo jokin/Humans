@@ -131,9 +131,23 @@ CampaignGrant (Campaigns)
 ## Cross-cutting serialization rules
 
 - All entities use `System.Text.Json` serialization.
-- All dates and times use NodaTime (`Instant`, `LocalDate`, `LocalDateTime`, `OffsetDateTime`) — never `DateTime` or `DateTimeOffset`. See [`coding-rules.md`](coding-rules.md).
+- All dates and times use NodaTime (`Instant`, `LocalDate`, `LocalDateTime`, `OffsetDateTime`) — never `DateTime` or `DateTimeOffset`. See [`memory/code/nodatime-for-dates.md`](../../memory/code/nodatime-for-dates.md).
 - Enums are stored as strings via `HasConversion<string>()` unless otherwise noted on the owning section's doc.
-- Entity serialization rules: see [`coding-rules.md`](coding-rules.md) — in particular: never rename serialized fields; never remove "unused" properties (reflection); always include the full set of required fields at serialization time.
+- Entity serialization rules — never rename serialized fields ([`memory/code/no-rename-serialized-fields.md`](../../memory/code/no-rename-serialized-fields.md)); never remove "unused" properties because they may be reflection-bound ([`memory/code/no-remove-unused-properties.md`](../../memory/code/no-remove-unused-properties.md)); private setters need `[JsonInclude]` and polymorphic types need `[JsonPolymorphic]` + `[JsonDerivedType]` ([`memory/code/json-serialization.md`](../../memory/code/json-serialization.md)).
+
+## Account merge fold + chain-follow reads
+
+Account merges are folded into the target via `IAccountMergeService.AcceptAsync` (Profiles section). The orchestrator re-FKs every owning section's user-scoped rows from source to target via per-section `Reassign…ToUserAsync` methods, then tombstones the source `User` row by setting `User.MergedToUserId` + `User.MergedAt` (`IUserService.AnonymizeForMergeAsync`). The source row is NOT deleted — it stays as a redirect. The self-referential `User.MergedToUserId` FK is `OnDelete(Restrict)` so deleting a target cannot cascade-delete its source tombstones.
+
+Append-only sections (§12) cannot rewrite their `UserId` / `ActorUserId` columns to point at the target — the rows stay at source by design (DB triggers, repository shape, or both). Per-user reads on append-only entities therefore **chain-follow** merge tombstones: callers union the result of `IUserService.GetMergedSourceIdsAsync(targetUserId)` with the target id before querying. Sections that implement chain-follow:
+
+| Section | Owning entity | Read paths that chain-follow |
+|---------|---------------|------------------------------|
+| [Audit Log](../sections/AuditLog.md) | `AuditLogEntry` | `GetByUserAsync`, `GetUserAuditLogPageAsync`, per-entity history when entity is User, `ContributeForUserAsync` |
+| [Legal & Consent](../sections/LegalAndConsent.md) | `ConsentRecord` | `GetUserConsentsAsync`, `HasAllRequiredConsentsAsync`, consent dashboard, `ContributeForUserAsync` |
+| [Budget](../sections/Budget.md) | `BudgetAuditLog` | `ContributeForUserAsync` (GDPR) |
+
+When adding a new append-only entity that carries a `UserId` / `ActorUserId` column, decide at design time whether per-user reads need chain-follow and add the union explicitly — `IUserService.GetMergedSourceIdsAsync` is the only sanctioned primitive.
 
 ## Append-only entities (§12)
 

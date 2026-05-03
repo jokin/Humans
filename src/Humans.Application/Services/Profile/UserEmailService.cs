@@ -19,7 +19,7 @@ namespace Humans.Application.Services.Profile;
 /// no direct DbContext usage. Cross-section reads (AccountMergeRequests,
 /// Users) are routed through their owning service interfaces.
 /// </summary>
-public sealed class UserEmailService : IUserEmailService
+public sealed class UserEmailService : IUserEmailService, IUserMerge
 {
     private readonly IUserEmailRepository _repository;
     private readonly IUserService _userService;
@@ -321,6 +321,18 @@ public sealed class UserEmailService : IUserEmailService
     public Task RemoveAllEmailsAsync(
         Guid userId, CancellationToken cancellationToken = default) =>
         _repository.RemoveAllForUserAsync(userId, cancellationToken);
+
+    /// <inheritdoc />
+    public async Task ReassignAsync(Guid mergedFromUserId, Guid mergedToUserId, Guid actorUserId, Instant now,
+        CancellationToken ct)
+    {
+        // Cache invalidation is the caller's responsibility — must run AFTER
+        // the ambient TransactionScope completes so a rolled-back fold
+        // doesn't repopulate caches from now-uncommitted state.
+        // See AccountMergeService.AcceptAsync post-commit block.
+        await _repository.ReassignToUserAsync(
+            mergedFromUserId, mergedToUserId, now, ct);
+    }
 
     public async Task AddVerifiedEmailAsync(
         Guid userId, string email, CancellationToken cancellationToken = default)

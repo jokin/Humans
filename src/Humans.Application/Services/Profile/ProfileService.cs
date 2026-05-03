@@ -26,7 +26,7 @@ namespace Humans.Application.Services.Profile;
 /// Cache management is handled by the <c>CachingProfileService</c> decorator.
 /// Cross-domain reads use owning-section service interfaces.
 /// </summary>
-public sealed class ProfileService : IProfileService, IUserDataContributor
+public sealed class ProfileService : IProfileService, IUserDataContributor, IUserMerge
 {
     private readonly IProfileRepository _profileRepository;
     private readonly IUserService _userService;
@@ -188,12 +188,6 @@ public sealed class ProfileService : IProfileService, IUserDataContributor
         var latestApplication = applications.Count > 0 ? applications[0] : null;
 
         return (profile, latestApplication, snapshot.PendingConsentCount);
-    }
-
-    public async Task<IReadOnlyList<CampaignGrant>> GetActiveOrCompletedCampaignGrantsAsync(
-        Guid userId, CancellationToken ct = default)
-    {
-        return await _campaignService.GetActiveOrCompletedGrantsForUserAsync(userId, ct);
     }
 
     public async Task<(Domain.Entities.Profile? Profile, bool IsTierLocked, MemberApplication? PendingApplication)>
@@ -866,8 +860,8 @@ public sealed class ProfileService : IProfileService, IUserDataContributor
         {
             e.Email,
             e.IsVerified,
-            // JSON keys stay "IsOAuth" and "IsNotificationTarget" per coding-rules.md
-            // "Never Rename Fields in Serialized Objects" — the GDPR export is a JSON
+            // JSON keys stay "IsOAuth" and "IsNotificationTarget" per
+            // memory/code/no-rename-serialized-fields.md — the GDPR export is a JSON
             // file users download. IsOAuth sources from (Provider != null) — the
             // pre-PR-4 semantics meaning "this row has an OAuth login attached".
             // The PR 4 spec's Task 17 swapped both the JSON key (rename) and the
@@ -1171,6 +1165,13 @@ public sealed class ProfileService : IProfileService, IUserDataContributor
             CancellationToken ct = default) =>
         _profileRepository.DowngradeTierForExpiredAsync(
             currentTier, userIdsToKeep, fallbackTierByUser, now, ct);
+
+    // Cache invalidation (FullProfile refresh for both source and target) is
+    // handled by the CachingProfileService decorator's wrapper for this
+    // method — ProfileService is the inner / non-cached implementation.
+    public Task ReassignAsync(Guid sourceUserId, Guid targetUserId, Guid actorUserId, Instant updatedAt,
+        CancellationToken ct) =>
+        _profileRepository.ReassignSubAggregatesToUserAsync(sourceUserId, targetUserId, updatedAt, ct);
 
     // ==========================================================================
     // Helpers

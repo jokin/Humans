@@ -41,6 +41,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddCalendarSection();
         services.AddTicketsSection();
         services.AddFeedbackSection();
+        services.AddIssuesSection();
         services.AddNotificationsSection();
         services.AddLegalAndConsentSection();
         services.AddCampaignsSection();
@@ -48,6 +49,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddGdprSection();
         services.AddAdminSection();
         services.AddGuideSection(configuration);
+        services.AddAgentSection(configuration);
 
         return services;
     }

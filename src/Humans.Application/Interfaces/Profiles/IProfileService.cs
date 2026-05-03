@@ -1,6 +1,6 @@
 using Humans.Application.DTOs;
-using Humans.Application.Interfaces;
 using Humans.Application.Interfaces.Onboarding;
+using Humans.Application.Interfaces.Users;
 using Humans.Domain.Entities;
 using Humans.Domain.Enums;
 using NodaTime;
@@ -8,7 +8,7 @@ using MemberApplication = Humans.Domain.Entities.Application;
 
 namespace Humans.Application.Interfaces.Profiles;
 
-public interface IProfileService
+public interface IProfileService : IUserMerge
 {
     Task<Profile?> GetProfileAsync(Guid userId, CancellationToken ct = default);
 
@@ -112,9 +112,6 @@ public interface IProfileService
 
     Task<IReadOnlyList<(Guid ProfileId, Guid UserId, long UpdatedAtTicks)>>
         GetCustomPictureInfoByUserIdsAsync(IEnumerable<Guid> userIds, CancellationToken ct = default);
-
-    Task<IReadOnlyList<CampaignGrant>> GetActiveOrCompletedCampaignGrantsAsync(
-        Guid userId, CancellationToken ct = default);
 
     Task<IReadOnlyList<BirthdayProfileInfo>>
         GetBirthdayProfilesAsync(int month, CancellationToken ct = default);

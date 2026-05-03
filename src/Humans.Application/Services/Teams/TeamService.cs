@@ -56,7 +56,7 @@ namespace Humans.Application.Services.Teams;
 /// §15 Profile migration established.
 /// </para>
 /// </summary>
-public sealed class TeamService : ITeamService, IUserDataContributor
+public sealed class TeamService : ITeamService, IUserDataContributor, IUserMerge
 {
     private readonly ITeamRepository _repo;
     private readonly IAuditLogService _auditLogService;
@@ -219,9 +219,6 @@ public sealed class TeamService : ITeamService, IUserDataContributor
     public Task<IReadOnlyList<Team>> GetAllTeamsAsync(CancellationToken cancellationToken = default) =>
         _repo.GetAllActiveAsync(cancellationToken);
 
-    public Task<IReadOnlyList<Team>> GetUserCreatedTeamsAsync(CancellationToken cancellationToken = default) =>
-        _repo.GetAllActiveUserCreatedAsync(cancellationToken);
-
     public Task<IReadOnlyList<TeamOptionDto>> GetActiveTeamOptionsAsync(CancellationToken cancellationToken = default) =>
         _repo.GetActiveOptionsAsync(cancellationToken);
 
@@ -279,7 +276,8 @@ public sealed class TeamService : ITeamService, IUserDataContributor
                 CanCreateTeam: false,
                 MyTeams: [],
                 Departments: publicDepartments,
-                SystemTeams: []);
+                SystemTeams: [],
+                HiddenTeams: []);
         }
 
         var isBoardMember = await RoleAssignmentService.IsUserBoardMemberAsync(userId.Value, cancellationToken);
@@ -305,13 +303,18 @@ public sealed class TeamService : ITeamService, IUserDataContributor
             .ToList();
 
         var departments = summaries
-            .Where(t => !t.IsCurrentUserMember && !t.IsSystemTeam)
+            .Where(t => !t.IsCurrentUserMember && !t.IsSystemTeam && !t.IsHidden)
             .OrderBy(t => t.SortKey, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
         var systemTeams = summaries
-            .Where(t => !t.IsCurrentUserMember && t.IsSystemTeam)
+            .Where(t => !t.IsCurrentUserMember && t.IsSystemTeam && !t.IsHidden)
             .OrderBy(t => t.Name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        var hiddenTeams = summaries
+            .Where(t => !t.IsCurrentUserMember && t.IsHidden)
+            .OrderBy(t => t.SortKey, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
         return new TeamDirectoryResult(
@@ -319,7 +322,8 @@ public sealed class TeamService : ITeamService, IUserDataContributor
             CanCreateTeam: canCreateTeam,
             MyTeams: myTeams,
             Departments: departments,
-            SystemTeams: systemTeams);
+            SystemTeams: systemTeams,
+            HiddenTeams: hiddenTeams);
     }
 
     public async Task<TeamDetailResult?> GetTeamDetailAsync(
@@ -1865,6 +1869,39 @@ public sealed class TeamService : ITeamService, IUserDataContributor
         return count;
     }
 
+    public async Task ReassignAsync(
+        Guid sourceUserId,
+        Guid targetUserId,
+        Guid actorUserId,
+        Instant updatedAt,
+        CancellationToken cancellationToken)
+    {
+        // 1. TeamMember fold. System teams are reconciled by SystemTeamSyncJob;
+        //    skip them here. Compose AddMemberToTeamAsync / RemoveMemberAsync
+        //    so audit log + Google-sync outbox + cache mutations all fire as
+        //    they would for any normal membership change.
+        var sourceMemberships = await GetUserTeamsAsync(sourceUserId, cancellationToken);
+        var targetMemberships = await GetUserTeamsAsync(targetUserId, cancellationToken);
+        var targetTeamIds = targetMemberships.Select(m => m.TeamId).ToHashSet();
+
+        foreach (var membership in sourceMemberships)
+        {
+            if (membership.Team.IsSystemTeam)
+                continue;
+
+            if (!targetTeamIds.Contains(membership.TeamId))
+            {
+                await AddMemberToTeamAsync(membership.TeamId, targetUserId, actorUserId, cancellationToken);
+            }
+
+            await RemoveMemberAsync(membership.TeamId, sourceUserId, actorUserId, cancellationToken);
+        }
+
+        // 2. TeamJoinRequest fold. Re-FK source's rows to target except where
+        //    target already has an active pending request for the same team.
+        await _repo.ReassignActiveJoinRequestsAsync(sourceUserId, targetUserId, cancellationToken);
+    }
+
     // ==========================================================================
     // GDPR export
     // ==========================================================================
@@ -2255,6 +2292,7 @@ public sealed class TeamService : ITeamService, IUserDataContributor
             team.Slug,
             team.Members.Count,
             team.IsSystemTeam,
+            team.IsHidden,
             team.RequiresApproval,
             team.IsPublicPage,
             isCurrentUserMember,

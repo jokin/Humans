@@ -24,7 +24,6 @@ public interface ICampService
 
     // Queries
     Task<Camp?> GetCampBySlugAsync(string slug, CancellationToken cancellationToken = default);
-    Task<Camp?> GetCampByIdAsync(Guid campId, CancellationToken cancellationToken = default);
     Task<CampDetailData?> GetCampDetailAsync(
         string slug,
         int? preferredYear = null,
