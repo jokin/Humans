@@ -723,6 +723,12 @@ public sealed class ProfileService : IProfileService, IUserDataContributor, IUse
         return SearchHumansFromSnapshot(snapshot, query);
     }
 
+    public async Task<IReadOnlyList<HumanSearchResult>> SearchHumansByNameAsync(string query, CancellationToken ct = default)
+    {
+        var snapshot = await BuildFullProfileSnapshotAsync(ct);
+        return SearchHumansByNameFromSnapshot(snapshot, query);
+    }
+
     /// <summary>
     /// Searches all approved, non-suspended profiles from a pre-built <see cref="FullProfile"/>
     /// snapshot for users whose display name or notification email contains <paramref name="query"/>.
@@ -766,6 +772,29 @@ public sealed class ProfileService : IProfileService, IUserDataContributor, IUse
         return results
             .OrderBy(r => r.DisplayName, StringComparer.OrdinalIgnoreCase)
             .Take(50)
+            .ToList();
+    }
+
+    /// <summary>
+    /// Narrowed snapshot search for the typeahead picker — matches DisplayName
+    /// (covers first + last) and BurnerName only. Skips bio / city / interests /
+    /// pronouns / CV so callers like the camp role picker get a tight result list.
+    /// </summary>
+    public static IReadOnlyList<HumanSearchResult> SearchHumansByNameFromSnapshot(
+        IEnumerable<FullProfile> snapshot, string query)
+    {
+        return snapshot
+            .Where(p => p.IsApproved && !p.IsSuspended)
+            .Where(p =>
+                p.DisplayName.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                (p.BurnerName?.Contains(query, StringComparison.OrdinalIgnoreCase) ?? false))
+            .OrderBy(p => p.DisplayName, StringComparer.OrdinalIgnoreCase)
+            .Take(50)
+            .Select(p => new HumanSearchResult(
+                p.UserId, p.DisplayName, p.BurnerName, p.City, p.Bio, p.ContributionInterests,
+                p.ProfilePictureUrl, p.HasCustomPicture, p.ProfileId, p.UpdatedAtTicks,
+                p.DisplayName.Contains(query, StringComparison.OrdinalIgnoreCase) ? "Name" : "Burner Name",
+                null))
             .ToList();
     }
 
@@ -920,61 +949,46 @@ public sealed class ProfileService : IProfileService, IUserDataContributor, IUse
     public Task<int> GetPendingReviewCountAsync(CancellationToken ct = default) =>
         _profileRepository.GetReviewableCountAsync(ct);
 
-    public async Task<OnboardingResult> ClearConsentCheckAsync(
-        Guid userId, Guid reviewerId, string? notes, CancellationToken ct = default)
+    public async Task<OnboardingResult> RecordConsentCheckAsync(
+        Guid userId, Guid reviewerId, ConsentCheckStatus result, string? notes,
+        CancellationToken ct = default)
     {
+        if (result is not ConsentCheckStatus.Cleared and not ConsentCheckStatus.Flagged)
+        {
+            throw new ArgumentException(
+                $"RecordConsentCheckAsync only accepts Cleared or Flagged; use SetConsentCheckPendingAsync for the system-driven Pending transition.",
+                nameof(result));
+        }
+
         var profile = await _profileRepository.GetByUserIdAsync(userId, ct);
         if (profile is null)
             return new OnboardingResult(false, "NotFound");
 
-        if (profile.RejectedAt is not null)
+        var cleared = result == ConsentCheckStatus.Cleared;
+
+        if (cleared && profile.RejectedAt is not null)
             return new OnboardingResult(false, "AlreadyRejected");
 
         var now = _clock.GetCurrentInstant();
 
-        profile.ConsentCheckStatus = ConsentCheckStatus.Cleared;
+        profile.ConsentCheckStatus = result;
         profile.ConsentCheckAt = now;
         profile.ConsentCheckedByUserId = reviewerId;
         profile.ConsentCheckNotes = notes;
-        profile.IsApproved = true;
+        profile.IsApproved = cleared;
         profile.UpdatedAt = now;
 
         await _profileRepository.UpdateAsync(profile, ct);
 
         await _auditLogService.LogAsync(
-            AuditAction.ConsentCheckCleared, nameof(Domain.Entities.Profile), userId,
-            "Consent check cleared",
+            cleared ? AuditAction.ConsentCheckCleared : AuditAction.ConsentCheckFlagged,
+            nameof(Domain.Entities.Profile), userId,
+            cleared ? "Consent check cleared" : $"Consent check flagged: {notes}",
             reviewerId);
 
-        _logger.LogInformation("Consent check cleared for user {UserId} by {ReviewerId}", userId, reviewerId);
-
-        return new OnboardingResult(true);
-    }
-
-    public async Task<OnboardingResult> FlagConsentCheckAsync(
-        Guid userId, Guid reviewerId, string? notes, CancellationToken ct = default)
-    {
-        var profile = await _profileRepository.GetByUserIdAsync(userId, ct);
-        if (profile is null)
-            return new OnboardingResult(false, "NotFound");
-
-        var now = _clock.GetCurrentInstant();
-
-        profile.ConsentCheckStatus = ConsentCheckStatus.Flagged;
-        profile.ConsentCheckAt = now;
-        profile.ConsentCheckedByUserId = reviewerId;
-        profile.ConsentCheckNotes = notes;
-        profile.IsApproved = false;
-        profile.UpdatedAt = now;
-
-        await _profileRepository.UpdateAsync(profile, ct);
-
-        await _auditLogService.LogAsync(
-            AuditAction.ConsentCheckFlagged, nameof(Domain.Entities.Profile), userId,
-            $"Consent check flagged: {notes}",
-            reviewerId);
-
-        _logger.LogInformation("Consent check flagged for user {UserId} by {ReviewerId}", userId, reviewerId);
+        _logger.LogInformation(
+            "Consent check {Status} for user {UserId} by {ReviewerId}",
+            cleared ? "cleared" : "flagged", userId, reviewerId);
 
         return new OnboardingResult(true);
     }
@@ -1033,47 +1047,32 @@ public sealed class ProfileService : IProfileService, IUserDataContributor, IUse
         return new OnboardingResult(true);
     }
 
-    public async Task<OnboardingResult> SuspendAsync(
-        Guid userId, Guid adminId, string? notes, CancellationToken ct = default)
+    public async Task<OnboardingResult> SetSuspendedAsync(
+        Guid userId, Guid adminId, bool suspended, string? notes,
+        CancellationToken ct = default)
     {
         var profile = await _profileRepository.GetByUserIdAsync(userId, ct);
         if (profile is null)
             return new OnboardingResult(false, "NotFound");
 
-        profile.IsSuspended = true;
-        profile.AdminNotes = notes;
+        profile.IsSuspended = suspended;
+        if (suspended)
+            profile.AdminNotes = notes;
         profile.UpdatedAt = _clock.GetCurrentInstant();
 
         await _profileRepository.UpdateAsync(profile, ct);
 
         await _auditLogService.LogAsync(
-            AuditAction.MemberSuspended, nameof(User), userId,
-            $"Suspended{(string.IsNullOrWhiteSpace(notes) ? "" : $": {notes}")}",
+            suspended ? AuditAction.MemberSuspended : AuditAction.MemberUnsuspended,
+            nameof(User), userId,
+            suspended
+                ? $"Suspended{(string.IsNullOrWhiteSpace(notes) ? "" : $": {notes}")}"
+                : "Unsuspended",
             adminId);
 
-        _logger.LogInformation("Admin {AdminId} suspended human {HumanId}", adminId, userId);
-
-        return new OnboardingResult(true);
-    }
-
-    public async Task<OnboardingResult> UnsuspendAsync(
-        Guid userId, Guid adminId, CancellationToken ct = default)
-    {
-        var profile = await _profileRepository.GetByUserIdAsync(userId, ct);
-        if (profile is null)
-            return new OnboardingResult(false, "NotFound");
-
-        profile.IsSuspended = false;
-        profile.UpdatedAt = _clock.GetCurrentInstant();
-
-        await _profileRepository.UpdateAsync(profile, ct);
-
-        await _auditLogService.LogAsync(
-            AuditAction.MemberUnsuspended, nameof(User), userId,
-            "Unsuspended",
-            adminId);
-
-        _logger.LogInformation("Admin {AdminId} unsuspended human {HumanId}", adminId, userId);
+        _logger.LogInformation(
+            "Admin {AdminId} {Verb} human {HumanId}",
+            adminId, suspended ? "suspended" : "unsuspended", userId);
 
         return new OnboardingResult(true);
     }
