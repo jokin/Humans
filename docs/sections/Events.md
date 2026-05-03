@@ -1,6 +1,6 @@
-# Event Guide — Section Invariants
+# Events — Section Invariants
 
-Event programming guide: submission, moderation, browse, export, and preference management for festival events.
+Event programming: submission, moderation, browsing, export, and preference management for festival events.
 
 ## Concepts
 
@@ -136,20 +136,20 @@ Unique constraint on (UserId, GuideEventId).
 
 | Controller | Route prefix | Audience |
 |-----------|--------------|----------|
-| `EventGuideController` | `/EventGuide/` | All active members |
-| `CampEventsController` | `/Camps/{slug}/Events/` | Camp coordinators |
-| `ModerationController` | `/EventGuide/Moderate/` | GuideModerator, Admin |
-| `EventGuideDashboardController` | `/EventGuide/Dashboard/` | GuideModerator, Admin |
-| `EventGuideExportController` | `/EventGuide/Export/` | GuideModerator, Admin |
+| `EventGuideController` | `/Events/` | All active members |
+| `CampEventsController` | `/Barrios/{slug}/Events/` | Barrio coordinators |
+| `ModerationController` | `/Events/Moderate/` | GuideModerator, Admin |
+| `EventGuideDashboardController` | `/Events/Dashboard/` | GuideModerator, Admin |
+| `EventGuideExportController` | `/Events/Export/` | GuideModerator, Admin |
 | `GuideAdminController` | `/Admin/Guide*/` | Admin |
-| `GuideApiController` | `/api/guide/` | Public (CORS) + authenticated same-origin |
+| `GuideApiController` | `/api/events/` | Public (CORS) + authenticated same-origin |
 
 ## Actors & Roles
 
 | Actor | Capabilities |
 |-------|--------------|
 | Any active member | Browse approved events; submit individual events during open window; manage own favourites and category preferences; view own submissions |
-| Camp coordinator (CampAdmin role) | Submit events on behalf of their camp |
+| Barrio coordinator (CampAdmin role) | Submit events on behalf of their barrio |
 | GuideModerator, Admin | All active member capabilities. Additionally: view moderation queue, approve/reject/request-resubmit events, view dashboard, download CSV export, print guide |
 | Admin | All moderator capabilities. Additionally: manage guide settings, event categories, shared venues |
 
@@ -168,9 +168,9 @@ Unique constraint on (UserId, GuideEventId).
 - Non-moderators **cannot** approve, reject, or request edits on any event.
 - Non-admins **cannot** create, edit, or delete event categories or shared venues, or modify guide settings.
 - A submitter **cannot** moderate their own event.
-- The public API (`/api/guide/events`, `/api/guide/camps`, `/api/guide/categories`) **cannot** return unapproved events.
+- The public API (`/api/events/events`, `/api/events/barrios`, `/api/events/categories`) **cannot** return unapproved events.
 - Favourites and preferences endpoints **cannot** be accessed cross-origin (enforced by `[DisableCors]` on all `[Authorize]` API actions).
-- Camp events **cannot** be submitted or withdrawn via the individual `EventGuideController`; those use `CampEventsController`.
+- Barrio events **cannot** be submitted or withdrawn via the individual `EventGuideController`; those use `CampEventsController`.
 
 ## Triggers
 
@@ -180,7 +180,7 @@ Unique constraint on (UserId, GuideEventId).
 ## Cross-Section Dependencies
 
 - **Users**: `UserManager<User>` (Identity) to resolve current user in controllers; `User.GetEffectiveEmail()` for email dispatch; `User.Profile?.BurnerName` for display names.
-- **Camps**: `GuideEvent.CampId` FK; edit URLs for camp events routed through `CampEventsController`.
+- **Barrios**: `GuideEvent.CampId` FK; edit URLs for barrio events routed through `CampEventsController`.
 - **Calendar/EventSettings**: `IEventGuideService` reads `EventSettings` (gate opening date, timezone, event name) via the `GuideSettings.EventSettings` navigation for day-offset computation and timezone conversion.
 - **Email**: `IEmailService` for moderation outcome notifications.
 
