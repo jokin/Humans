@@ -117,7 +117,9 @@ public sealed class GoogleAdminService : IGoogleAdminService
                     LastLoginTime: account.LastLoginTime,
                     MatchedUserId: matched?.UserId,
                     MatchedDisplayName: matchedUser?.DisplayName,
-                    IsUsedAsPrimary: isUsedAsPrimary));
+                    IsUsedAsPrimary: isUsedAsPrimary,
+                    IsEnrolledIn2Sv: account.IsEnrolledIn2Sv,
+                    RecoveryEmail: account.RecoveryEmail));
             }
 
             var sorted = accountInfos
@@ -125,6 +127,9 @@ public sealed class GoogleAdminService : IGoogleAdminService
                 .ToList();
 
             var linkedCount = sorted.Count(a => a.MatchedUserId.HasValue);
+            // Missing-2FA only applies to accounts that can actually be used — suspended
+            // accounts can't sign in at all, so flagging their 2FA gap is noise.
+            var missingTwoFactorCount = sorted.Count(a => !a.IsSuspended && !a.IsEnrolledIn2Sv);
 
             return new WorkspaceAccountListResult(
                 Accounts: sorted,
@@ -133,7 +138,8 @@ public sealed class GoogleAdminService : IGoogleAdminService
                 SuspendedAccounts: sorted.Count(a => a.IsSuspended),
                 LinkedAccounts: linkedCount,
                 UnlinkedAccounts: sorted.Count - linkedCount,
-                NotPrimaryCount: notPrimaryCount);
+                NotPrimaryCount: notPrimaryCount,
+                MissingTwoFactorCount: missingTwoFactorCount);
         }
         catch (Exception ex)
         {
@@ -146,6 +152,7 @@ public sealed class GoogleAdminService : IGoogleAdminService
                 LinkedAccounts: 0,
                 UnlinkedAccounts: 0,
                 NotPrimaryCount: 0,
+                MissingTwoFactorCount: 0,
                 ErrorMessage: "Failed to load @nobodies.team accounts. Check the logs for details.");
         }
     }
@@ -313,6 +320,107 @@ public sealed class GoogleAdminService : IGoogleAdminService
             return new WorkspaceAccountActionResult(false,
                 ErrorMessage: $"Failed to reset password for {email}.");
         }
+    }
+
+    private async Task<WorkspaceBackupCodesResult> GenerateBackupCodesAsync(
+        string email, Guid actorUserId,
+        CancellationToken ct = default)
+    {
+        IReadOnlyList<string> codes;
+        try
+        {
+            codes = await _workspaceUserService.GenerateBackupCodesAsync(email, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to generate backup codes for: {Email}", email);
+            return new WorkspaceBackupCodesResult(
+                Success: false,
+                Email: email,
+                ErrorMessage: $"Failed to generate backup codes for {email}. Check logs for details.");
+        }
+
+        if (codes.Count == 0)
+        {
+            // Generate succeeded but List returned 0 — API hiccup or race.
+            // No codes to deliver and nothing to audit; surface a clear failure
+            // instead of recording "Generated 0 backup codes" in the audit log.
+            _logger.LogWarning(
+                "Backup-code generation for {Email} returned 0 codes; nothing to deliver",
+                email);
+            return new WorkspaceBackupCodesResult(
+                Success: false,
+                Email: email,
+                ErrorMessage: $"Backup codes were generated for {email} but none were returned. Check logs and try again.");
+        }
+
+        // Audit AFTER the Workspace-side rotation succeeds. If audit persistence
+        // throws we must still hand the codes back: Google has already
+        // invalidated any previously-issued set, so dropping the new ones
+        // locks the human out. Surface the audit failure loudly via a critical
+        // log so it can be reconciled out-of-band.
+        try
+        {
+            await _auditLogService.LogAsync(
+                AuditAction.WorkspaceAccountBackupCodesGenerated,
+                "WorkspaceAccount", Guid.Empty,
+                $"Generated {codes.Count} backup code(s) for @{NobodiesTeamDomain} account: {email}",
+                actorUserId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogCritical(ex,
+                "Audit-log write failed AFTER backup codes were generated for {Email} by actor {ActorUserId}. Codes were delivered; reconcile audit trail manually.",
+                email, actorUserId);
+        }
+
+        return new WorkspaceBackupCodesResult(
+            Success: true,
+            Email: email,
+            Codes: codes,
+            Message: $"Generated {codes.Count} backup code(s) for {email}. Deliver them securely — they cannot be retrieved again.");
+    }
+
+    public async Task<WorkspaceRecoveryCredentialsResult> ResetPasswordAndGenerate2FaAsync(
+        string email, Guid actorUserId,
+        CancellationToken ct = default)
+    {
+        // Step 1: reset the password. Audit + return on failure — there's
+        // no point grabbing a backup code if the human can't sign in anyway.
+        var resetResult = await ResetPasswordAsync(email, actorUserId, ct);
+        if (!resetResult.Success || resetResult.TemporaryPassword is null)
+        {
+            return new WorkspaceRecoveryCredentialsResult(
+                Success: false,
+                Email: email,
+                ErrorMessage: resetResult.ErrorMessage
+                    ?? $"Failed to reset password for {email}. Check logs for details.");
+        }
+
+        // Step 2: grab a backup code. If this fails, the password is still
+        // valid — return Success with just the password and an explanatory
+        // message so the admin can deliver what we have. (Google rotates
+        // codes destructively, so a partial success is better than re-asking
+        // the admin to start over.)
+        var codesResult = await GenerateBackupCodesAsync(email, actorUserId, ct);
+        if (!codesResult.Success || codesResult.Codes is not { Count: > 0 })
+        {
+            return new WorkspaceRecoveryCredentialsResult(
+                Success: true,
+                Email: email,
+                TempPassword: resetResult.TemporaryPassword,
+                BackupCode: null,
+                Message: $"Password reset for {email}. Backup-code generation failed — "
+                       + (codesResult.ErrorMessage
+                            ?? "deliver the password only and ask the human to re-attempt the 2FA request out-of-band."));
+        }
+
+        return new WorkspaceRecoveryCredentialsResult(
+            Success: true,
+            Email: email,
+            TempPassword: resetResult.TemporaryPassword,
+            BackupCode: codesResult.Codes[0],
+            Message: $"Password reset and one backup code issued for {email}. Deliver both securely — neither can be retrieved again.");
     }
 
     public async Task<WorkspaceAccountActionResult> LinkAccountAsync(
