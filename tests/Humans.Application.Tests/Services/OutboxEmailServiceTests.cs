@@ -367,14 +367,14 @@ public sealed class OutboxEmailServiceTests : IDisposable
     [HumansFact]
     public async Task SendEventSubmittedAsync_CreatesOutboxRowAndTriggersImmediate()
     {
-        _renderer.RenderEventSubmitted("Alice", "Sunrise Parade", "https://humans.example/EventGuide/MySubmissions", "en")
+        _renderer.RenderEventSubmitted("Alice", "Sunrise Parade", "https://humans.example/Events/MySubmissions", "en")
             .Returns(new EmailContent("Event received", "<p>Thanks for your submission</p>"));
 
         await _service.SendEventSubmittedAsync(
             "alice@example.com",
             "Alice",
             "Sunrise Parade",
-            "https://humans.example/EventGuide/MySubmissions",
+            "https://humans.example/Events/MySubmissions",
             "en");
 
         var msg = await _dbContext.EmailOutboxMessages.SingleAsync();

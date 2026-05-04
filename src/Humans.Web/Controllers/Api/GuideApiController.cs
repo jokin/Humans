@@ -13,7 +13,7 @@ using NodaTime.Text;
 namespace Humans.Web.Controllers.Api;
 
 [ApiController]
-[Route("api/guide")]
+[Route("api/events")]
 [EnableCors("GuideApi")]
 [ServiceFilter(typeof(EventGuideFeatureFilter))]
 public class GuideApiController : ControllerBase
@@ -31,7 +31,7 @@ public class GuideApiController : ControllerBase
     public async Task<IActionResult> GetEvents(
         [FromQuery] int? day,
         [FromQuery] string? categorySlug,
-        [FromQuery] Guid? campId,
+        [FromQuery] Guid? barrioId,
         [FromQuery] string? q)
     {
         var guideSettings = await _guide.GetGuideSettingsAsync();
@@ -41,7 +41,7 @@ public class GuideApiController : ControllerBase
         var gateOpeningDate = guideSettings?.EventSettings?.GateOpeningDate;
 
         var excludedSlugs = await GetExcludedSlugsAsync();
-        var events = await _guide.GetApprovedEventsAsync(campId, null, null, q, excludedSlugs);
+        var events = await _guide.GetApprovedEventsAsync(barrioId, null, null, q, excludedSlugs);
 
         var results = new List<GuideEventApiDto>();
         foreach (var e in events)
@@ -87,11 +87,11 @@ public class GuideApiController : ControllerBase
         return Ok(BuildEventDto(e, e.StartAt, ComputeDayOffset(e.StartAt, gateOpeningDate, tz), campName, submitterName));
     }
 
-    [HttpGet("camps")]
-    public async Task<IActionResult> GetCamps()
+    [HttpGet("barrios")]
+    public async Task<IActionResult> GetBarrios()
     {
         var events = await _guide.GetApprovedEventsAsync(null, null, null, null, []);
-        var campGroups = events
+        var barrioGroups = events
             .Where(e => e.CampId.HasValue)
             .GroupBy(e => e.CampId!.Value)
             .Select(g =>
@@ -105,11 +105,11 @@ public class GuideApiController : ControllerBase
             })
             .ToList();
 
-        return Ok(campGroups);
+        return Ok(barrioGroups);
     }
 
-    [HttpGet("camps/{id:guid}")]
-    public async Task<IActionResult> GetCamp(Guid id)
+    [HttpGet("barrios/{id:guid}")]
+    public async Task<IActionResult> GetBarrio(Guid id)
     {
         var guideSettings = await _guide.GetGuideSettingsAsync();
         DateTimeZone? tz = guideSettings?.EventSettings != null

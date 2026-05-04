@@ -2,7 +2,7 @@
 
 ## Business Context
 
-The published event guide is currently only consumable through the standalone PWA via the `/api/guide` endpoints. Humans members have no way to browse approved events from within the Humans app itself. Adding a simple, read-only guide browser inside Humans lets members discover events, filter by day/category/camp, and access their favourites and personal schedule without leaving the platform. This complements the PWA (which targets anonymous attendees on-site) by providing a first-class experience for logged-in humans.
+The published event guide is currently only consumable through the standalone PWA via the `/api/events` endpoints. Humans members have no way to browse approved events from within the Humans app itself. Adding a simple, read-only guide browser inside Humans lets members discover events, filter by day/category/barrio, and access their favourites and personal schedule without leaving the platform. This complements the PWA (which targets anonymous attendees on-site) by providing a first-class experience for logged-in humans.
 
 ## User Stories
 
@@ -12,7 +12,7 @@ The published event guide is currently only consumable through the standalone PW
 **So that** I can discover what's happening without switching to the PWA
 
 **Acceptance Criteria:**
-- Page at `/EventGuide/Browse` showing all approved events
+- Page at `/Events/Browse` showing all approved events
 - Events displayed as cards with: title, category badge, date/time, duration, venue (camp name or shared venue name)
 - Sorted by day then start time by default
 - Recurring events shown as separate entries per occurrence
@@ -21,13 +21,13 @@ The published event guide is currently only consumable through the standalone PW
 
 ### US-27.2: Filter and Search Events
 **As a** logged-in human
-**I want to** filter events by day, category, and camp, and search by keyword
+**I want to** filter events by day, category, and barrio, and search by keyword
 **So that** I can quickly find events I'm interested in
 
 **Acceptance Criteria:**
 - Day filter: toggle buttons for each event day (multi-select, derived from GuideSettings date range and timezone)
 - Category filter: dropdown listing active categories
-- Venue filter: dropdown listing active GuideSharedVenues (replaces camp filter; individual events use shared venues)
+- Venue filter: dropdown listing active GuideSharedVenues (replaces barrio filter; individual events use shared venues)
 - Keyword search: matches against title and description (case-insensitive)
 - Filters are combinable (AND logic)
 - Filters update results without full page reload (use partial views or minimal JS)
@@ -51,7 +51,7 @@ The published event guide is currently only consumable through the standalone PW
 
 **Acceptance Criteria:**
 - Each event card shows a favourite toggle (heart icon or similar)
-- Toggle calls the existing `/api/guide/favourites/{eventId}` POST/DELETE endpoints
+- Toggle calls the existing `/api/events/favourites/{eventId}` POST/DELETE endpoints
 - Favourite state is reflected immediately without full page reload
 - A "Show favourites only" filter option to see only favourited events
 - Favourites persist via existing `UserEventFavourite` records
@@ -84,7 +84,7 @@ No new entities required. The browser reads from existing tables:
 
 | Route | Purpose |
 |-------|---------|
-| `/EventGuide/Browse` | Main guide browser page |
+| `/Events/Browse` | Main guide browser page |
 
 ## UI Notes
 
@@ -103,6 +103,6 @@ No new entities required. The browser reads from existing tables:
 ## Related Features
 
 - **Event Guide Management** (26): Source of all event data and the moderation workflow
-- **Favourites and Schedule** (US-26.8): Reuses `UserEventFavourite` and the `/EventGuide/Schedule` page
+- **Favourites and Schedule** (US-26.8): Reuses `UserEventFavourite` and the `/Events/Schedule` page
 - **Category Opt-Out** (US-26.7): Reuses `UserGuidePreference`
 - **Feature Toggle**: Gated by `Features:EventGuide` in appsettings, same as all other guide UI

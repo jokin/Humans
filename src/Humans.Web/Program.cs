@@ -443,7 +443,7 @@ builder.Services.AddLocalization();
 // CORS — allow the public nobodies.team website to fetch /api/barrios.
 // Localhost / 127.0.0.1 (any port) are allowed so devs working on the
 // public site locally can hit the deployed barrios API. GuideApi remains
-// open so the PWA can fetch /api/guide.
+// open so the PWA can fetch /api/events.
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("BarriosPublic", policy =>

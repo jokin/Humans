@@ -42,10 +42,10 @@ See `docs/specs/event-guide-proposal-v1.md` for the full design specification.
 
 **Acceptance Criteria:**
 - Submission form accessible from profile page or a dedicated link
-- Same fields as camp events except location is chosen from the GuideSharedVenue list, not a team camp
+- Same fields as barrio events except location is chosen from the GuideSharedVenue list, not a barrio
 - An optional location note can add specificity (e.g. "near the fire pit")
 - Event is attributed to the submitter's name (or chosen display name) in the published guide
-- Same email notifications and status visibility as camp organiser flow
+- Same email notifications and status visibility as barrio organiser flow
 
 ### US-26.4: Moderator Reviews Submissions
 **As a** moderator
@@ -54,15 +54,15 @@ See `docs/specs/event-guide-proposal-v1.md` for the full design specification.
 
 **Acceptance Criteria:**
 
-- Queue at `/Event/Moderate` lists all Pending submissions in order of receipt
-- Duplicate flag shown when a submission shares a camp and overlapping time slot with an existing Pending or Approved event (advisory only — moderator decides)
+- Queue at `/Events/Moderate` lists all Pending submissions in order of receipt
+- Duplicate flag shown when a submission shares a barrio and overlapping time slot with an existing Pending or Approved event (advisory only — moderator decides)
 - Actions: Approve, Reject (requires reason), Request Edit (requires reason)
 - On Reject or Request Edit: submitter receives email with the reason
 - On Approve: submitter receives confirmation email
 - All decisions logged as append-only ModerationAction records
 
 ### US-26.5: Submitter Responds to Rejection / Edit Request
-**As a** submitter (camp organiser or individual human)
+**As a** submitter (barrio organiser or individual human)
 **I want to** edit and resubmit a rejected or edit-requested event
 **So that** I can address the moderator's feedback
 
@@ -77,10 +77,10 @@ See `docs/specs/event-guide-proposal-v1.md` for the full design specification.
 **So that** I can plan what to attend
 
 **Acceptance Criteria:**
-- Published API (`/api/guide/events`, `/api/guide/camps`, `/api/guide/venues`) returns only Approved events
+- Published API (`/api/events/events`, `/api/events/barrios`, `/api/events/categories`) returns only Approved events
 - Filter by day, time of day, and category
 - Keyword search across title and description
-- Event detail includes camp name or shared venue name, grid address, time, duration, full description
+- Event detail includes barrio name or shared venue name, grid address, time, duration, full description
 - Recurring events expanded into one entry per occurrence in API responses
 
 ### US-26.7: Attendee Opts Out of Sensitive Categories
@@ -168,17 +168,17 @@ All emails use the existing `EmailOutboxMessage` / `ProcessEmailOutboxJob` infra
 
 | Route | Purpose |
 |-------|---------|
-| `/Event/Submit` | Any human: individual event submission form |
-| `/Event/Moderate` | Moderator: pending submissions queue |
-| `/Event/Admin` | Admin: GuideSettings, categories, venues, exports |
-| `/Teams/{slug}/Events` | Lead: submit and manage camp events for a team |
-| `/api/guide/events` | Public API: approved events (PWA data source) |
-| `/api/guide/camps` | Public API: published camps with hosted events |
-| `/api/guide/venues` | Public API: active shared venues |
+| `/Events/Submit` | Any human: individual event submission form |
+| `/Events/Moderate` | Moderator: pending submissions queue |
+| `/Admin/Guide*` | Admin: GuideSettings, categories, venues, exports |
+| `/Barrios/{slug}/Events` | Lead: submit and manage barrio events |
+| `/api/events/events` | Public API: approved events (PWA data source) |
+| `/api/events/barrios` | Public API: published barrios with hosted events |
+| `/api/events/categories` | Public API: event categories |
 
 ## Related Features
 
-- **Teams** (06): GuideCamp is anchored to a Team; Lead role gates camp event submission
+- **Teams** (06): GuideCamp is anchored to a Team; Lead role gates barrio event submission
 - **Profiles** (02): SubmitterUserId links GuideEvent to a user; UserGuidePreference and UserEventFavourite extend the user record
 - **Audit Log** (12): ModerationAction provides an append-only decision trail per event
 - **Shift Management** (25): Shares EventSettings (dates, timezone) and the Team/Department hierarchy

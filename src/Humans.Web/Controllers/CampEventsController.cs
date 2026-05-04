@@ -13,7 +13,6 @@ using NodaTime;
 namespace Humans.Web.Controllers;
 
 [Authorize]
-[Route("Camps/{slug}/Events")]
 [Route("Barrios/{slug}/Events")]
 [ServiceFilter(typeof(EventGuideFeatureFilter))]
 public class CampEventsController : HumansCampControllerBase
